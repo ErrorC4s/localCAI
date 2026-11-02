@@ -16,7 +16,7 @@ localCAI moves your Character.AI chats, pinned messages, memories, personas, ava
 
 You need **Python 3.10+**. That's it: localCAI has a **built-in model engine** (llama.cpp), so Ollama or LM Studio are optional.
 
-**Windows, easiest:** get **`localCAI.exe`** and double-click it. It opens in its own window with no console and doesn't need Python. To build it yourself: download the repo, then double-click **`build-exe.bat`** (needs Python once, for building).
+**Windows, easiest:** download **`localCAI.exe`** from the [latest release](https://github.com/ErrorC4s/localCAI/releases) and double-click it. It opens in its own window with no console and doesn't need Python. To build it yourself: download the repo, then double-click **`build-exe.bat`** (needs Python once, for building).
 
 **Any OS, from source:** download the repo (Code → Download ZIP), unzip it and double-click **`start-localcai.bat`** (Windows) or **`start-localcai.sh`** (macOS/Linux). With `pip install pywebview` it opens in its own window, otherwise in your browser.
 
@@ -38,7 +38,7 @@ Already use Ollama, LM Studio, llama.cpp or KoboldCpp? Just pick it in **Backend
 
 ### The browser extension
 
-Until it's in the Chrome Web Store / Firefox Add-ons, install it from this repo:
+Until it's in the Chrome Web Store / Firefox Add-ons, install it from the [latest release](https://github.com/ErrorC4s/localCAI/releases) or this repo:
 
 - **Chrome / Edge / Brave:** download [`localcai-extractor-0.5.0-chrome.zip`](downloads/localcai-extractor-0.5.0-chrome.zip) and unzip it → open `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → pick the unzipped folder.
 - **Firefox 140+:** download [`localcai-extractor-0.5.0-firefox.zip`](downloads/localcai-extractor-0.5.0-firefox.zip) → open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → pick the zip.
@@ -143,6 +143,8 @@ python tests/e2e_ui/test_engine.py                # built-in engine with fake Gi
 NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs        # extension against a mocked character.ai
 NODE_PATH=$(npm root -g) node tests/e2e_extension/load_all.mjs   # "Load full history" auto-scroll
 ```
+
+Every push to `main` that changes the app or the extension builds `localCAI.exe` and the extension zips on GitHub Actions and publishes them as the release for the current version (`localcai/__init__.py`).
 
 Pure Python standard library at runtime, no dependencies, so it stays easy to install for non-developers. The `.lcai.json` format is documented in [`docs/lcai-format.md`](docs/lcai-format.md).
 
