@@ -43,7 +43,7 @@ def http(method, path, headers=None, body=None):
 
 def main(shot=None):
     home = tempfile.mkdtemp(prefix="lcai-home-")
-    last = os.path.join(home, "last_request.json")
+    last = last_path = os.path.join(home, "last_request.json")
     env = {**os.environ, "LOCALCAI_HOME": home, "PYTHONPATH": str(ROOT)}
     procs = [
         subprocess.Popen([sys.executable, str(Path(__file__).parent / "fake_llm.py"), str(LLM_PORT), last]),
@@ -116,6 +116,67 @@ def main(shot=None):
             page.wait_for_timeout(600)
             expect(page.locator(".msg")).to_have_count(n_before + 4)
 
+            # ── C.ai-style message tools ──
+            last = page.locator(".msg").last
+            expect(last.locator(".swipes")).to_contain_text("2/2")       # ↻ above kept the old reply as a swipe
+            last.locator(".swipes .tool").first.click()                 # ◀
+            expect(page.locator(".msg").last.locator(".swipes")).to_contain_text("1/2")
+            page.locator(".msg").last.locator(".swipes .tool").last.click()  # ▶ back to 2/2
+            expect(page.locator(".msg").last.locator(".swipes")).to_contain_text("2/2")
+            page.locator(".msg").last.locator(".swipes .tool").last.click()  # ▶ at the end → generate a 3rd
+            expect(page.locator(".msg").last.locator(".swipes")).to_contain_text("3/3", timeout=10000)
+            count = page.locator(".msg").count()
+
+            # edit a line
+            page.locator(".msg").last.locator(".tool[title='Edit']").click()
+            page.fill(".edit-box", "*smiles* Edited line.")
+            page.click(".edit-buttons .tool.primary")
+            expect(page.locator(".msg").last.locator(".body")).to_have_text("smiles Edited line.")
+            expect(page.locator(".msg").last.locator(".edited")).to_have_count(1)
+
+            # pin it → it becomes a memory in the next prompt
+            page.locator(".msg").last.locator(".tool[title^='Pin']").click()
+            expect(page.locator(".msg").last.locator(".pin")).to_have_count(1)
+            page.fill("#input", "still there?")
+            page.click("#send")
+            expect(page.locator(".msg")).to_have_count(count + 2)
+            sent = json.load(open(last_path, encoding="utf-8"))
+            assert "Edited line." in sent["messages"][0]["content"], "pinned message in memories"
+
+            # delete one message, then rewind
+            page.on("dialog", lambda d: d.accept())
+            page.locator(".msg").last.locator(".tool[title='Delete this message']").click()
+            expect(page.locator(".msg")).to_have_count(count + 1)
+            page.locator(".msg").nth(count - 1).locator(".tool[title^='Rewind']").click()
+            expect(page.locator(".msg")).to_have_count(count - 1)
+
+            # custom chat background
+            bg = Path(home) / "bg.png"
+            bg.write_bytes(Path(ROOT / "extension" / "icons" / "icon48.png").read_bytes())
+            page.set_input_files("#bg-input", str(bg))
+            expect(page.locator(".toast", has_text="Background set")).to_have_count(1)
+            assert "/api/image/chats/" in page.eval_on_selector("#messages", "e => e.style.backgroundImage")
+            page.click("#bg-remove")
+            page.wait_for_timeout(400)
+            assert "/api/image/chats/" not in page.eval_on_selector("#messages", "e => e.style.backgroundImage")
+            bad = Path(home) / "evil.png"; bad.write_text("<svg onload=alert(1)>")
+            assert http("POST", "/api/chat/background", {"X-LocalCAI": "1", "Content-Type": "image/png",
+                        "X-Chat": "x.jsonl"}, b"<svg/>") in (400, 404), "fake images rejected"
+
+            # edit the character
+            page.click("#edit-char")
+            page.fill("#char-fields textarea[data-key='description']", "Lives on the moon. Loves riddles.")
+            page.click("#char-save")
+            expect(page.locator(".toast", has_text="Character saved")).to_have_count(1)
+            page.fill("#input", "riddle me")
+            page.click("#send")
+            page.wait_for_timeout(800)
+            sent = json.load(open(last_path, encoding="utf-8"))
+            assert "Loves riddles." in sent["messages"][0]["content"], "edited description used"
+            card = json.loads((Path(home) / "library" / "characters" / "Luna.card.json").read_text("utf-8"))
+            assert card["data"]["description"].endswith("Loves riddles.")
+            n_before = page.locator(".msg").count() - 4  # keep later count checks relative
+
             # crisis banner (shown, never blocking)
             page.fill("#input", "honestly I want to die")
             page.click("#send")
@@ -147,8 +208,7 @@ def main(shot=None):
 
             # delete Rex (moved to trash, not destroyed)
             page.click(".char-item:has-text('Rex')")
-            page.once("dialog", lambda d: d.accept())
-            page.click("#delete-char")
+            page.click("#delete-char")  # confirm() accepted by the handler registered above
             expect(page.locator(".char-item")).to_have_count(1)
             assert list(Path(home, "library", "trash").rglob("Rex.card.json")), "Rex should be in trash"
             assert http("POST", "/api/character/delete", {"X-LocalCAI": "1", "Content-Type": "application/json"},

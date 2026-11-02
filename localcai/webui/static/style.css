@@ -116,3 +116,18 @@ dialog .field { margin-bottom: 12px; font-size: 12px; }
   white-space: pre-wrap; font-size: 11px; max-height: 160px; overflow: auto; }
 #engine-dialog { width: min(520px, 94vw); }
 details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
+
+/* message tools */
+.msg { position: relative; }
+.tools { display: flex; gap: 2px; align-items: center; justify-content: flex-end; margin-top: 6px; opacity: 0; transition: opacity .15s; }
+.msg:hover .tools, .msg:focus-within .tools, .msg:last-child .tools { opacity: 1; }
+.tool { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 6px; border-radius: 6px; font: inherit; font-size: 13px; }
+.tool:hover:not(:disabled) { background: var(--panel2); color: var(--text); }
+.tool:disabled { opacity: .3; cursor: default; }
+.tool.primary { background: var(--accent); color: #fff; }
+.swipes { display: inline-flex; align-items: center; gap: 2px; margin-right: auto; font-size: 12px; color: var(--muted); }
+.msg .edited { font-style: italic; opacity: .7; }
+.edit-box { width: 100%; resize: vertical; min-width: min(560px, 70vw); }
+.edit-buttons { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
+#char-dialog { width: min(640px, 94vw); }
+.char-fields textarea { width: 100%; resize: vertical; }

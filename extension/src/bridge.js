@@ -32,12 +32,15 @@
 
   function findScroller() {
     let best = null, bestScore = 0;
-    for (const el of document.querySelectorAll("div, main, section")) {
+    for (const el of document.querySelectorAll("div, main, section, ol, ul")) {
       const cs = getComputedStyle(el);
       if (!/(auto|scroll)/.test(cs.overflowY) || el.scrollHeight <= el.clientHeight + 20) continue;
       const score = el.scrollHeight * Math.min(el.clientWidth, 2000);
       if (score > bestScore) { best = el; bestScore = score; }
     }
+    // some layouts scroll the whole page instead of a chat panel
+    const page = document.scrollingElement;
+    if (!best && page && page.scrollHeight > page.clientHeight + 20) best = page;
     return best;
   }
 
@@ -81,7 +84,8 @@
   chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     const N = globalThis.LocalCAINormalize;
     if (msg?.type === "stats") {
-      reply({ captures: captures.length, ...N.stats(N.normalize(captures)), job: { ...job } });
+      reply({ captures: captures.length, ...N.stats(N.normalize(captures)), job: { ...job },
+              version: chrome.runtime.getManifest().version });
     } else if (msg?.type === "export") {
       reply({ doc: N.normalize(captures, { version: chrome.runtime.getManifest().version }) });
     } else if (msg?.type === "raw") {

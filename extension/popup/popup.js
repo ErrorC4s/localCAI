@@ -27,8 +27,10 @@ async function refresh() {
     $("export").disabled = !s.turns && !s.characters;
     const job = s.job || {};
     $("load-all").textContent = job.running ? "■ Stop loading" : "⏫ Load full history";
-    $("load-msg").hidden = !job.message;
-    $("load-msg").textContent = job.message || "";
+    const stale = s.version !== chrome.runtime.getManifest().version;
+    const msg = stale ? STALE : job.message || "";
+    $("load-msg").hidden = !msg;
+    $("load-msg").textContent = msg;
     $("main").hidden = false;
   } catch {
     $("not-cai").hidden = false;
@@ -51,9 +53,18 @@ $("export").onclick = async () => {
   } finally { btn.disabled = false; }
 };
 $("raw").onclick = async () => download((await ask("raw")).doc, `localcai-raw-${stamp()}.json`);
+const STALE = "The extension was updated. Refresh the character.ai page (F5), then try again.";
 $("load-all").onclick = async () => {
-  const s = await ask("stats");
-  await ask(s.job && s.job.running ? "stopLoad" : "loadAll");
+  try {
+    const s = await ask("stats");
+    if (!s || s.version !== chrome.runtime.getManifest().version) throw new Error(STALE);
+    const ok = await ask(s.job && s.job.running ? "stopLoad" : "loadAll");
+    if (!ok) throw new Error(STALE);
+  } catch (e) {
+    $("load-msg").hidden = false;
+    $("load-msg").textContent = e.message.includes("Receiving end") ? STALE : e.message;
+    return;
+  }
   refresh();
 };
 $("clear").onclick = async () => { await ask("clear"); refresh(); };

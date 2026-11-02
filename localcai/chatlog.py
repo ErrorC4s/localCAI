@@ -31,3 +31,19 @@ def row(name: str, is_user: bool, text: str, send_date: str = "") -> dict:
 def to_history(rows: list[dict]) -> list[dict]:
     return [{"role": "user" if r.get("is_user") else "assistant", "content": r.get("mes", "")}
             for r in rows if not r.get("is_system")]
+
+
+def pinned_memories(rows: list[dict]) -> list[str]:
+    return [f"{r.get('name', '')}: {r.get('mes', '')}" for r in rows if (r.get("extra") or {}).get("pinned")]
+
+
+def set_swipe(row: dict, index: int) -> None:
+    swipes = row.get("swipes") or [row.get("mes", "")]
+    index = max(0, min(index, len(swipes) - 1))
+    row["swipes"], row["swipe_id"], row["mes"] = swipes, index, swipes[index]
+
+
+def add_swipe(row: dict, text: str) -> None:
+    swipes = row.get("swipes") or [row.get("mes", "")]
+    swipes.append(text)
+    row["swipes"], row["swipe_id"], row["mes"] = swipes, len(swipes) - 1, text

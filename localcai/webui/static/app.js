@@ -205,6 +205,7 @@ function applyBackground() {
   const chat = c && c.chats.find((x) => x.file === S.chat);
   const url = chat && chat.background ? `/api/image/chats/${enc(chat.background)}`
     : c && c.background ? `/api/image/characters/${enc(c.background)}` : null;
+  $("bg-remove").hidden = !(chat && chat.background);
   $("messages").style.backgroundImage = url
     ? `linear-gradient(rgba(21,22,29,.72), rgba(21,22,29,.86)), url("${url}")` : "";
 }
@@ -226,7 +227,7 @@ $("new-chat").onclick = async () => {
 };
 
 // ── Messages ──────────────────────────────────────────
-function msgEl(row) {
+function msgEl(row, index) {
   const el = document.createElement("div");
   el.className = "msg" + (row.is_user ? " user" : "");
   const who = document.createElement("div"); who.className = "who";
@@ -241,9 +242,68 @@ function msgEl(row) {
   const nm = document.createElement("span"); nm.textContent = row.name || "";
   who.append(face, nm);
   if (row.extra && row.extra.pinned) { const p = document.createElement("span"); p.className = "pin"; p.textContent = "📌 pinned"; who.appendChild(p); }
+  if (row.extra && row.extra.edited) { const e = document.createElement("span"); e.className = "edited"; e.textContent = "edited"; who.appendChild(e); }
   const body = document.createElement("div"); body.className = "body"; body.innerHTML = render(row.mes || "");
   el.append(who, body);
+  if (index !== undefined) el.appendChild(msgTools(row, index, el));
   return el;
+}
+
+// ── Message tools: swipe ◀ ▶, edit, pin, delete, rewind ─────
+const editCall = (action, index, extra = {}) =>
+  api("/api/chat/" + action, { json: { chat: S.chat, index, expect: S.rows[index].mes, ...extra } })
+    .then((r) => { S.rows = r.rows; renderMessages(); })
+    .catch((e) => toast(e.message, "error"));
+
+function tool(label, title, fn) {
+  const b = document.createElement("button");
+  b.className = "tool"; b.type = "button"; b.textContent = label; b.title = title;
+  b.onclick = (ev) => { ev.stopPropagation(); fn(); };
+  return b;
+}
+
+function msgTools(row, i, el) {
+  const bar = document.createElement("div"); bar.className = "tools";
+  const isLast = i === S.rows.length - 1;
+  const swipes = row.swipes || [row.mes];
+  const sid = row.swipe_id || 0;
+  if (!row.is_user && (swipes.length > 1 || isLast)) {
+    const nav = document.createElement("span"); nav.className = "swipes";
+    const prev = tool("◀", "Previous reply", () => editCall("swipe", i, { to: sid - 1 }));
+    prev.disabled = sid === 0;
+    const count = document.createElement("span"); count.textContent = `${sid + 1}/${swipes.length}`;
+    const atEnd = sid === swipes.length - 1;
+    const next = tool("▶", atEnd ? "Generate another reply" : "Next reply", () =>
+      atEnd ? (isLast ? $("regen").click() : null) : editCall("swipe", i, { to: sid + 1 }));
+    next.disabled = atEnd && !isLast;
+    nav.append(prev, count, next);
+    bar.appendChild(nav);
+  }
+  bar.append(
+    tool("✏", "Edit", () => startEdit(row, i, el)),
+    tool((row.extra || {}).pinned ? "📍" : "📌", (row.extra || {}).pinned ? "Unpin" : "Pin (the character always remembers pinned messages)",
+      () => editCall("pin", i, { pinned: !(row.extra || {}).pinned })),
+    tool("⤺", "Rewind: delete this and everything after it", () => {
+      if (confirm(`Delete this message and the ${S.rows.length - i - 1} after it?`)) editCall("delete", i, { from_here: true });
+    }),
+    tool("🗑", "Delete this message", () => { if (confirm("Delete this message?")) editCall("delete", i); }),
+  );
+  return bar;
+}
+
+function startEdit(row, i, el) {
+  const body = el.querySelector(".body");
+  const ta = document.createElement("textarea");
+  ta.className = "edit-box"; ta.value = row.mes || "";
+  ta.rows = Math.min(16, Math.max(3, ta.value.split("\n").length + 1));
+  const save = tool("Save", "Save changes", () => editCall("edit", i, { text: ta.value }));
+  save.classList.add("primary");
+  const cancel = tool("Cancel", "Discard changes", () => renderMessages());
+  const btns = document.createElement("div"); btns.className = "edit-buttons"; btns.append(cancel, save);
+  body.replaceWith(ta);
+  el.querySelector(".tools").replaceWith(btns);
+  ta.focus();
+  ta.addEventListener("keydown", (e) => { if (e.key === "Escape") renderMessages(); if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) save.click(); });
 }
 function renderMessages() {
   const box = $("messages");
@@ -253,7 +313,7 @@ function renderMessages() {
     p.textContent = "No chats yet. Click “New chat” to start one.";
     box.appendChild(p);
   }
-  for (const r of S.rows) box.appendChild(msgEl(r));
+  S.rows.forEach((r, i) => box.appendChild(msgEl(r, i)));
   box.scrollTop = box.scrollHeight;
   const canTalk = !!S.chat;
   $("input").disabled = !canTalk; $("send").disabled = !canTalk;
@@ -319,8 +379,45 @@ $("input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); }
 });
 $("regen").onclick = () => {
-  if (S.rows.length && !S.rows[S.rows.length - 1].is_user) { S.rows.pop(); renderMessages(); }
+  if (S.rows.length && !S.rows[S.rows.length - 1].is_user) { S.rows.pop(); renderMessages(); }  // the old reply stays as a swipe
   reply("/api/chat/regenerate", { character: S.character, chat: S.chat });
+};
+
+// ── Chat background & character editing ───────────────
+$("bg-input").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f || !S.chat) return;
+  try {
+    await api("/api/chat/background", { body: f, headers: { "X-Chat": enc(S.chat), "Content-Type": f.type } });
+    await loadState(); applyBackground(); toast("Background set for this chat.");
+  } catch (err) { toast(err.message, "error"); }
+};
+$("bg-remove").onclick = async () => {
+  await api("/api/chat/background-remove", { json: { chat: S.chat, index: 0 } }).catch((e) => toast(e.message, "error"));
+  await loadState(); applyBackground();
+};
+const CHAR_FIELDS = [["description", "Description"], ["personality", "Personality"], ["scenario", "Scenario"],
+  ["first_mes", "Greeting (first message)"], ["mes_example", "Example dialogue / definition"],
+  ["creator_notes", "Tagline"], ["system_prompt", "Custom instructions (optional)"]];
+$("edit-char").onclick = async () => {
+  if (!S.card) { const r = await api(`/api/chat?character=${enc(S.character)}&chat=${enc(S.chat || "")}`).catch(() => null); if (r) S.card = r.card; }
+  const box = $("char-fields"); box.innerHTML = "";
+  for (const [k, label] of CHAR_FIELDS) {
+    const l = document.createElement("label"); l.className = "field"; l.textContent = label;
+    const ta = document.createElement("textarea"); ta.dataset.key = k; ta.rows = k === "creator_notes" ? 1 : 4;
+    ta.value = (S.card && S.card[k]) || ""; l.appendChild(ta); box.appendChild(l);
+  }
+  $("char-dialog-title").textContent = "Edit " + charInfo(S.character).name;
+  $("char-dialog").showModal();
+};
+$("char-cancel").onclick = () => $("char-dialog").close();
+$("char-save").onclick = async () => {
+  const data = {};
+  for (const ta of $("char-fields").querySelectorAll("textarea")) data[ta.dataset.key] = ta.value;
+  try {
+    const r = await api("/api/character/save", { json: { character: S.character, data } });
+    S.card = r.card; $("char-dialog").close(); await loadState(); openCharacter(S.character, S.chat); toast("Character saved.");
+  } catch (e) { toast(e.message, "error"); }
 };
 $("stop").onclick = () => S.abort && S.abort.abort();
 $("crisis-close").onclick = () => ($("crisis").hidden = true);

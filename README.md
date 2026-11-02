@@ -46,7 +46,14 @@ Run `localcai` and it opens at `http://127.0.0.1:8765`:
 - **Backend / Model**: the built-in engine (default) or your own runner, and the model, from dropdowns (custom URLs in ⚙ Settings)
 - **🧠 Engine**: install llama.cpp, download a starter model, open the model slot folder, stop the engine
 - **You are**: pick one of your C.ai personas so the character knows who you are
-- **Chats**: continue an imported chat or start a new one, stream replies, stop or regenerate
+- **Chats**: continue an imported chat or start a new one, stream replies, stop
+- **C.ai-style message tools** (hover a message):
+  - **◀ 2/3 ▶** browse alternative replies; ▶ on the last one generates a new one (old replies are kept)
+  - **✏ Edit** any line, yours or the character's
+  - **📌 Pin**: pinned messages become memories the character always keeps in mind
+  - **🗑 Delete** a message, or **⤺ Rewind** to delete it and everything after
+- **🖼 Background**: set your own picture as a chat's background (✕ to remove)
+- **✎ Edit character**: description, personality, scenario, greeting, example dialogue, custom instructions
 - **⬇ Card**: download a Character Card V2 PNG for SillyTavern, RisuAI, etc.
 - ⚙ **Settings**: your name, creativity (temperature), reply length, and for the built-in engine: build (GPU/CPU), context size and GPU layers
 

@@ -197,6 +197,13 @@ def make_handler(app: App, port: int):
                     with app.lock:
                         n = delete_character(app.lib, self.body_json()["character"])
                     return self.send_json({"moved": n})
+                if path == "/api/chat/background":
+                    return self.chat_background_upload()
+                if path in ("/api/chat/edit", "/api/chat/delete", "/api/chat/pin", "/api/chat/swipe",
+                            "/api/chat/background-remove"):
+                    return self.chat_edit(path.rsplit("/", 1)[1], self.body_json())
+                if path == "/api/character/save":
+                    return self.character_save(self.body_json())
                 if path in ("/api/chat/new", "/api/chat/send", "/api/chat/regenerate"):
                     if not settings()["age_confirmed"]:
                         return self.send_json({"error": "Please confirm you are 18 or older first."}, 403)
@@ -261,6 +268,71 @@ def make_handler(app: App, port: int):
                 return self.send_json({"error": "Another download is still running."}, 409)
             return self.send_json(ENGINE.status())
 
+        def chat_edit(self, action: str, body: dict):
+            path = app.safe_file("chats", body["chat"], "")
+            with app.lock:
+                meta, rows = chatlog.load(path)
+                if action == "background-remove":
+                    for f in (app.lib / "chats").glob(f"{path.stem}.background.*"):
+                        f.unlink()
+                    return self.send_json({"ok": True})
+                i = int(body["index"])
+                if not 0 <= i < len(rows):
+                    raise ValueError("message index out of range")
+                # guard against editing a different message than the one on screen
+                if "expect" in body and rows[i].get("mes", "")[:200] != str(body["expect"])[:200]:
+                    return self.send_json({"error": "The chat changed. Reload and try again."}, 409)
+                row = rows[i]
+                if action == "edit":
+                    text = str(body.get("text", "")).strip()
+                    if not text:
+                        raise ValueError("empty message")
+                    row["mes"] = text
+                    if row.get("swipes"):
+                        row["swipes"][row.get("swipe_id", 0)] = text
+                    row.setdefault("extra", {})["edited"] = True
+                elif action == "delete":
+                    rows = rows[:i] + ([] if body.get("from_here") else rows[i + 1:])
+                elif action == "pin":
+                    row.setdefault("extra", {})["pinned"] = bool(body.get("pinned"))
+                elif action == "swipe":
+                    chatlog.set_swipe(row, int(body["to"]))
+                chatlog.save(path, meta, rows)
+            return self.send_json({"rows": rows})
+
+        def chat_background_upload(self):
+            from ..images import looks_like, ext_for
+            name = unquote(self.headers.get("X-Chat", ""))
+            path = app.safe_file("chats", name, "")
+            n = int(self.headers.get("Content-Length") or 0)
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if not 0 < n <= 15 * 1024 * 1024:
+                return self.send_json({"error": "Image missing or larger than 15 MB."}, 400)
+            data = self.rfile.read(n)
+            if ctype not in ("image/png", "image/jpeg", "image/webp", "image/gif") or not looks_like(ctype, data):
+                return self.send_json({"error": "Please use a PNG, JPEG, WebP or GIF image."}, 400)
+            with app.lock:
+                for f in (app.lib / "chats").glob(f"{path.stem}.background.*"):
+                    f.unlink()
+                (app.lib / "chats" / f"{path.stem}.background.{ext_for(ctype)}").write_bytes(data)
+            return self.send_json({"ok": True})
+
+        def character_save(self, body: dict):
+            editable = {"description", "personality", "scenario", "first_mes", "mes_example",
+                        "creator_notes", "system_prompt"}
+            jp = app.safe_file("characters", body["character"], ".card.json")
+            pp = app.safe_file("characters", body["character"], ".card.png")
+            with app.lock:
+                card = json.loads(jp.read_text("utf-8"))
+                d = card.setdefault("data", {})
+                for k, v in (body.get("data") or {}).items():
+                    if k in editable and isinstance(v, str):
+                        d[k] = v
+                jp.write_text(json.dumps(card, ensure_ascii=False, indent=2), "utf-8")
+                from ..exporters import embed_card_in_png
+                pp.write_bytes(embed_card_in_png(pp.read_bytes(), card))  # keep the PNG card in sync
+            return self.send_json({"ok": True, "card": d})
+
         def chat_new(self, body: dict):
             card = app.card(body["character"])
             d = card.get("data", card)
@@ -285,9 +357,10 @@ def make_handler(app: App, port: int):
             with app.lock:
                 meta, rows = chatlog.load(path)
             crisis = False
+            swipe_row = None
             if regenerate:
                 if rows and not rows[-1].get("is_user"):
-                    rows.pop()
+                    swipe_row = rows.pop()  # generate a new alternative for this reply
             else:
                 text = str(body.get("text", "")).strip()
                 if not text:
@@ -305,7 +378,8 @@ def make_handler(app: App, port: int):
                 url = ENGINE.base_url
             else:
                 url = resolve_base_url(s["backend"])
-            msgs = build_messages(card, chatlog.to_history(rows), user, persona=persona)
+            msgs = build_messages(card, chatlog.to_history(rows), user, persona=persona,
+                                  memories=chatlog.pinned_memories(rows + ([swipe_row] if swipe_row else [])))
             gen = stream_chat(url, s["model"], msgs, temperature=float(s["temperature"]),
                               max_tokens=int(s["max_tokens"]))
             try:
@@ -329,7 +403,11 @@ def make_handler(app: App, port: int):
             except (OSError, BrokenPipeError):
                 pass  # client hit Stop: keep what we have
             text_out = "".join(reply).strip()
-            if text_out:
+            if swipe_row is not None:
+                if text_out:
+                    chatlog.add_swipe(swipe_row, text_out)
+                rows.append(swipe_row)
+            elif text_out:
                 rows.append(chatlog.row(char, False, text_out, datetime.now().isoformat()))
             with app.lock:
                 chatlog.save(path, meta, rows)
