@@ -1,5 +1,5 @@
 // End-to-end test for the extension with a mocked character.ai (no real network).
-// Usage: node tests/extension/e2e.mjs <output.lcai.json>
+// Usage: node tests/e2e_extension/e2e.mjs <output.lcai.json>
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";

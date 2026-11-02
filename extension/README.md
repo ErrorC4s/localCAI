@@ -30,6 +30,6 @@
 - `src/inject.js`：在頁面環境攔截 fetch / XHR / WebSocket 的回應
 - `src/bridge.js`：收集資料、回應 popup
 - `src/normalize.js`：**所有 C.ai 格式相關的規則都在這裡**，C.ai 改版時只需要改這一個檔
-- 測試：`NODE_PATH=$(npm root -g) node tests/extension/e2e.mjs`（Playwright + 模擬的 character.ai，不會連到真網站）
+- 測試：`NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs`（Playwright + 模擬的 character.ai，不會連到真網站）
 
 > 目前的格式規則還是暫定的，要用真實的除錯匯出確認過才算定案。
