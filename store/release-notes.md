@@ -1,4 +1,12 @@
-## localCAI v0.8.20 · Extractor 0.5.0
+## localCAI v0.8.21 · Extractor 0.5.0
+
+**Staying in character, for every character**
+- **World boundary:** every character is told it only knows what someone in its own world would know. Things from outside (other games, AI, tech the setting doesn't have) get an in-character reaction, and the character never turns into an assistant or admits to being an AI.
+- **OOC guard** (on by default, ⚙ Settings): after each reply, the model double-checks it as a strict editor: AI talk, assistant behaviour, out-of-world knowledge, writing your actions, or a reply far longer than usual. If something's off, the reply is rewritten once; the first try stays one swipe back and the reply gets an "auto-fixed" badge explaining why. Adds a second or two.
+- **New chats sound right from the first reply:** until a chat has its own history, the reply length follows the character card's greeting and example dialogue (so a quiet character answers in a line or two).
+- **Rules that stick:** tick "Always do this" in ✨ to save an instruction as a permanent rule for that character; see and edit the rules in Edit.
+
+### Earlier in v0.8.20
 
 **Own icon set**
 - All emoji in the app are replaced by localCAI's own line icons (engine, settings, background, edit, learn style, memory, pin, rewind, rewrite…). They look the same on every Windows version and follow the theme colours.

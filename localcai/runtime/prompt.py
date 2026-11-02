@@ -66,6 +66,11 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
     char_pr = character_pronouns(d)
     user_pr = user_pronouns or guess_pronouns(persona) or guess_user_pronouns(history)
     parts.append(perspective_block(char, user_name, char_pr, user_pr))
+    parts.append(WORLD.format(char=char))
+    rules = [r for r in (((d.get("extensions") or {}).get("localcai") or {}).get("rules") or []) if str(r).strip()]
+    if rules:
+        parts.append(f"[Rules for {char}, set by {user_name}: always follow these]\n"
+                     + "\n".join(f"- {str(r).strip()}" for r in rules))
     if pacing:
         parts.append(PACING.format(char=char, user=user_name))
     if reply_words:
@@ -256,6 +261,10 @@ def perspective_block(char: str, user: str, char_pr: str = "", user_pr: str = ""
             f"Keep to first and second person; don't switch to talking about {char} or {user} as he/she.")
 
 
+WORLD = """[Stay inside {char}'s world]
+{char} only knows what someone living in {char}'s world would plausibly know. Anything from outside it (other games, books or shows, AI chatbots, real-world brands or tech the setting wouldn't have, skills {char} wouldn't have) gets {char}'s own in-character reaction: confused, dismissive, curious or joking. Never step out of the role and never act as an assistant: no code, essays, lists or helpful explanations unless {char} would really give them. Never say or hint that {char} is an AI, a model, a bot, a character or part of a story."""
+
+
 PACING = """[How to write {char}'s replies]
 Keep three things apart: actions and body language go in *asterisks*, spoken words go in "quotes", and the scene (place, light, sounds, weather) is described briefly and only when it changes or matters. If {char}'s earlier replies use a different format, follow theirs.
 Let the moment decide the balance between action and speech:
@@ -292,7 +301,7 @@ def moment_hint(text: str) -> str:
 
 
 LENGTH_PRESETS = {"short": 60, "medium": 120, "long": 220}
-_BUCKETS = (40, 60, 90, 120, 160, 220, 300)
+_BUCKETS = (15, 25, 40, 60, 90, 120, 160, 220, 300)
 
 
 def _words(text: str) -> int:
@@ -300,15 +309,33 @@ def _words(text: str) -> int:
     return len(text.split()) + cjk // 2
 
 
-def reply_words_for(setting: str, history: list[dict]) -> int:
+def card_reply_samples(d: dict) -> list[str]:
+    """The character's own lines in the card: greeting and example-dialogue turns."""
+    name = d.get("name", "")
+    out = [d["first_mes"]] if d.get("first_mes") else []
+    for line in re.split(r"\n(?=\s*(?:\{\{(?:char|user)\}\}|<START>|[^\n:]{1,40}:))", d.get("mes_example") or ""):
+        m = re.match(r"\s*(?:\{\{char\}\}|" + re.escape(name) + r")\s*:\s*(.+)", line, re.S) if name else \
+            re.match(r"\s*\{\{char\}\}\s*:\s*(.+)", line, re.S)
+        if m and m.group(1).strip():
+            out.append(m.group(1).strip())
+    return out
+
+
+def reply_words_for(setting: str, history: list[dict], card: dict | None = None) -> int:
     """Target reply length in words. "auto" copies how long the character's replies usually are
-    (median, rounded to a few fixed steps so the prompt stays the same turn after turn)."""
+    (median, rounded to a few fixed steps so the prompt stays the same turn after turn). A new chat
+    with fewer than 3 replies learns it from the card's greeting and example dialogue instead."""
     if setting in LENGTH_PRESETS:
         return LENGTH_PRESETS[setting]
     if setting == "off":
         return 0
     lens = sorted(_words(m["content"]) for m in history if m["role"] == "assistant" and m["content"].strip())
-    if len(lens) < 3:
+    if len(lens) < 3 and card:
+        d = card.get("data", card)
+        samples = card_reply_samples(d)
+        if samples:
+            lens = sorted(_words(t) for t in samples)
+    if not lens:
         return LENGTH_PRESETS["medium"]
     med = lens[len(lens) // 2]
     return min(_BUCKETS, key=lambda b: abs(b - med * 1.15))

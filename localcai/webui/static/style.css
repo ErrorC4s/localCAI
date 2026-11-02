@@ -204,3 +204,6 @@ details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted);
 h3 .ic { width: 20px; height: 20px; vertical-align: -3px; margin-right: 2px; color: var(--accent2); }
 .msg .pin .ic { color: #f0c46c; }
 .note-box .ic { color: #f0c46c; }
+.msg .fixed { color: var(--accent2); cursor: help; }
+.msg .checking { color: var(--muted); margin-top: 8px; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }

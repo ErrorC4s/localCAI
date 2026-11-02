@@ -105,6 +105,7 @@
     <input id="set-temperature" type="range" min="0" max="1.5" step="0.05"></label>
   <label class="field">Reply length
     <select id="set-reply-length"><option value="auto">Like the character's past replies</option><option value="short">Short</option><option value="medium">Medium</option><option value="long">Long</option><option value="off">No limit</option></select></label>
+  <label class="check-row"><input type="checkbox" id="set-guard"> OOC guard: double-check every reply stays in character, and fix it if not (adds a second or two)</label>
   <label class="check-row"><input type="checkbox" id="set-pacing"> Natural pacing: keep actions, scene and dialogue apart, and fit them to the moment</label>
   <label class="field">Who leads the scene
     <select id="set-initiative">
@@ -167,6 +168,7 @@
     <p class="muted small">Tell the character what to do differently. The new version is added as another reply, so you can flip back with the <i data-ic="prev"></i><i data-ic="next"></i> arrows.</p>
     <input id="direct-text" maxlength="600" placeholder="e.g. Shorter. / She gets jealous. / More teasing, less talking. / 讓她哭出來">
     <div id="direct-recent" class="chip-row"></div>
+    <label class="check-row"><input type="checkbox" id="direct-keep"> Always do this for <b id="direct-keep-name"></b> (save as a rule)</label>
     <div class="dialog-buttons">
       <button type="button" class="btn" id="direct-cancel">Cancel</button>
       <button type="submit" class="btn primary"><i data-ic="sparkle"></i> Rewrite</button>

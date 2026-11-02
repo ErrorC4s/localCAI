@@ -28,19 +28,22 @@ from .. import analyze
 from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
+from ..runtime.guard import check_reply
 from ..runtime.client import other_speakers, strip_markers, strip_name_prefix, trim_to_sentence
 from ..runtime.prompt import PRONOUN_CHOICES, reply_words_for
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
+GUARD_MARK = "\x1e"  # sent after the streamed reply while the OOC guard checks it
+
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
-                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns", "persona_pronouns", "initiative"}
+                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns", "persona_pronouns", "initiative", "ooc_guard"}
 DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
             "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True,
             "gpu_device": "auto", "reply_length": "auto", "pacing": True, "user_pronouns": "",
-            "persona_pronouns": {}, "initiative": "auto"}
+            "persona_pronouns": {}, "initiative": "auto", "ooc_guard": True}
 
 # Background jobs (history analysis). One at a time; the UI polls /api/job.
 JOB: dict = {}
@@ -390,6 +393,9 @@ def make_handler(app: App, port: int):
                 for k, v in (body.get("data") or {}).items():
                     if k in editable and isinstance(v, str):
                         d[k] = v
+                if "rules" in body:
+                    rules = [str(r).strip()[:300] for r in (body.get("rules") or []) if str(r).strip()][:30]
+                    d.setdefault("extensions", {}).setdefault("localcai", {})["rules"] = rules
                 if "pronouns" in body:
                     pr = str(body["pronouns"] or "")
                     if pr and pr not in PRONOUN_CHOICES:
@@ -514,22 +520,28 @@ def make_handler(app: App, port: int):
                 recalled = recall(rows, query, exclude_last=40, cache_key=str(path))
             budget = max(6000, int(int(s["ctx_size"]) * 3.2) - int(s["max_tokens"]) * 4)
             history = chatlog.to_history(rows)
-            msgs = build_messages(card, history, user, max_chars=budget, persona=persona,
-                                  memories=chatlog.pinned_memories(rows + ([swipe_row] if swipe_row else [])),
-                                  story=story, recalled=recalled,
-                                  reply_words=reply_words_for(str(s.get("reply_length", "auto")), history),
-                                  pacing=s.get("pacing", True) is not False,
-                                  user_pronouns=str((s.get("persona_pronouns") or {}).get(s.get("persona") or "", "")
-                                                    or s.get("user_pronouns") or ""),
-                                  initiative=str(s.get("initiative") or "auto"),
-                                  instruction=str(body.get("instruction") or "")[:600],
-                                  rewrite_of=(swipe_row or {}).get("mes", "") if body.get("instruction") else "")
+            target_words = reply_words_for(str(s.get("reply_length", "auto")), history, card)
+            instruction = str(body.get("instruction") or "")[:600]
+
+            def make_msgs(instruction: str = "", rewrite_of: str = "") -> list[dict]:
+                return build_messages(
+                    card, history, user, max_chars=budget, persona=persona,
+                    memories=chatlog.pinned_memories(rows + ([swipe_row] if swipe_row else [])),
+                    story=story, recalled=recalled, reply_words=target_words,
+                    pacing=s.get("pacing", True) is not False,
+                    user_pronouns=str((s.get("persona_pronouns") or {}).get(s.get("persona") or "", "")
+                                      or s.get("user_pronouns") or ""),
+                    initiative=str(s.get("initiative") or "auto"),
+                    instruction=instruction, rewrite_of=rewrite_of)
+
+            msgs = make_msgs(instruction, (swipe_row or {}).get("mes", "") if instruction else "")
             info: dict = {}
             # Built-in engine: sampler settings that keep small models from rambling and looping.
-            extra = ({"top_p": 0.9, "top_k": 40, "min_p": 0.05, "repeat_penalty": 1.08}
-                     if s["backend"] == "builtin" else None)
+            sampler = ({"top_p": 0.9, "top_k": 40, "min_p": 0.05, "repeat_penalty": 1.08}
+                       if s["backend"] == "builtin" else {})
+            extra = dict(sampler)
             # never let the model write the user's turn in chat-log style ("Sam: …")
-            extra = {**(extra or {}), "stop": [f"\n{user}:", f"\n**{user}:**", f"\n{user}：", "<|im_end|>", "<|im_start|>"]}
+            extra = {**extra, "stop": [f"\n{user}:", f"\n**{user}:**", f"\n{user}：", "<|im_end|>", "<|im_start|>"]}
             gen = strip_name_prefix(stream_chat(url, s["model"], msgs, temperature=float(s["temperature"]),
                                                 max_tokens=int(s["max_tokens"]), info=info, extra=extra), char, info)
             try:
@@ -543,6 +555,7 @@ def make_handler(app: App, port: int):
             self.send_header("X-LocalCAI-Crisis", "1" if crisis else "0")
             self.end_headers()
             reply = [first]
+            stopped = False
             try:
                 self.wfile.write(first.encode("utf-8"))
                 self.wfile.flush()
@@ -551,7 +564,7 @@ def make_handler(app: App, port: int):
                     self.wfile.write(tok.encode("utf-8"))
                     self.wfile.flush()
             except BrokenPipeError:
-                pass  # client hit Stop: keep what we have
+                stopped = True  # client hit Stop: keep what we have
             except OSError as e:  # the model failed mid-reply: tell the user in the chat
                 try:
                     self.wfile.write(f"\n\n[localCAI: the model stopped with an error: {e}]".encode("utf-8"))
@@ -563,12 +576,45 @@ def make_handler(app: App, port: int):
             if info.get("name_prefix") and other_speakers(text_out, char):
                 # a group scene: keep the opening "Bram:" so every line says who is talking
                 text_out = info["name_prefix"].strip() + " " + text_out
+            fixed, fix_reason = "", ""
+            if (text_out and not stopped and not instruction and not crisis
+                    and s.get("ooc_guard", True) is not False):
+                # OOC guard: a second look; if the reply breaks character, rewrite it once
+                try:
+                    self.wfile.write(GUARD_MARK.encode("utf-8"))  # tells the UI "checking…"
+                    self.wfile.flush()
+                except OSError:
+                    pass
+
+                def ask(system: str, prompt: str) -> str:
+                    return "".join(stream_chat(url, s["model"], [{"role": "system", "content": system},
+                                                                 {"role": "user", "content": prompt}],
+                                               temperature=0.1, max_tokens=80, extra=sampler or None))
+
+                last_user = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
+                fix_reason = check_reply(ask, card, user, last_user, text_out, target_words)
+                if fix_reason:
+                    try:
+                        info2: dict = {}
+                        out = "".join(strip_name_prefix(stream_chat(
+                            url, s["model"], make_msgs(fix_reason, text_out), temperature=float(s["temperature"]),
+                            max_tokens=int(s["max_tokens"]), info=info2, extra=extra), char, info2))
+                        fixed = strip_markers(out).strip()
+                        if info2.get("finish_reason") == "length":
+                            fixed = trim_to_sentence(fixed)
+                    except OSError:
+                        fixed = ""
+            target = swipe_row
             if swipe_row is not None:
                 if text_out:
                     chatlog.add_swipe(swipe_row, text_out)
                 rows.append(swipe_row)
             elif text_out:
-                rows.append(chatlog.row(char, False, text_out, datetime.now().isoformat()))
+                target = chatlog.row(char, False, text_out, datetime.now().isoformat())
+                rows.append(target)
+            if fixed and target is not None:
+                chatlog.add_swipe(target, fixed)  # the in-character version is shown; the first try stays a swipe
+                target.setdefault("extra", {})["ooc_fixed"] = fix_reason[:300]
             with app.lock:
                 chatlog.save(path, meta, rows)
 

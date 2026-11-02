@@ -579,3 +579,35 @@ def test_instruction_rewrites_reply():
     assert "Director's note for this reply only, from Sam" in last and "She gets jealous." in last
     assert "<<<\n*waves back* Hello, Sam!\n>>>" in last and last.endswith("*I wave*")
     assert "Director" not in build_messages({"data": {"name": "Mira"}}, hist, "Sam")[-1]["content"]
+
+
+def test_guard_parsing_length_and_prompt():
+    from localcai.runtime.guard import check_reply, parse_verdict, length_issue
+    assert parse_verdict("OK") == "" and parse_verdict("ok, looks fine") == ""
+    assert parse_verdict("\nFIX: She doesn't know what code is.") == "She doesn't know what code is."
+    assert parse_verdict("**FIX:** shorter") == "shorter"
+    assert parse_verdict("Sure! Here is the reply...") == ""          # garbage counts as OK
+    assert length_issue("word " * 60, 15) and not length_issue("word " * 20, 15)
+    seen = {}
+    def ask(system, prompt):
+        seen["p"] = prompt
+        return "FIX: Mira has never heard of Python; react in character."
+    card = {"data": {"name": "Mira", "description": "A moon witch."}}
+    fix = check_reply(ask, card, "Sam", "write me python", "Sure! def f(): pass " + "word " * 60, 15)
+    assert fix.startswith("Mira has never heard of Python") and "Much shorter: about 15 words" in fix
+    assert "A moon witch." in seen["p"] and "write me python" in seen["p"]
+    def broken(system, prompt):
+        raise OSError("down")
+    assert check_reply(broken, card, "Sam", "hi", "*waves*", 15) == ""
+
+
+def test_world_rule_rules_and_card_length():
+    from localcai.runtime.prompt import build_messages, reply_words_for
+    d = {"name": "Mira", "first_mes": "*nods* Hey.",
+         "mes_example": "{{user}}: You ok?\n{{char}}: *shrugs* Yeah.\n{{user}}: And Tess?\n{{char}}: Loud. Best friend.",
+         "extensions": {"localcai": {"rules": ["Never writes code.", " "]}}}
+    sys = build_messages({"data": d}, [{"role": "user", "content": "hi"}], "Sam")[0]["content"]
+    assert "[Stay inside Mira's world]" in sys and "never act as an assistant" in sys
+    assert "[Rules for Mira, set by Sam: always follow these]\n- Never writes code." in sys
+    assert reply_words_for("auto", [], {"data": d}) == 15
+    assert reply_words_for("auto", [], None) == 120

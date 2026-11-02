@@ -20,17 +20,28 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        with open(LAST, "w", encoding="utf-8") as f:
+        msgs = body["messages"]
+        check = msgs[0]["role"] == "system" and msgs[0]["content"].startswith("You are a strict editor")
+        with open(LAST + (".check" if check else ""), "w", encoding="utf-8") as f:
             json.dump(body, f, ensure_ascii=False)
+        if check:  # the OOC guard asking for a verdict
+            verdict = "FIX: She has never heard of video games; react with confusion." \
+                if "ooc test" in msgs[-1]["content"].lower() else "OK"
+            return self.sse([verdict], "stop")
+        ramble = "ramble" in body["messages"][-1]["content"]
+        if "never heard of video games" in body["messages"][-1]["content"]:
+            return self.sse(["*tilts head* A video... what?"], "stop")
+        parts = ["She nods. ", "Then she lea"] if ramble else ["*sips tea* ", "Oolong ", "from **Darjeeling**~"]
+        self.sse(parts, "length" if ramble else "stop")
+
+    def sse(self, parts, finish):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
-        ramble = "ramble" in body["messages"][-1]["content"]
-        parts = ["She nods. ", "Then she lea"] if ramble else ["*sips tea* ", "Oolong ", "from **Darjeeling**~"]
         for t in parts:
             self.wfile.write(f"data: {json.dumps({'choices': [{'delta': {'content': t}}]})}\n\n".encode())
             self.wfile.flush()
-        fin = {"choices": [{"delta": {}, "finish_reason": "length" if ramble else "stop"}]}
+        fin = {"choices": [{"delta": {}, "finish_reason": finish}]}
         self.wfile.write(f"data: {json.dumps(fin)}\n\n".encode())
         self.wfile.write(b"data: [DONE]\n\n")
 

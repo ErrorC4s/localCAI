@@ -180,6 +180,33 @@ def main(shot=None):
             expect(page.locator("#direct-recent .chip-btn")).to_have_text(["She gets jealous."])
             page.click("#direct-cancel")
 
+            # OOC guard: the reviewer flags the reply → it is rewritten, first try kept one swipe back
+            n0 = page.locator(".msg").count()
+            page.fill("#input", "ooc test: do you like video games?"); page.click("#send")
+            expect(page.locator(".msg")).to_have_count(n0 + 2)
+            expect(page.locator(".msg").last.locator(".body")).to_have_text("tilts head A video... what?", timeout=15000)
+            expect(page.locator(".msg").last.locator(".fixed")).to_be_visible()
+            expect(page.locator(".msg").last.locator(".swipes")).to_contain_text("2/2")
+            chk = json.load(open(last_path + ".check", encoding="utf-8"))
+            assert "ooc test" in chk["messages"][-1]["content"] and "Darjeeling" in chk["messages"][-1]["content"]
+            sent = json.load(open(last_path, encoding="utf-8"))
+            assert "never heard of video games" in sent["messages"][-1]["content"]
+
+            # ✨ "always do this" → saved as a rule on the character, sent with every reply after
+            page.locator(".msg").last.locator(".tool[title^='Tell the character']").click()
+            page.fill("#direct-text", "Never writes code.")
+            page.check("#direct-keep")
+            page.click("#direct-form button[type=submit]")
+            expect(page.locator(".toast", has_text="Saved as a rule")).to_have_count(1)
+            page.wait_for_timeout(1500)
+            page.fill("#input", "hello"); page.click("#send"); page.wait_for_timeout(1500)
+            sent = json.load(open(last_path, encoding="utf-8"))
+            assert "- Never writes code." in sent["messages"][0]["content"], "rule in system prompt"
+            assert "[Stay inside" in sent["messages"][0]["content"], "world boundary rule"
+            page.click("#edit-char")
+            expect(page.locator("#char-rules")).to_have_value("Never writes code.")
+            page.click("#char-cancel")
+
             # custom backgrounds: this chat, then every chat with the character, hide the C.ai one
             bg = Path(home) / "bg.png"
             bg.write_bytes(Path(ROOT / "extension" / "icons" / "icon48.png").read_bytes())

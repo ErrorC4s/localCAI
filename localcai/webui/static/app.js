@@ -327,6 +327,12 @@ function msgEl(row, index) {
   const nm = document.createElement("span"); nm.textContent = row.name || "";
   who.append(face, nm);
   if (row.extra && row.extra.pinned) { const p = document.createElement("span"); p.className = "pin"; p.innerHTML = ic("pinned") + " pinned"; who.appendChild(p); }
+  if (row.extra && row.extra.ooc_fixed && (row.swipe_id || 0) === (row.swipes || []).length - 1) {
+    const f = document.createElement("span"); f.className = "fixed";
+    f.innerHTML = ic("sparkle") + " auto-fixed"; f.title = "Rewritten to stay in character: " + row.extra.ooc_fixed
+      + "\nThe first version is one reply back (◀).";
+    who.appendChild(f);
+  }
   if (row.extra && row.extra.edited) { const e = document.createElement("span"); e.className = "edited"; e.textContent = "edited"; who.appendChild(e); }
   const body = document.createElement("div"); body.className = "body"; body.innerHTML = render(row.mes || "");
   el.append(who, body);
@@ -439,7 +445,12 @@ async function reply(path, payload) {
       const { value, done } = await reader.read();
       if (done) break;
       text += dec.decode(value, { stream: true });
-      body.innerHTML = render(text);
+      const mark = text.indexOf("\x1e");  // the server is double-checking the reply stays in character
+      body.innerHTML = render(mark >= 0 ? text.slice(0, mark) : text);
+      if (mark >= 0 && !bot.querySelector(".checking")) {
+        const c = document.createElement("div"); c.className = "checking small";
+        c.innerHTML = ic("sparkle") + " Checking it stays in character…"; bot.appendChild(c);
+      }
       box.scrollTop = box.scrollHeight;
     }
   } catch (e) {
@@ -468,7 +479,10 @@ $("input").addEventListener("keydown", (e) => {
 // ── ✨ Direct a reply: "make it shorter", "she gets jealous", "more teasing"… ─────
 const RECENT_KEY = "localcai.recentInstructions";
 function recentInstructions() { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch { return []; } }
+function currentRules() { return (((S.card || {}).extensions || {}).localcai || {}).rules || []; }
 function openDirect() {
+  $("direct-keep").checked = false;
+  $("direct-keep-name").textContent = (S.card && S.card.name) || "this character";
   const box = $("direct-recent"); box.innerHTML = "";
   for (const t of recentInstructions()) {
     const b = document.createElement("button"); b.type = "button"; b.className = "chip-btn"; b.textContent = t;
@@ -487,6 +501,12 @@ $("direct-form").onsubmit = (e) => {
     localStorage.setItem(RECENT_KEY, JSON.stringify(list));
   } catch { /* storage may be unavailable */ }
   $("direct-dialog").close();
+  if ($("direct-keep").checked) {
+    const rules = [...currentRules(), instruction].filter((r, i, a) => a.indexOf(r) === i);
+    api("/api/character/save", { json: { character: S.character, data: {}, rules } })
+      .then((r) => { S.card = r.card; toast("Saved as a rule for " + (S.card.name || "this character") + ". Edit it any time in Edit."); })
+      .catch((e) => toast(e.message, "error"));
+  }
   if (S.rows.length && !S.rows[S.rows.length - 1].is_user) { S.rows.pop(); renderMessages(); }
   reply("/api/chat/regenerate", { character: S.character, chat: S.chat, instruction });
 };
@@ -535,15 +555,20 @@ $("edit-char").onclick = async () => {
     const ta = document.createElement("textarea"); ta.dataset.key = k; ta.rows = k === "creator_notes" ? 1 : 4;
     ta.value = (S.card && S.card[k]) || ""; l.appendChild(ta); box.appendChild(l);
   }
+  const rl = document.createElement("label"); rl.className = "field";
+  rl.textContent = "Rules (one per line): always followed, e.g. \"Never writes code.\" or \"Has never heard of video games.\"";
+  const rt = document.createElement("textarea"); rt.id = "char-rules"; rt.rows = 3; rt.value = currentRules().join("\n");
+  rl.appendChild(rt); box.appendChild(rl);
   $("char-dialog-title").textContent = "Edit " + charInfo(S.character).name;
   $("char-dialog").showModal();
 };
 $("char-cancel").onclick = () => $("char-dialog").close();
 $("char-save").onclick = async () => {
   const data = {};
-  for (const ta of $("char-fields").querySelectorAll("textarea")) data[ta.dataset.key] = ta.value;
+  for (const ta of $("char-fields").querySelectorAll("textarea[data-key]")) data[ta.dataset.key] = ta.value;
+  const rules = $("char-rules").value.split("\n").map((x) => x.trim()).filter(Boolean);
   try {
-    const r = await api("/api/character/save", { json: { character: S.character, data, pronouns: $("char-pronouns").value } });
+    const r = await api("/api/character/save", { json: { character: S.character, data, rules, pronouns: $("char-pronouns").value } });
     S.card = r.card; $("char-dialog").close(); await loadState(); openCharacter(S.character, S.chat); toast("Character saved.");
   } catch (e) { toast(e.message, "error"); }
 };
@@ -592,6 +617,7 @@ $("open-settings").onclick = () => {
   $("set-recall").checked = s.recall !== false;
   $("set-pacing").checked = s.pacing !== false;
   $("set-initiative").value = s.initiative || "auto";
+  $("set-guard").checked = s.ooc_guard !== false;
   {
     const who = $("persona").value, p = personaInfo();
     const map = s.persona_pronouns || {};
@@ -619,6 +645,7 @@ $("settings-save").onclick = async () => {
     recall: $("set-recall").checked,
     pacing: $("set-pacing").checked,
     initiative: $("set-initiative").value,
+    ooc_guard: $("set-guard").checked,
     persona_pronouns: { ...(S.state.settings.persona_pronouns || {}), [$("persona").value]: $("set-pronouns").value },
     ctx_size: parseInt($("set-ctx").value, 10) || 8192,
     gpu_layers: Math.max(0, parseInt($("set-ngl").value, 10) || 0),
