@@ -76,8 +76,8 @@ Feed any of those files, or a folder of them, to `localcai import`.
 - Token budgeting is character-count based for now.
 
 ### Roadmap
-- [ ] Confirm the extractor's rules against a real (redacted) C.ai debug dump
-- [ ] Extractor: "export all my chats" (opt-in, slow, one at a time) + capture personas
+- [x] Confirm the extractor's rules against a real (redacted) C.ai debug dump
+- [ ] Extractor: "export all my chats" (opt-in, slow, one at a time)
 - [ ] Publish extractor on Chrome Web Store & Firefox Add-ons
 - [ ] Real-world fixtures for the official export & Wilds JSON
 - [ ] Desktop GUI (PySide6): drag in an export, pick a model, chat

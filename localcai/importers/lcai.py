@@ -26,6 +26,7 @@ def import_lcai(path: Path, data: dict | None = None) -> Bundle:
             tagline=c.get("tagline", ""),
             description=c.get("description", ""),
             greeting=c.get("greeting", ""),
+            alternate_greetings=list(c.get("alternate_greetings") or []),
             example_dialogue=(c.get("definition") or "").replace("END_OF_DIALOG", "<START>").strip(),
             creator=c.get("creator", ""),
             avatar_url=c.get("avatar_url"),
@@ -51,5 +52,7 @@ def import_lcai(path: Path, data: dict | None = None) -> Bundle:
                                 alternatives=[x for i, x in enumerate(cands) if i != p]))
         b.chats.append(Chat(character_name=ch.get("character_name", "Unknown"),
                             user_name=ch.get("user_name") or "User", messages=msgs,
-                            title=ch.get("title", ""), created=ch.get("created"), source="lcai"))
+                            title=ch.get("title", ""), created=ch.get("created"), source="lcai",
+                            memories=[m for m in ch.get("memories", []) if m.get("value")]))
+    b.personas = [p for p in data.get("personas", []) if p.get("name")]
     return b

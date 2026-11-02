@@ -1,7 +1,7 @@
 {
   "format": "localcai",
   "version": 1,
-  "exported_at": "2026-11-02T01:45:00.684Z",
+  "exported_at": "2026-11-02T02:13:23.958Z",
   "exporter": {
     "name": "localCAI extension",
     "version": "0.1.0",
@@ -14,6 +14,7 @@
       "tagline": "A sleepy moon witch",
       "description": "Lives on the moon.",
       "greeting": "*yawns* Oh, {{user}}...",
+      "alternate_greetings": [],
       "definition": "{{user}}: Hi\n{{char}}: Hello~",
       "definition_withheld": false,
       "avatar_url": "https://characterai.io/i/400/static/avatars/u/luna.webp",
@@ -26,9 +27,10 @@
       "tagline": "Someone else's bot",
       "description": "",
       "greeting": "Rawr.",
+      "alternate_greetings": [],
       "definition": "",
       "definition_withheld": true,
-      "avatar_url": null,
+      "avatar_url": "https://characterai.io/i/400/static/avatars/u/rex.webp",
       "creator": "someone_else",
       "is_own": false
     }
@@ -36,11 +38,23 @@
   "chats": [
     {
       "id": "chat-1",
-      "character_id": null,
+      "character_id": "abc123",
       "character_name": "Luna",
       "title": "",
-      "created": "2026-10-01T10:01:00Z",
+      "created": "2026-10-01T10:00:00Z",
       "user_name": "Alex",
+      "memories": [
+        {
+          "about": "Luna",
+          "category": "likes",
+          "value": "Earl Grey tea"
+        },
+        {
+          "about": "Alex",
+          "category": "hometown",
+          "value": "Lisbon"
+        }
+      ],
       "turns": [
         {
           "id": "t1",
@@ -98,5 +112,10 @@
       ]
     }
   ],
-  "personas": []
+  "personas": [
+    {
+      "name": "Alex",
+      "description": "A tired night-shift baker."
+    }
+  ]
 }

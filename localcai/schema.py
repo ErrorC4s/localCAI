@@ -46,6 +46,8 @@ class Chat:
     title: str = ""
     created: str | None = None
     source: str = "unknown"
+    # C.ai "conversation facts" (its built-in chat memory): [{"about","category","value"}]
+    memories: list[dict] = field(default_factory=list)
 
     @property
     def pins(self) -> list[Message]:
@@ -57,11 +59,13 @@ class Bundle:
     """Everything one import produced."""
     characters: list[Character] = field(default_factory=list)
     chats: list[Chat] = field(default_factory=list)
+    personas: list[dict] = field(default_factory=list)   # [{"name","description"}]
     warnings: list[str] = field(default_factory=list)
 
     def merge(self, other: "Bundle") -> "Bundle":
         self.characters += other.characters
         self.chats += other.chats
+        self.personas += other.personas
         self.warnings += other.warnings
         return self
 

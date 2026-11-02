@@ -5,11 +5,36 @@
   if (window.__localcaiInjected) return;
   window.__localcaiInjected = true;
 
+  // ALLOWLIST: only the endpoints that hold chats, characters, pins, memory and personas.
+  // Everything else (billing, subscriptions, analytics, account details...) is never collected.
+  const ALLOW = [
+    /^\/turns\/[^/]+\/?$/,                         // chat history pages (incl. pins & swipes)
+    /^\/chat\/[^/]+\/?$/,                          // chat metadata
+    /^\/chat\/[^/]+\/conversation-facts\/?$/,      // C.ai chat memory
+    /^\/chats\/recent\/[^/]+\/?$/,                 // chat list for one character
+    /^\/character\/v1\/get_character_info\/?$/,    // character profile
+    /^\/character\/v1\/get_user_personas\/?$/,     // your personas
+    /^\/user\/?$/,                                 // only to learn your username (trimmed below)
+    /^\/ws\/?$/,                                   // live messages
+  ];
   const isCai = (url) => {
     try {
-      const h = new URL(url, location.href).hostname;
-      return h === "character.ai" || h.endsWith(".character.ai");
+      const u = new URL(url, location.href);
+      const h = u.hostname;
+      if (!(h === "neo.character.ai" || h === "plus.character.ai")) return false;
+      if (u.pathname === "/turns/count/" || u.pathname === "/turns/count") return false;
+      return ALLOW.some((re) => re.test(u.pathname));
     } catch { return false; }
+  };
+  // From the account endpoint keep only what we need to tell "your" characters apart.
+  const trim = (url, data) => {
+    try {
+      if (/^\/user\/?$/.test(new URL(url, location.href).pathname)) {
+        const u = data?.user?.user || {};
+        return { user: { user: { username: u.username, account: { name: u.account?.name } } } };
+      }
+    } catch {}
+    return data;
   };
 
   const post = (kind, url, body) => {
@@ -18,7 +43,7 @@
     if (!data || typeof data !== "object") return;
     // strip query strings: they can carry ids/tokens and we don't need them
     const cleanUrl = String(url).split("?")[0];
-    window.postMessage({ __localcai: true, kind, url: cleanUrl, t: Date.now(), data }, location.origin);
+    window.postMessage({ __localcai: true, kind, url: cleanUrl, t: Date.now(), data: trim(url, data) }, location.origin);
   };
 
   // fetch

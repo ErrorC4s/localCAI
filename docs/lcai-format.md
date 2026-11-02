@@ -17,6 +17,7 @@ Everything else (official exports, CAI Tools, Wilds) is converted on a best-effo
       "tagline": "A sleepy moon witch",
       "description": "…",
       "greeting": "*yawns* Oh, {{user}}…",
+      "alternate_greetings": [],
       "definition": "{{user}}: Hi\n{{char}}: …",   // "" when not available to this user
       "definition_withheld": false,   // true = the character's creator kept it private
       "avatar_url": "https://…",
@@ -33,6 +34,9 @@ Everything else (official exports, CAI Tools, Wilds) is converted on a best-effo
       "title": "Moon night",
       "created": "2026-10-01T10:00:00Z",
       "user_name": "Alex",
+      "memories": [                   // C.ai's own chat memory ("conversation facts")
+        { "about": "Luna", "category": "likes", "value": "Earl Grey tea" }
+      ],
       "turns": [                      // oldest first
         {
           "id": "turn-uuid",
@@ -55,7 +59,7 @@ Everything else (official exports, CAI Tools, Wilds) is converted on a best-effo
 ## Rules
 - `turns` are **oldest first**.
 - `candidates[primary]` is the reply that was shown in the chat. The others become swipes.
-- `pinned: true` turns become constant lorebook memories on import.
+- `pinned: true` turns and chat `memories` become constant lorebook entries on import.
 - Private definitions of **other creators'** characters are never exported (`definition: ""`,
   `definition_withheld: true`).
 - Unknown extra fields must be ignored by readers. Bump `version` only for breaking changes.

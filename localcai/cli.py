@@ -50,7 +50,12 @@ def cmd_import(a: argparse.Namespace) -> int:
     for i, chat in enumerate(bundle.chats):
         p = write_chat(chat, out / "chats", i)
         print(f"  ✓ chat       {chat.character_name}  {len(chat.messages)} msgs, "
-              f"{len(chat.pins)} pinned  → {p}")
+              f"{len(chat.pins)} pinned, {len(chat.memories)} memories  → {p}")
+    if bundle.personas:
+        (out / "personas").mkdir(parents=True, exist_ok=True)
+        pp = out / "personas" / "personas.json"
+        pp.write_text(json.dumps(bundle.personas, ensure_ascii=False, indent=2), "utf-8")
+        print(f"  ✓ personas   {', '.join(p['name'] for p in bundle.personas)}  → {pp}")
     for w in bundle.warnings:
         print(f"  ! {w}", file=sys.stderr)
     if not bundle.characters and not bundle.chats:

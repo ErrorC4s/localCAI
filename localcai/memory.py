@@ -1,4 +1,4 @@
-"""Turn C.ai pinned messages into long-term memory.
+"""Turn C.ai pinned messages and chat memory ("conversation facts") into long-term memory.
 
 On C.ai, pinning a message means "always remember this". The closest local
 equivalent is a *constant* lorebook entry: it is injected into every prompt,
@@ -27,11 +27,24 @@ def pins_to_lorebook(chats: list[Chat], character_name: str) -> dict | None:
                 "comment": f"Pinned on Character.AI{(' at ' + m.timestamp) if m.timestamp else ''}",
                 "extensions": {"localcai": {"from_pin": True}},
             })
+        for f in chat.memories:
+            entries.append({
+                "id": len(entries),
+                "name": f"memory-{len(entries) + 1}",
+                "keys": [],
+                "content": f"{f.get('about', '')} — {f.get('category', '')}: {f['value']}".strip(" —:"),
+                "enabled": True,
+                "constant": True,
+                "insertion_order": len(entries),
+                "case_sensitive": False,
+                "comment": "Character.AI chat memory (conversation fact)",
+                "extensions": {"localcai": {"from_memory": True}},
+            })
     if not entries:
         return None
     return {
-        "name": f"{character_name} — pinned memories",
-        "description": "Imported from Character.AI pinned messages by localCAI",
+        "name": f"{character_name} — memories",
+        "description": "Imported from Character.AI pinned messages and chat memory by localCAI",
         "scan_depth": 4,
         "token_budget": 1024,
         "recursive_scanning": False,

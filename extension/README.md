@@ -32,4 +32,5 @@
 - `src/normalize.js`：**所有 C.ai 格式相關的規則都在這裡**，C.ai 改版時只需要改這一個檔
 - 測試：`NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs`（Playwright + 模擬的 character.ai，不會連到真網站）
 
-> 目前的格式規則還是暫定的，要用真實的除錯匯出確認過才算定案。
+> 格式規則已用真實資料確認（2026-11）：對話、重骰、釘選、角色、persona、C.ai 記憶（conversation facts）。
+> 只收集白名單內的端點，帳務、訂閱、生日等資料一律不碰。

@@ -107,3 +107,13 @@ def test_lcai_from_extension_is_exact():
     assert len(chat.pins) == 1 and chat.pins[0].is_user
     book = pins_to_lorebook(b.chats, "Luna")
     assert "Alishan" in book["entries"][0]["content"]
+
+
+def test_lcai_memories_and_personas():
+    b = import_path(FX / "extension_export.lcai.json")
+    assert [p["name"] for p in b.personas] == ["Alex"]
+    chat = b.chats[0]
+    assert {m["value"] for m in chat.memories} == {"Earl Grey tea", "Lisbon"}
+    book = pins_to_lorebook(b.chats, "Luna")
+    contents = [e["content"] for e in book["entries"]]
+    assert len(contents) == 3 and any("Lisbon" in c for c in contents)
