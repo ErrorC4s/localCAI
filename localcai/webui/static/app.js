@@ -365,6 +365,7 @@ function msgTools(row, i, el) {
     bar.appendChild(nav);
   }
   bar.append(
+    ...(!row.is_user && isLast ? [tool("✨", "Tell the character how to change this reply", () => openDirect())] : []),
     tool("✏", "Edit", () => startEdit(row, i, el)),
     tool((row.extra || {}).pinned ? "📍" : "📌", (row.extra || {}).pinned ? "Unpin" : "Pin (the character always remembers pinned messages)",
       () => editCall("pin", i, { pinned: !(row.extra || {}).pinned })),
@@ -463,6 +464,32 @@ $("composer").onsubmit = async (e) => {
 $("input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); }
 });
+// ── ✨ Direct a reply: "make it shorter", "she gets jealous", "more teasing"… ─────
+const RECENT_KEY = "localcai.recentInstructions";
+function recentInstructions() { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch { return []; } }
+function openDirect() {
+  const box = $("direct-recent"); box.innerHTML = "";
+  for (const t of recentInstructions()) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "chip-btn"; b.textContent = t;
+    b.onclick = () => { $("direct-text").value = t; $("direct-text").focus(); };
+    box.appendChild(b);
+  }
+  $("direct-text").value = ""; $("direct-dialog").showModal(); $("direct-text").focus();
+}
+$("direct-cancel").onclick = () => $("direct-dialog").close();
+$("direct-form").onsubmit = (e) => {
+  e.preventDefault();
+  const instruction = $("direct-text").value.trim();
+  if (!instruction) return;
+  try {
+    const list = [instruction, ...recentInstructions().filter((x) => x !== instruction)].slice(0, 6);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+  } catch { /* storage may be unavailable */ }
+  $("direct-dialog").close();
+  if (S.rows.length && !S.rows[S.rows.length - 1].is_user) { S.rows.pop(); renderMessages(); }
+  reply("/api/chat/regenerate", { character: S.character, chat: S.chat, instruction });
+};
+
 $("regen").onclick = () => {
   if (S.rows.length && !S.rows[S.rows.length - 1].is_user) { S.rows.pop(); renderMessages(); }  // the old reply stays as a swipe
   reply("/api/chat/regenerate", { character: S.character, chat: S.chat });

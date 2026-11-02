@@ -567,3 +567,15 @@ def test_initiative_lead_and_follow():
     assert "own next action" not in follow
     lead = continuity_note([prev, {"role": "user", "content": "*I sip* thanks"}], "Mira", "Sam", "lead")
     assert "take the lead" in lead
+
+
+
+def test_instruction_rewrites_reply():
+    from localcai.runtime.prompt import build_messages
+    hist = [{"role": "assistant", "content": "Hi."}, {"role": "user", "content": "*I wave*"}]
+    msgs = build_messages({"data": {"name": "Mira"}}, hist, "Sam", instruction="She gets jealous.",
+                          rewrite_of="*waves back* Hello, Sam!")
+    last = msgs[-1]["content"]
+    assert "Director's note for this reply only, from Sam" in last and "She gets jealous." in last
+    assert "<<<\n*waves back* Hello, Sam!\n>>>" in last and last.endswith("*I wave*")
+    assert "Director" not in build_messages({"data": {"name": "Mira"}}, hist, "Sam")[-1]["content"]

@@ -521,7 +521,9 @@ def make_handler(app: App, port: int):
                                   pacing=s.get("pacing", True) is not False,
                                   user_pronouns=str((s.get("persona_pronouns") or {}).get(s.get("persona") or "", "")
                                                     or s.get("user_pronouns") or ""),
-                                  initiative=str(s.get("initiative") or "auto"))
+                                  initiative=str(s.get("initiative") or "auto"),
+                                  instruction=str(body.get("instruction") or "")[:600],
+                                  rewrite_of=(swipe_row or {}).get("mes", "") if body.get("instruction") else "")
             info: dict = {}
             # Built-in engine: sampler settings that keep small models from rambling and looping.
             extra = ({"top_p": 0.9, "top_k": 40, "min_p": 0.05, "repeat_penalty": 1.08}

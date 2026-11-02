@@ -161,6 +161,25 @@ def main(shot=None):
             page.locator(".msg").nth(count - 1).locator(".tool[title^='Rewind']").click()
             expect(page.locator(".msg")).to_have_count(count - 1)
 
+            # ✨ change the last reply with an instruction → a new swipe written with a director's note
+            n0 = page.locator(".msg").count()
+            page.fill("#input", "hello again"); page.click("#send")
+            expect(page.locator(".msg")).to_have_count(n0 + 2)
+            page.wait_for_timeout(800)
+            before = page.locator(".msg").last.locator(".swipes span").inner_text()
+            page.locator(".msg").last.locator(".tool[title^='Tell the character']").click()
+            page.fill("#direct-text", "She gets jealous.")
+            page.click("#direct-form button[type=submit]")
+            page.wait_for_timeout(1500)
+            sent = json.load(open(last_path, encoding="utf-8"))
+            assert "Director's note for this reply only" in sent["messages"][-1]["content"]
+            assert "She gets jealous." in sent["messages"][-1]["content"] and "<<<" in sent["messages"][-1]["content"]
+            after = page.locator(".msg").last.locator(".swipes span").inner_text()
+            assert int(after.split("/")[1]) == int(before.split("/")[1]) + 1, (before, after)
+            page.locator(".msg").last.locator(".tool[title^='Tell the character']").click()
+            expect(page.locator("#direct-recent .chip-btn")).to_have_text(["She gets jealous."])
+            page.click("#direct-cancel")
+
             # custom backgrounds: this chat, then every chat with the character, hide the C.ai one
             bg = Path(home) / "bg.png"
             bg.write_bytes(Path(ROOT / "extension" / "icons" / "icon48.png").read_bytes())

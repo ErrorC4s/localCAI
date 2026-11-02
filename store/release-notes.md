@@ -1,4 +1,11 @@
-## localCAI v0.8.18 · Extractor 0.5.0
+## localCAI v0.8.19 · Extractor 0.5.0
+
+**✨ Change a reply with an instruction**
+- New ✨ button on the character's latest reply: type what should be different ("Shorter.", "She gets jealous.", "More teasing, less talking.", "讓她哭出來") and the reply is rewritten to follow it.
+- The rewrite is added as another version, so the original is still there behind ◀ ▶.
+- Your last few instructions are kept as one-click chips.
+
+### Earlier in v0.8.18
 
 **The character can take the lead**
 - The character now builds on its own last action to make the next move, instead of only reacting — while still never inventing what *you* do.

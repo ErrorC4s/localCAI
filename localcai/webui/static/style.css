@@ -190,3 +190,8 @@ details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted);
   background: rgba(0, 0, 0, .55); }
 .fit { color: var(--muted); } .fit.gpu { color: #7fd99a; } .fit.partial { color: #f0c46c; } .fit.cpu { color: #e88; }
 #eng-models li { margin: 3px 0; } #eng-models .fit { display: block; font-size: 11px; }
+#direct-dialog { width: min(560px, 94vw); } #direct-text { width: 100%; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+.chip-btn { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 99px;
+  padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.chip-btn:hover { border-color: var(--accent2); }

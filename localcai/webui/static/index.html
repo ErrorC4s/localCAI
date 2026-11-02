@@ -161,6 +161,19 @@
   </div>
 </dialog>
 
+<dialog id="direct-dialog">
+  <form id="direct-form" method="dialog">
+    <h3>✨ Change this reply</h3>
+    <p class="muted small">Tell the character what to do differently. The new version is added as another reply, so you can flip back with ◀ ▶.</p>
+    <input id="direct-text" maxlength="600" placeholder="e.g. Shorter. / She gets jealous. / More teasing, less talking. / 讓她哭出來">
+    <div id="direct-recent" class="chip-row"></div>
+    <div class="dialog-buttons">
+      <button type="button" class="btn" id="direct-cancel">Cancel</button>
+      <button type="submit" class="btn primary">✨ Rewrite</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="bg-dialog">
   <h3>🖼 Background</h3>
   <div id="bg-preview" class="bg-preview"><span id="bg-source"></span></div>

@@ -30,7 +30,7 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
                    max_chars: int = 24000, persona: str = "", memories: list[str] | None = None,
                    story: str = "", recalled: list[str] | None = None,
                    reply_words: int = 0, pacing: bool = True, user_pronouns: str = "",
-                   initiative: str = "auto") -> list[dict]:
+                   initiative: str = "auto", instruction: str = "", rewrite_of: str = "") -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
     Built to be prompt-cache friendly: everything that stays the same from turn to turn
@@ -99,6 +99,14 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         hint = moment_hint(history[-1]["content"])
         if hint:
             extra.append(hint.format(char=char))
+    if instruction:
+        # the user's own direction for this one reply (✨ on a message): it wins over the defaults above
+        d_note = (f"Director's note for this reply only, from {user_name} — follow it closely, it overrides "
+                  f"the guidance above where they conflict: {instruction.strip()}")
+        if rewrite_of:
+            d_note += (f"\nRewrite {char}'s reply below to follow the note. Keep the parts the note doesn't "
+                       f"ask to change, same perspective and format:\n<<<\n{rewrite_of.strip()}\n>>>")
+        extra.append(d_note)
     if recalled:
         extra.append("[Earlier moments that may be relevant now]\n" + "\n".join(f"- {x}" for x in recalled))
     note = _fill("\n\n".join(extra), char, user_name) if extra else ""
