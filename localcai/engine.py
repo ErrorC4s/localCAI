@@ -40,8 +40,24 @@ UA = {"User-Agent": "localCAI (+https://github.com/ErrorC4s/localCAI)"}
 # One-click starter model. The exact file is looked up via the Hugging Face API at download time.
 STARTER_MODELS = {
     "qwen3-4b-instruct": {
-        "label": "Qwen3 4B Instruct 2507 (Q4_K_M, ~2.5 GB, runs on 4+ GB VRAM)",
+        "label": "Qwen3 4B Instruct 2507 · general assistant, small and fast · ~2.5 GB, 4+ GB VRAM",
         "repo": "lmstudio-community/Qwen3-4B-Instruct-2507-GGUF",
+        "pattern": r"Q4_K_M\.gguf$",
+    },
+    # Community roleplay fine-tunes: write more like C.ai and refuse less (adult scenes included).
+    "stheno-8b": {
+        "label": "Stheno 8B v3.2 (Llama 3) · roleplay-tuned, fewer refusals · ~4.9 GB, 6–8 GB VRAM",
+        "repo": "QuantFactory/L3-8B-Stheno-v3.2-GGUF",
+        "pattern": r"Q4_K_M\.gguf$",
+    },
+    "mag-mell-12b": {
+        "label": "Mag Mell 12B R1 (Mistral Nemo) · roleplay & storytelling, fewer refusals · ~7.5 GB, 8+ GB VRAM",
+        "repo": "inflatebot/MN-12B-Mag-Mell-R1-GGUF",
+        "pattern": r"Q4_K_M\.gguf$",
+    },
+    "rocinante-12b": {
+        "label": "Rocinante 12B v1.1 (Mistral Nemo) · roleplay & adventure, fewer refusals · ~7.5 GB, 8+ GB VRAM",
+        "repo": "TheDrummer/Rocinante-12B-v1.1-GGUF",
         "pattern": r"Q4_K_M\.gguf$",
     },
 }
@@ -449,6 +465,7 @@ class Engine:
             # one conversation at a time: the whole context goes to it (no parallel slots sharing it)
             cmd = [str(server), "-m", str(path), "--host", "127.0.0.1", "--port", str(self.port),
                    "-c", str(int(ctx)), "-ngl", str(int(gpu_layers)), "-np", "1", "--jinja"]
+            fit_note = ""
             if int(gpu_layers) > 0 and device != "cpu":
                 if device and device != "auto":
                     chosen = next((d for d in self.devices(server) if d["id"] == device), None)
@@ -456,6 +473,12 @@ class Engine:
                     chosen = pick_device(self.devices(server))
                 if chosen:
                     cmd += ["--device", chosen["id"]]
+                    size_mib = path.stat().st_size / 2**20
+                    if int(gpu_layers) >= 999 and chosen.get("mib") and size_mib > chosen["mib"] * 0.8:
+                        # Too big to put all of it on the GPU: let llama.cpp work out how much fits.
+                        i = cmd.index("-ngl"); del cmd[i:i + 2]
+                        fit_note = (f"\n[localCAI] model is {size_mib / 1024:.1f} GB, GPU has {chosen['mib'] / 1024:.1f} GB:"
+                                    " letting llama.cpp fit as many layers as possible on the GPU")
                 self.device = chosen
             else:
                 self.device = None
@@ -465,7 +488,7 @@ class Engine:
             log.write(f"[localCAI] build: {inst.get('asset')}\n[localCAI] GPUs seen: "
                       + (", ".join(f"{d['id']}={d['name']} ({d['mib']} MiB)" for d in devs) or "none")
                       + f"\n[localCAI] using: {self.device['name'] if self.device else 'CPU'}"
-                      + f"\n[localCAI] command: {' '.join(cmd)}\n")
+                      + fit_note + f"\n[localCAI] command: {' '.join(cmd)}\n")
             log.flush()
             self.proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=server.parent,
                                          env=env, creationflags=flags)

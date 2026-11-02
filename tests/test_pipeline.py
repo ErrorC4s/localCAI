@@ -393,3 +393,32 @@ def test_moment_hint_picks_pacing():
     assert msgs[-1]["content"].startswith("(Moment: quiet and intimate")
     assert "Moment:" not in build_messages(card, [{"role": "user", "content": "*kisses*"}], "Sam",
                                            pacing=False)[-1]["content"]
+
+
+def test_big_model_lets_llama_cpp_fit_layers(tmp_path, monkeypatch):
+    import localcai.engine as eng
+    monkeypatch.setenv("LOCALCAI_HOME", str(tmp_path))
+    model = eng.models_dir() / "big-12b-Q4_K_M.gguf"
+    with open(model, "wb") as f:
+        f.truncate(int(7.5 * 2**30))  # sparse 7.5 GB file
+    server = tmp_path / "llama-server"; server.write_text("")
+    e = eng.Engine()
+    monkeypatch.setattr(e, "installed", lambda: {"server": str(server)})
+    monkeypatch.setattr(e, "devices", lambda s=None: [{"id": "CUDA0", "name": "RTX 4060", "mib": 8123}])
+    e._devices = (str(server), [{"id": "CUDA0", "name": "RTX 4060", "mib": 8123}])
+    seen = {}
+
+    def fake_popen(cmd, **kw):
+        seen["cmd"] = cmd
+        raise OSError("stop here")
+    monkeypatch.setattr(eng.subprocess, "Popen", fake_popen)
+    eng.engine_dir().mkdir(parents=True, exist_ok=True)
+    try:
+        e.start(model.name, timeout=1)
+    except Exception as ex:
+        seen.setdefault("err", repr(ex))
+    assert "cmd" in seen, seen
+    assert "--device" in seen["cmd"] and "-ngl" not in seen["cmd"], seen["cmd"]
+    log = (eng.engine_dir() / "engine.log").read_text()
+    assert "letting llama.cpp fit" in log
+    assert set(eng.STARTER_MODELS) >= {"qwen3-4b-instruct", "stheno-8b", "mag-mell-12b", "rocinante-12b"}
