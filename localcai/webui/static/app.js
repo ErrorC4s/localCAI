@@ -465,6 +465,7 @@ $("open-settings").onclick = () => {
   $("set-custom-url").value = s.backend in S.state.backends ? "" : s.backend;
   $("set-temperature").value = s.temperature; $("temp-val").textContent = s.temperature;
   $("set-max-tokens").value = s.max_tokens;
+  $("set-reply-length").value = s.reply_length || "auto";
   $("set-recall").checked = s.recall !== false;
   $("set-engine-variant").value = s.engine_variant; $("set-ctx").value = s.ctx_size; $("set-ngl").value = s.gpu_layers;
   api("/api/engine/devices").then((r) => {
@@ -480,6 +481,7 @@ $("settings-cancel").onclick = () => $("settings-dialog").close();
 $("settings-save").onclick = async () => {
   const patch = { user_name: $("set-user-name").value.trim(), temperature: parseFloat($("set-temperature").value),
     max_tokens: parseInt($("set-max-tokens").value, 10) || 512,
+    reply_length: $("set-reply-length").value,
     engine_variant: $("set-engine-variant").value,
     recall: $("set-recall").checked,
     ctx_size: parseInt($("set-ctx").value, 10) || 8192,

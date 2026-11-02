@@ -90,6 +90,7 @@ def main():
     env = {**os.environ, "LOCALCAI_HOME": home, "PYTHONPATH": str(ROOT),
            "LOCALCAI_LLAMA_RELEASE_API": f"http://127.0.0.1:{CDN_PORT}/release",
            "LOCALCAI_HF_BASE": f"http://127.0.0.1:{CDN_PORT}/hf",
+           "FAKE_LLAMA_LAST": str(Path(home, "llama_last.json")),
            "PATH": f"{fakebin}:{os.environ.get('PATH', '')}"}
     ui = subprocess.Popen([sys.executable, "-m", "localcai", "ui", "--no-browser", "--port", str(UI_PORT)], env=env, cwd=home)
     try:
@@ -142,6 +143,8 @@ def main():
             expect(page.locator(".msg")).to_have_count(n + 2, timeout=15000)
             last = page.locator(".msg").last
             expect(last).to_contain_text(f"Hello from {MODEL}")
+            req = json.loads(Path(home, "llama_last.json").read_text())
+            assert req["top_k"] == 40 and req["repeat_penalty"] > 1, "built-in engine gets sampler settings"
             expect(last).not_to_contain_text("let me think")                  # <think> stripped
 
             st = json.load(urllib.request.urlopen(f"http://127.0.0.1:{UI_PORT}/api/engine"))

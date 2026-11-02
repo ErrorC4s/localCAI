@@ -108,6 +108,16 @@ def main(shot=None):
             expect(page.locator(".msg")).to_have_count(n_before + 4)
             sent = json.load(open(last, encoding="utf-8"))
             assert "[About Alex]" in sent["messages"][0]["content"], "persona in prompt"
+            assert "[Reply length]" in sent["messages"][0]["content"], "reply length guidance"
+            assert "top_k" not in sent, "sampler extras only go to the built-in engine"
+
+            # a reply cut off by the token limit is saved without the half sentence
+            page.fill("#input", "please ramble")
+            page.click("#send")
+            expect(page.locator(".msg")).to_have_count(n_before + 6)
+            expect(page.locator(".msg").last).not_to_contain_text("Then she lea", timeout=8000)
+            expect(page.locator(".msg").last).to_contain_text("She nods.")
+            n_before += 2  # keep the later count checks relative
             user_face = page.locator(".msg.user .who img").last
             expect(user_face).to_have_attribute("src", "/api/image/personas/Alex.avatar.png")
 

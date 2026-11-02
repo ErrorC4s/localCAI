@@ -26,7 +26,8 @@ HISTORY_BLOCK = 16  # history is dropped in blocks, so the prompt's beginning st
 
 def build_messages(card: dict, history: list[dict], user_name: str = "User",
                    max_chars: int = 24000, persona: str = "", memories: list[str] | None = None,
-                   story: str = "", recalled: list[str] | None = None) -> list[dict]:
+                   story: str = "", recalled: list[str] | None = None,
+                   reply_words: int = 0) -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
     Built to be prompt-cache friendly: everything that stays the same from turn to turn
@@ -59,6 +60,10 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         parts.append(f"[The story so far between {char} and {user_name}]\n{story}")
     if d.get("mes_example"):
         parts.append("[Example dialogue — style reference only]\n" + d["mes_example"])
+    if reply_words:
+        parts.append(f"[Reply length]\nKeep each reply to about {reply_words} words or fewer, "
+                     f"like {char}'s earlier replies. Say one or two things, then stop at a natural point "
+                     f"and leave room for {user_name} to answer. Don't repeat yourself.")
     system = _fill("\n\n".join(parts), char, user_name)
 
     # per-turn context: keyword-triggered memories + recalled earlier moments
@@ -91,3 +96,26 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
                 break
     # (The greeting is part of `history` — the chat loop seeds it as the first assistant turn.)
     return [{"role": "system", "content": system}] + kept
+
+
+LENGTH_PRESETS = {"short": 60, "medium": 120, "long": 220}
+_BUCKETS = (40, 60, 90, 120, 160, 220, 300)
+
+
+def _words(text: str) -> int:
+    cjk = sum(1 for ch in text if "\u3040" <= ch <= "\u9fff" or "\uac00" <= ch <= "\ud7af")
+    return len(text.split()) + cjk // 2
+
+
+def reply_words_for(setting: str, history: list[dict]) -> int:
+    """Target reply length in words. "auto" copies how long the character's replies usually are
+    (median, rounded to a few fixed steps so the prompt stays the same turn after turn)."""
+    if setting in LENGTH_PRESETS:
+        return LENGTH_PRESETS[setting]
+    if setting == "off":
+        return 0
+    lens = sorted(_words(m["content"]) for m in history if m["role"] == "assistant" and m["content"].strip())
+    if len(lens) < 3:
+        return LENGTH_PRESETS["medium"]
+    med = lens[len(lens) // 2]
+    return min(_BUCKETS, key=lambda b: abs(b - med * 1.15))

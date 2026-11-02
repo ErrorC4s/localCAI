@@ -1,6 +1,8 @@
-## localCAI v0.8.4 · Extractor 0.5.0
+## localCAI v0.8.5 · Extractor 0.5.0
 
-**Much faster replies**
-- Prompts are now built so the engine can reuse its cache: only the newest message is processed each turn instead of the whole conversation. Long chats go from minutes to seconds, even on CPU.
-- On PCs with an NVIDIA GPU, the built-in engine now installs the CUDA build of llama.cpp (with its CUDA runtime) instead of Vulkan. Open 🧠 and press **Reinstall / update** to switch.
-- The status chip warns "CPU (slow)" when no GPU is being used, and engine.log now records which GPUs were detected and which one is used.
+**Replies that know when to stop**
+- New **Reply length** setting (⚙). The default, "Like the character's past replies", matches how long the character usually wrote on C.ai. Short / Medium / Long / No limit are also available.
+- A reply that hits the hard token limit is saved without its unfinished last sentence.
+- The built-in engine uses sampler settings that keep small models from rambling and repeating themselves.
+
+From v0.8.4: much faster replies (prompt cache, and the CUDA engine on NVIDIA GPUs).

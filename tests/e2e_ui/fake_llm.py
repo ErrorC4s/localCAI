@@ -25,9 +25,13 @@ class H(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
-        for t in ["*sips tea* ", "Oolong ", "from **Darjeeling**~"]:
+        ramble = "ramble" in body["messages"][-1]["content"]
+        parts = ["She nods. ", "Then she lea"] if ramble else ["*sips tea* ", "Oolong ", "from **Darjeeling**~"]
+        for t in parts:
             self.wfile.write(f"data: {json.dumps({'choices': [{'delta': {'content': t}}]})}\n\n".encode())
             self.wfile.flush()
+        fin = {"choices": [{"delta": {}, "finish_reason": "length" if ramble else "stop"}]}
+        self.wfile.write(f"data: {json.dumps(fin)}\n\n".encode())
         self.wfile.write(b"data: [DONE]\n\n")
 
 

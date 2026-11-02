@@ -28,16 +28,18 @@ from .. import analyze
 from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
+from ..runtime.client import trim_to_sentence
+from ..runtime.prompt import reply_words_for
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
-                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device"}
+                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length"}
 DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
             "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True,
-            "gpu_device": "auto"}
+            "gpu_device": "auto", "reply_length": "auto"}
 
 # Background jobs (history analysis). One at a time; the UI polls /api/job.
 JOB: dict = {}
@@ -481,11 +483,17 @@ def make_handler(app: App, port: int):
                 query = " ".join(r.get("mes", "") for r in rows[-2:])
                 recalled = recall(rows, query, exclude_last=40, cache_key=str(path))
             budget = max(6000, int(int(s["ctx_size"]) * 3.2) - int(s["max_tokens"]) * 4)
-            msgs = build_messages(card, chatlog.to_history(rows), user, max_chars=budget, persona=persona,
+            history = chatlog.to_history(rows)
+            msgs = build_messages(card, history, user, max_chars=budget, persona=persona,
                                   memories=chatlog.pinned_memories(rows + ([swipe_row] if swipe_row else [])),
-                                  story=story, recalled=recalled)
+                                  story=story, recalled=recalled,
+                                  reply_words=reply_words_for(str(s.get("reply_length", "auto")), history))
+            info: dict = {}
+            # Built-in engine: sampler settings that keep small models from rambling and looping.
+            extra = ({"top_p": 0.9, "top_k": 40, "min_p": 0.05, "repeat_penalty": 1.08}
+                     if s["backend"] == "builtin" else None)
             gen = stream_chat(url, s["model"], msgs, temperature=float(s["temperature"]),
-                              max_tokens=int(s["max_tokens"]))
+                              max_tokens=int(s["max_tokens"]), info=info, extra=extra)
             try:
                 first = next(gen, "")
             except OSError as e:
@@ -512,6 +520,8 @@ def make_handler(app: App, port: int):
                 except OSError:
                     pass
             text_out = "".join(reply).strip()
+            if info.get("finish_reason") == "length":
+                text_out = trim_to_sentence(text_out)  # hit max_tokens: don't save half a sentence
             if swipe_row is not None:
                 if text_out:
                     chatlog.add_swipe(swipe_row, text_out)

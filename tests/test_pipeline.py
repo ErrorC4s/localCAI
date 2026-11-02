@@ -332,3 +332,24 @@ def test_cuda_build_on_nvidia():
     assert pick_asset(assets, "win", "x64", "auto", nvidia=False)["name"].endswith("vulkan-x64.zip")
     assert pick_asset(assets, "win", "x64", "vulkan", nvidia=True)["name"].endswith("vulkan-x64.zip")
     assert companion_assets(assets, {"name": "llama-b1-bin-win-vulkan-x64.zip"}) == []
+
+
+def test_trim_to_sentence():
+    from localcai.runtime.client import trim_to_sentence
+    assert trim_to_sentence('*She smiles.* "Hello there." *(My eyes close. A') == '*She smiles.* "Hello there." *(My eyes close.)*'
+    assert trim_to_sentence("我好想你。你呢？我們去") == "我好想你。你呢？"
+    assert trim_to_sentence("no punctuation at all") == "no punctuation at all"
+    assert trim_to_sentence('*She leans in. "Stay') == '*She leans in.*'
+
+
+def test_reply_length_auto_and_stable():
+    from localcai.runtime.prompt import build_messages, reply_words_for
+    hist = [{"role": "assistant", "content": " ".join(["word"] * 50)}, {"role": "user", "content": "hi"}] * 10
+    n = reply_words_for("auto", hist)
+    assert 40 <= n <= 90
+    assert reply_words_for("short", hist) == 60 and reply_words_for("off", hist) == 0
+    # one more long reply barely moves the median → same bucket → same cached system prompt
+    assert reply_words_for("auto", hist + [{"role": "assistant", "content": "x " * 400}]) == n
+    card = {"data": {"name": "Mira"}}
+    sys_text = build_messages(card, hist, "Sam", reply_words=n)[0]["content"]
+    assert f"about {n} words" in sys_text

@@ -24,7 +24,9 @@ class H(BaseHTTPRequestHandler):
             self.send_response(200); self.end_headers()
             self.wfile.write(json.dumps({"data": [{"id": model}]}).encode())
     def do_POST(self):
-        self.rfile.read(int(self.headers["Content-Length"]))
+        req = self.rfile.read(int(self.headers["Content-Length"]))
+        if os.environ.get("FAKE_LLAMA_LAST"):
+            open(os.environ["FAKE_LLAMA_LAST"], "wb").write(req)
         self.send_response(200); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
         for t in ["<think>let me th", "ink</think>", "Hello from ", model]:
             self.wfile.write(f"data: {json.dumps({'choices': [{'delta': {'content': t}}]})}\n\n".encode()); self.wfile.flush()
