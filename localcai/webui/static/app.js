@@ -563,6 +563,7 @@ $("open-settings").onclick = () => {
   $("set-reply-length").value = s.reply_length || "auto";
   $("set-recall").checked = s.recall !== false;
   $("set-pacing").checked = s.pacing !== false;
+  $("set-initiative").value = s.initiative || "auto";
   {
     const who = $("persona").value, p = personaInfo();
     const map = s.persona_pronouns || {};
@@ -589,6 +590,7 @@ $("settings-save").onclick = async () => {
     engine_variant: $("set-engine-variant").value,
     recall: $("set-recall").checked,
     pacing: $("set-pacing").checked,
+    initiative: $("set-initiative").value,
     persona_pronouns: { ...(S.state.settings.persona_pronouns || {}), [$("persona").value]: $("set-pronouns").value },
     ctx_size: parseInt($("set-ctx").value, 10) || 8192,
     gpu_layers: Math.max(0, parseInt($("set-ngl").value, 10) || 0),

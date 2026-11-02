@@ -106,6 +106,12 @@
   <label class="field">Reply length
     <select id="set-reply-length"><option value="auto">Like the character's past replies</option><option value="short">Short</option><option value="medium">Medium</option><option value="long">Long</option><option value="off">No limit</option></select></label>
   <label class="check-row"><input type="checkbox" id="set-pacing"> Natural pacing: keep actions, scene and dialogue apart, and fit them to the moment</label>
+  <label class="field">Who leads the scene
+    <select id="set-initiative">
+      <option value="auto">Auto: the character keeps things moving, and takes the lead when you ask ("your turn", "go on", "妳來", "...")</option>
+      <option value="follow">Me: the character mostly reacts to what I do</option>
+      <option value="lead">The character: it makes the next move every turn</option>
+    </select></label>
   <label class="field">Hard limit per reply (tokens)<input id="set-max-tokens" type="number" min="32" max="4096" step="32"></label>
   <label class="check-row"><input type="checkbox" id="set-recall"> Recall earlier moments from the whole chat when relevant</label>
   <details>

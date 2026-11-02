@@ -29,7 +29,8 @@ HISTORY_BLOCK = 16  # history is dropped in blocks, so the prompt's beginning st
 def build_messages(card: dict, history: list[dict], user_name: str = "User",
                    max_chars: int = 24000, persona: str = "", memories: list[str] | None = None,
                    story: str = "", recalled: list[str] | None = None,
-                   reply_words: int = 0, pacing: bool = True, user_pronouns: str = "") -> list[dict]:
+                   reply_words: int = 0, pacing: bool = True, user_pronouns: str = "",
+                   initiative: str = "auto") -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
     Built to be prompt-cache friendly: everything that stays the same from turn to turn
@@ -82,7 +83,7 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
     if triggered:
         extra.append("[Relevant memories]\n" + "\n".join(f"- {x}" for x in triggered))
     if pacing and history and history[-1]["role"] == "user":
-        c = continuity_note(history, char, user_name)
+        c = continuity_note(history, char, user_name, initiative)
         if c:
             extra.append(c)
     if history and history[-1]["role"] == "user" and _FIRST_PERSON.search(history[-1]["content"]):
@@ -161,11 +162,24 @@ def guess_user_pronouns(history: list[dict]) -> str:
 _ACTION = re.compile(r"\*([^*\n]{3,})\*")
 
 
-def continuity_note(history: list[dict], char: str, user: str) -> str:
-    """Keep the scene from jumping: where the last reply left off, and whether the user did anything new.
+_LEAD = re.compile(r"\b(?:your turn|your move|take (?:the )?lead|you lead|lead the way|do (?:whatever|what) you want|"
+                   r"surprise me|show me|go on|continue|keep going|don'?t stop)\b|妳來|你來|主導|繼續|隨妳|隨你|交給妳|交給你",
+                   re.I)
 
-    Small models tend to skip ahead (new place, new position) or invent the user's next move
-    ("your fingers slide…") when the user only said something.
+
+def wants_lead(text: str) -> bool:
+    """The user hands the scene to the character ("your turn", "go on", "妳來", or just "...")."""
+    t = text.strip()
+    return bool(_LEAD.search(t)) or bool(t) and not re.sub(r"[.…。\s~～*]", "", t)
+
+
+def continuity_note(history: list[dict], char: str, user: str, initiative: str = "auto") -> str:
+    """Keep the scene flowing without jumps.
+
+    - Anchor: where the last reply left off (its last actions) — continue from there, nothing skipped.
+    - Never invent the user's moves; when the user only spoke they did nothing new physically.
+    - Initiative: the character may (auto), or should (lead / when asked), build on its last action
+      and make the next move itself; with "follow" it mostly reacts.
     """
     last_user = history[-1]["content"]
     prev = next((m["content"] for m in reversed(history[:-1]) if m["role"] == "assistant"), "")
@@ -178,11 +192,21 @@ def continuity_note(history: list[dict], char: str, user: str) -> str:
         parts.append(f"Continuity: the scene is exactly where {char}'s last reply left it ({anchor}). "
                      f"Continue from there: same place, same positions, nothing skipped.")
     spoke_only = not _ACTION.search(last_user) and not re.match(r"\s*(?:I|I'm|我)\b", last_user)
-    if spoke_only:
-        parts.append(f"{user} only spoke this turn and did nothing new with their body: "
-                     f"don't describe {user} doing or touching anything new, just react to their words.")
+    lead = initiative == "lead" or (initiative == "auto" and wants_lead(last_user))
+    if lead:
+        parts.append(f"{user} wants {char} to take the lead: build directly on that last action and make the "
+                     f"next move yourself, one clear step forward in {char}'s own actions and words. "
+                     f"Don't decide what {user} does, says or feels.")
+    elif spoke_only:
+        parts.append(f"{user} only spoke this turn and did nothing new with their body: don't describe {user} "
+                     f"doing or touching anything new. React to their words"
+                     + ("." if initiative == "follow" else
+                        f", then {char} may carry the scene on with her own next action, following on from the last one.")
+                     .replace("her own", f"{char}'s own"))
     else:
-        parts.append(f"React to what {user} actually did; never add actions for {user} beyond what they wrote.")
+        parts.append(f"React to what {user} actually did; never add actions for {user} beyond what they wrote."
+                     + ("" if initiative == "follow" else
+                        f" Then {char} can continue with a next action of {char}'s own that follows from it."))
     return " ".join(parts)
 
 

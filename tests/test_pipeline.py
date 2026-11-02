@@ -550,3 +550,20 @@ def test_continuity_note_anchors_scene_and_spoken_turns():
     assert "only spoke" not in acted and "never add actions for Sam" in acted
     last = build_messages({"data": {"name": "Mira"}}, hist, "Sam")[-1]["content"]
     assert "Continuity:" in last and last.endswith("hm... you're so sweet tonight...")
+
+
+
+def test_initiative_lead_and_follow():
+    from localcai.runtime.prompt import continuity_note, wants_lead
+    prev = {"role": "assistant", "content": "*I pour you some tea and slide the cup over.*"}
+    for msg in ("your turn~", "go on...", "妳來", "...", "…"):
+        assert wants_lead(msg), msg
+        n = continuity_note([prev, {"role": "user", "content": msg}], "Mira", "Sam")
+        assert "take the lead" in n and "next move yourself" in n and "pour you some tea" in n
+    assert not wants_lead("thanks for the tea")
+    auto = continuity_note([prev, {"role": "user", "content": "thanks for the tea"}], "Mira", "Sam")
+    assert "Sam only spoke" in auto and "Mira's own next action" in auto
+    follow = continuity_note([prev, {"role": "user", "content": "thanks for the tea"}], "Mira", "Sam", "follow")
+    assert "own next action" not in follow
+    lead = continuity_note([prev, {"role": "user", "content": "*I sip* thanks"}], "Mira", "Sam", "lead")
+    assert "take the lead" in lead

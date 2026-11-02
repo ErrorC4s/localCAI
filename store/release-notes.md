@@ -1,4 +1,11 @@
-## localCAI v0.8.17 · Extractor 0.5.0
+## localCAI v0.8.18 · Extractor 0.5.0
+
+**The character can take the lead**
+- The character now builds on its own last action to make the next move, instead of only reacting — while still never inventing what *you* do.
+- Hand the scene over any time with "your turn", "go on", "take the lead", "妳來", "繼續", or just "...": the character continues from where things stand and moves one clear step forward.
+- New ⚙ Settings → "Who leads the scene": Auto (default), Me (the character mostly reacts), or The character (it makes the next move every turn).
+
+### Earlier in v0.8.17
 
 **Scenes don't jump any more**
 - Each turn the model is reminded where the last reply left off (the last actions in it), and told to continue from there: same place, same positions, nothing skipped.
