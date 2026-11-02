@@ -38,14 +38,31 @@ def _quiet_console() -> None:
         sys.stderr = sys.stderr or f
 
 
-def _running_here(port: int) -> bool:
-    """Is a localCAI already serving on this port? (Then just open another window to it.)"""
+def _running_version(port: int) -> str | None:
+    """The version of the localCAI already serving on this port, or None."""
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{port}/api/state", headers={"Host": f"127.0.0.1:{port}"})
         with urllib.request.urlopen(req, timeout=1.5) as r:
-            return "version" in json.load(r)
-    except (OSError, ValueError):
-        return False
+            return str(json.load(r).get("version") or "") or None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _ask_to_quit(port: int, wait: float = 10.0) -> bool:
+    """Ask an older localCAI on this port to close; True once the port is free."""
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/quit", data=b"{}", method="POST",
+                                     headers={"Host": f"127.0.0.1:{port}", "X-LocalCAI": "1",
+                                              "Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=3).read()
+    except OSError:
+        return False  # versions before 0.8.6 can't be asked
+    end = time.time() + wait
+    while time.time() < end:
+        if _running_version(port) is None:
+            return True
+        time.sleep(0.3)
+    return False
 
 
 def _free_port() -> int:
@@ -68,8 +85,15 @@ def main() -> int:
     from .engine import ENGINE
     from .webui.server import create_server
 
+    from . import __version__
     port, httpd = PORT, None
-    if not _running_here(port):
+    running = _running_version(port)
+    if running and running != __version__:
+        # An older (or other) version is open: ask it to close so this one is what you see.
+        if not _ask_to_quit(port):
+            port = _free_port()  # it couldn't be asked: run side by side instead of reusing it
+        running = None
+    if running is None:
         try:
             httpd = create_server(port)
         except OSError:  # port taken by something else
@@ -85,18 +109,22 @@ def main() -> int:
         webbrowser.open(url)
         if httpd is None:
             return 0
+        stop = threading.Event()
+        httpd.quit_hook = stop.set  # a newer version asked us to close
         print("Close this window or press Ctrl+C to stop localCAI.")
         try:
-            while True:
-                time.sleep(3600)
+            while not stop.wait(1):
+                pass
         except KeyboardInterrupt:
             pass
     else:
         _windows_taskbar_identity()
         icon = resource("assets/logo.ico")
         webview.settings["ALLOW_DOWNLOADS"] = True  # ⬇ Card, exports
-        webview.create_window("localCAI", url, width=1320, height=860, min_size=(960, 620),
+        window = webview.create_window("localCAI", url, width=1320, height=860, min_size=(960, 620),
                               background_color="#15161D", text_select=True)
+        if httpd is not None:
+            httpd.quit_hook = window.destroy  # a newer version asked us to close
         webview.start(icon=str(icon) if icon.exists() else None, private_mode=False,
                       storage_path=str(home() / "webview"))
     if httpd is not None:

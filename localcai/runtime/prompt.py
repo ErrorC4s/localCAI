@@ -27,7 +27,7 @@ HISTORY_BLOCK = 16  # history is dropped in blocks, so the prompt's beginning st
 def build_messages(card: dict, history: list[dict], user_name: str = "User",
                    max_chars: int = 24000, persona: str = "", memories: list[str] | None = None,
                    story: str = "", recalled: list[str] | None = None,
-                   reply_words: int = 0) -> list[dict]:
+                   reply_words: int = 0, pacing: bool = True) -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
     Built to be prompt-cache friendly: everything that stays the same from turn to turn
@@ -60,6 +60,8 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         parts.append(f"[The story so far between {char} and {user_name}]\n{story}")
     if d.get("mes_example"):
         parts.append("[Example dialogue — style reference only]\n" + d["mes_example"])
+    if pacing:
+        parts.append(PACING.format(char=char, user=user_name))
     if reply_words:
         parts.append(f"[Reply length]\nKeep each reply to about {reply_words} words or fewer, "
                      f"like {char}'s earlier replies. Say one or two things, then stop at a natural point "
@@ -96,6 +98,15 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
                 break
     # (The greeting is part of `history` — the chat loop seeds it as the first assistant turn.)
     return [{"role": "system", "content": system}] + kept
+
+
+PACING = """[How to write {char}'s replies]
+Keep three things apart: actions and body language go in *asterisks*, spoken words go in "quotes", and the scene (place, light, sounds, weather) is described briefly and only when it changes or matters. If {char}'s earlier replies use a different format, follow theirs.
+Let the moment decide the balance between action and speech:
+- quiet, tender or sleepy moments: mostly slow, gentle actions and only a few soft words;
+- talking, teasing, arguing or explaining: mostly dialogue, with small gestures;
+- fast or physical moments (fighting, running, a battle, cooking): short action beats and short lines.
+Don't attach a line of speech to every gesture, and don't alternate action, line, action, line. Several actions can flow together in one paragraph; {char} can act without speaking, or speak without a gesture. Write in normal paragraphs, not one-line poem stacks. Never write {user}'s actions or words."""
 
 
 LENGTH_PRESETS = {"short": 60, "medium": 120, "long": 220}

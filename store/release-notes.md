@@ -1,8 +1,7 @@
-## localCAI v0.8.5 · Extractor 0.5.0
+## localCAI v0.8.6 · Extractor 0.5.0
 
-**Replies that know when to stop**
-- New **Reply length** setting (⚙). The default, "Like the character's past replies", matches how long the character usually wrote on C.ai. Short / Medium / Long / No limit are also available.
-- A reply that hits the hard token limit is saved without its unfinished last sentence.
-- The built-in engine uses sampler settings that keep small models from rambling and repeating themselves.
+**More natural replies**
+- New "Natural pacing" guide (on by default, in ⚙ Settings): the model keeps actions (*asterisks*), spoken words ("quotes") and scene description apart, and fits the balance to the moment — quiet moments get mostly gentle actions, conversations get mostly dialogue, fast scenes get short beats. No more a line of speech glued to every gesture.
 
-From v0.8.4: much faster replies (prompt cache, and the CUDA engine on NVIDIA GPUs).
+**Updating is smoother**
+- Opening a newer localCAI.exe while an older one is still open now closes the old one and takes over, instead of showing the old version's window. (Works from v0.8.6 onward; for older versions, close them first.)

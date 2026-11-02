@@ -467,6 +467,7 @@ $("open-settings").onclick = () => {
   $("set-max-tokens").value = s.max_tokens;
   $("set-reply-length").value = s.reply_length || "auto";
   $("set-recall").checked = s.recall !== false;
+  $("set-pacing").checked = s.pacing !== false;
   $("set-engine-variant").value = s.engine_variant; $("set-ctx").value = s.ctx_size; $("set-ngl").value = s.gpu_layers;
   api("/api/engine/devices").then((r) => {
     const sel = $("set-gpu"); sel.length = 2;
@@ -484,6 +485,7 @@ $("settings-save").onclick = async () => {
     reply_length: $("set-reply-length").value,
     engine_variant: $("set-engine-variant").value,
     recall: $("set-recall").checked,
+    pacing: $("set-pacing").checked,
     ctx_size: parseInt($("set-ctx").value, 10) || 8192,
     gpu_layers: Math.max(0, parseInt($("set-ngl").value, 10) || 0),
     gpu_device: $("set-gpu").value };

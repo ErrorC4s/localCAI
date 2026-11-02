@@ -35,11 +35,11 @@ from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
-                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length"}
+                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing"}
 DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
             "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True,
-            "gpu_device": "auto", "reply_length": "auto"}
+            "gpu_device": "auto", "reply_length": "auto", "pacing": True}
 
 # Background jobs (history analysis). One at a time; the UI polls /api/job.
 JOB: dict = {}
@@ -215,6 +215,11 @@ def make_handler(app: App, port: int):
                     return self.send_json(settings())
                 if path == "/api/import":
                     return self.do_import()
+                if path == "/api/quit":  # a newer localCAI is starting and takes over
+                    self.send_json({"ok": True})
+                    hook = getattr(self.server, "quit_hook", None) or self.server.shutdown
+                    threading.Thread(target=hook, daemon=True).start()
+                    return
                 if path.startswith("/api/engine/"):
                     return self.engine_action(path.rsplit("/", 1)[1], self.body_json())
                 if path == "/api/character/delete":
@@ -487,7 +492,8 @@ def make_handler(app: App, port: int):
             msgs = build_messages(card, history, user, max_chars=budget, persona=persona,
                                   memories=chatlog.pinned_memories(rows + ([swipe_row] if swipe_row else [])),
                                   story=story, recalled=recalled,
-                                  reply_words=reply_words_for(str(s.get("reply_length", "auto")), history))
+                                  reply_words=reply_words_for(str(s.get("reply_length", "auto")), history),
+                                  pacing=s.get("pacing", True) is not False)
             info: dict = {}
             # Built-in engine: sampler settings that keep small models from rambling and looping.
             extra = ({"top_p": 0.9, "top_k": 40, "min_p": 0.05, "repeat_penalty": 1.08}

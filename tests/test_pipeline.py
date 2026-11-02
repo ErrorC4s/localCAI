@@ -353,3 +353,29 @@ def test_reply_length_auto_and_stable():
     card = {"data": {"name": "Mira"}}
     sys_text = build_messages(card, hist, "Sam", reply_words=n)[0]["content"]
     assert f"about {n} words" in sys_text
+
+
+def test_pacing_guide_in_stable_system_prompt():
+    from localcai.runtime.prompt import build_messages
+    card = {"data": {"name": "Mira", "description": "moon witch"}}
+    hist = [{"role": "assistant", "content": "*waves* \"Hi.\""}, {"role": "user", "content": "hello"}]
+    on = build_messages(card, hist, "Sam")
+    off = build_messages(card, hist, "Sam", pacing=False)
+    assert "*asterisks*" in on[0]["content"] and "Never write Sam's" in on[0]["content"]
+    assert "*asterisks*" not in off[0]["content"]
+    hist2 = hist + [{"role": "assistant", "content": "ok"}, {"role": "user", "content": "more"}]
+    assert build_messages(card, hist2, "Sam")[0] == on[0]  # system prompt stays cacheable
+
+
+def test_newer_version_asks_older_to_quit(tmp_path, monkeypatch):
+    import threading
+    from localcai import desktop
+    from localcai.webui.server import create_server
+    monkeypatch.setenv("LOCALCAI_HOME", str(tmp_path))
+    port = desktop._free_port()
+    httpd = create_server(port, tmp_path / "lib")
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    assert desktop._running_version(port)
+    assert desktop._ask_to_quit(port, wait=5)
+    assert desktop._running_version(port) is None
+    httpd.server_close()
