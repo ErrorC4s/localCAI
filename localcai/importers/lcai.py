@@ -52,10 +52,12 @@ def import_lcai(path: Path, data: dict | None = None) -> Bundle:
             msgs.append(Message(author=a.get("name", ""), is_user=bool(a.get("is_user")),
                                 text=cands[p], timestamp=t.get("created"),
                                 pinned=bool(t.get("pinned")),
-                                alternatives=[x for i, x in enumerate(cands) if i != p]))
+                                alternatives=[x for i, x in enumerate(cands) if i != p],
+                                id=t.get("id") or None))
         b.chats.append(Chat(character_name=ch.get("character_name", "Unknown"),
                             user_name=ch.get("user_name") or "User", messages=msgs,
                             title=ch.get("title", ""), created=ch.get("created"), source="lcai",
+                            source_id=ch.get("id") or None,
                             memories=[m for m in ch.get("memories", []) if m.get("value")],
                             background=decode_data_url(ch.get("background"))))
     for p in data.get("personas", []):

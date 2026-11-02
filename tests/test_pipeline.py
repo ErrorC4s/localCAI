@@ -157,3 +157,55 @@ def test_bad_images_are_rejected():
     jpeg = decode_data_url("data:image/jpeg;base64," + b64(b"\xff\xd8\xff\xe0rest"))
     assert jpeg == ("image/jpeg", b"\xff\xd8\xff\xe0rest")
     assert png_or_none("data:image/jpeg;base64," + b64(b"\xff\xd8\xff\xe0rest")) is None
+
+
+def test_strip_thinking_handles_split_tags():
+    from localcai.runtime.client import strip_thinking
+    toks = ["<thi", "nk>secret plan", "</th", "ink>\nHello ", "<think>x</think>", "world"]
+    assert "".join(strip_thinking(iter(toks))) == "Hello world"
+    assert "".join(strip_thinking(iter(["a < b", " and c > d"]))) == "a < b and c > d"
+
+
+def test_engine_picks_the_right_build():
+    from localcai.engine import pick_asset
+    names = ["llama-b9000-bin-win-cpu-x64.zip", "llama-b9000-bin-win-vulkan-x64.zip", "llama-b9000-bin-win-cuda-12.4-x64.zip",
+             "cudart-llama-bin-win-cuda-12.4-x64.zip", "llama-b9000-bin-macos-arm64.tar.gz",
+             "llama-b9000-bin-ubuntu-x64.tar.gz", "llama-b9000-bin-ubuntu-vulkan-x64.tar.gz", "llama-b9000-xcframework.zip"]
+    assets = [{"name": n} for n in names]
+    pick = lambda *a: (pick_asset(assets, *a) or {}).get("name")
+    assert pick("win", "x64", "auto") == "llama-b9000-bin-win-vulkan-x64.zip"
+    assert pick("win", "x64", "cpu") == "llama-b9000-bin-win-cpu-x64.zip"
+    assert pick("macos", "arm64", "auto") == "llama-b9000-bin-macos-arm64.tar.gz"
+    assert pick("ubuntu", "x64", "auto") == "llama-b9000-bin-ubuntu-vulkan-x64.tar.gz"
+    assert pick("ubuntu", "x64", "cpu") == "llama-b9000-bin-ubuntu-x64.tar.gz"
+    assert pick("win", "arm64", "auto") is None
+
+
+def test_reimport_merges_instead_of_duplicating(tmp_path):
+    import copy
+    from localcai import chatlog
+    from localcai.library import import_into
+    full = json.loads((FX / "extension_export.lcai.json").read_text("utf-8"))
+    # 1st export: only the 2 newest turns (user didn't scroll up)
+    partial = copy.deepcopy(full)
+    partial["chats"][0]["turns"] = partial["chats"][0]["turns"][-2:]
+    (tmp_path / "a.lcai.json").write_text(json.dumps(partial), "utf-8")
+    import_into(tmp_path / "a.lcai.json", tmp_path / "lib")
+    files = list((tmp_path / "lib" / "chats").glob("Luna.*.jsonl"))
+    assert len(files) == 1
+    # user keeps chatting locally
+    meta, rows = chatlog.load(files[0])
+    rows.append(chatlog.row("Alex", True, "local message"))
+    chatlog.save(files[0], meta, rows)
+    # 2nd export: the full history
+    (tmp_path / "b.lcai.json").write_text(json.dumps(full), "utf-8")
+    import_into(tmp_path / "b.lcai.json", tmp_path / "lib")
+    files = list((tmp_path / "lib" / "chats").glob("Luna.*.jsonl"))
+    assert len(files) == 1, "same C.ai chat must stay one file"
+    _, rows = chatlog.load(files[0])
+    assert [r["mes"] for r in rows][:2] == ["*yawns* Oh, Alex...", "Remember: I love Alishan oolong."]
+    assert len(rows) == 5 and rows[-1]["mes"] == "local message"  # 4 imported + 1 local, nothing lost
+    # importing the partial one again must not drop the older history
+    import_into(tmp_path / "a.lcai.json", tmp_path / "lib")
+    _, rows = chatlog.load(files[0])
+    assert len(rows) == 5

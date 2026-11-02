@@ -6,8 +6,12 @@ X-LocalCAI header, which other websites can't send without a CORS preflight we n
 """
 from __future__ import annotations
 
+import atexit
 import json
 import mimetypes
+import os
+import subprocess
+import sys
 import re
 import shutil
 import tempfile
@@ -19,15 +23,18 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .. import __version__, chatlog
+from ..engine import ENGINE, models_dir
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
-SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed"}
-DEFAULTS = {"backend": "ollama", "model": "", "persona": "", "user_name": "",
-            "temperature": 0.8, "max_tokens": 512, "age_confirmed": False}
+SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
+                 "engine_variant", "ctx_size", "gpu_layers"}
+DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
+            "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
+            "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999}
 IMPORT_EXT = {".json", ".jsonl", ".png", ".zip"}
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
 
@@ -108,9 +115,19 @@ def make_handler(app: App, port: int):
                     return self.static(u.path[len("/static/"):])
                 if u.path == "/api/state":
                     return self.send_json({"version": __version__, "library": list_library(app.lib),
-                                           "settings": settings(), "backends": BACKENDS,
+                                           "settings": settings(),
+                                           "backends": {"builtin": "built-in llama.cpp", **BACKENDS},
                                            "helplines": HELPLINES, "library_path": str(app.lib)})
+                if u.path == "/api/engine":
+                    return self.send_json(ENGINE.status())
                 if u.path == "/api/models":
+                    if (q.get("backend") or settings()["backend"]) == "builtin":
+                        st = ENGINE.status()
+                        err = "" if st["installed"] else "The built-in engine isn't installed yet. Click 🧠 to set it up."
+                        if st["installed"] and not st["models"]:
+                            err = "No models yet. Click 🧠 to download one, or drop a .gguf into the models folder."
+                        return self.send_json({"models": [m["name"] for m in st["models"]], "error": err,
+                                               "builtin": True})
                     url = resolve_base_url(q.get("backend") or settings()["backend"])
                     try:
                         return self.send_json({"models": list_models(url)})
@@ -174,6 +191,8 @@ def make_handler(app: App, port: int):
                     return self.send_json(settings())
                 if path == "/api/import":
                     return self.do_import()
+                if path.startswith("/api/engine/"):
+                    return self.engine_action(path.rsplit("/", 1)[1], self.body_json())
                 if path == "/api/character/delete":
                     with app.lock:
                         n = delete_character(app.lib, self.body_json()["character"])
@@ -215,6 +234,33 @@ def make_handler(app: App, port: int):
             finally:
                 shutil.rmtree(tmp, ignore_errors=True)
 
+        def engine_action(self, action: str, body: dict):
+            s = settings()
+            if action == "install":
+                ok = ENGINE.install_async(body.get("variant") or s["engine_variant"])
+            elif action == "download":
+                ok = ENGINE.download_model_async(body.get("model", ""))
+            elif action == "start":
+                if not body.get("model"):
+                    raise ValueError("model required")
+                ENGINE.start_async(body["model"], int(s["ctx_size"]), int(s["gpu_layers"]))
+                ok = True
+            elif action == "stop":
+                ENGINE.stop()
+                ok = True
+            elif action == "open-folder":
+                folder = str(models_dir())
+                if sys.platform == "win32":
+                    os.startfile(folder)  # noqa: S606 - opens Explorer on the user's own machine
+                else:
+                    subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", folder])
+                ok = True
+            else:
+                return self.send_json({"error": "unknown action"}, 404)
+            if not ok:
+                return self.send_json({"error": "Another download is still running."}, 409)
+            return self.send_json(ENGINE.status())
+
         def chat_new(self, body: dict):
             card = app.card(body["character"])
             d = card.get("data", card)
@@ -251,7 +297,14 @@ def make_handler(app: App, port: int):
             if not s["model"]:
                 return self.send_json({"error": "Pick a model first (top bar)."}, 400)
 
-            url = resolve_base_url(s["backend"])
+            if s["backend"] == "builtin":
+                try:
+                    ENGINE.start(s["model"], int(s["ctx_size"]), int(s["gpu_layers"]))
+                except RuntimeError as e:
+                    return self.send_json({"error": str(e)}, 502)
+                url = ENGINE.base_url
+            else:
+                url = resolve_base_url(s["backend"])
             msgs = build_messages(card, chatlog.to_history(rows), user, persona=persona)
             gen = stream_chat(url, s["model"], msgs, temperature=float(s["temperature"]),
                               max_tokens=int(s["max_tokens"]))
@@ -290,6 +343,7 @@ def serve(port: int = 8765, open_browser: bool = True, library: Path | None = No
     for sub in ("characters", "chats", "personas"):
         (lib / sub).mkdir(parents=True, exist_ok=True)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(App(lib), port))
+    atexit.register(ENGINE.stop)  # never leave a model running in the background
     url = f"http://127.0.0.1:{port}/"
     print(f"localCAI is running at {url}  (library: {lib})\nPress Ctrl+C to stop.")
     if open_browser:

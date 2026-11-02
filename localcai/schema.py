@@ -19,6 +19,7 @@ class Message:
     pinned: bool = False
     # Alternative candidates (C.ai "swipes"); text is the chosen one.
     alternatives: list[str] = field(default_factory=list)
+    id: str | None = None      # source platform's message id (used to merge re-imports)
 
 
 @dataclass
@@ -48,6 +49,7 @@ class Chat:
     title: str = ""
     created: str | None = None
     source: str = "unknown"
+    source_id: str | None = None   # source platform's chat id (same chat → same file)
     # C.ai "conversation facts" (its built-in chat memory): [{"about","category","value"}]
     memories: list[dict] = field(default_factory=list)
     background: tuple[str, bytes] | None = None      # (mime, data)

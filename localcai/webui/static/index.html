@@ -17,7 +17,9 @@
     <span class="row">
       <select id="model"><option value="">—</option></select>
       <button id="refresh-models" class="icon" title="Refresh model list">↻</button>
+      <button id="open-engine" class="icon" title="Built-in engine & models">🧠</button>
     </span>
+    <span id="engine-chip" class="chip" hidden></span>
   </label>
   <label class="field">You are
     <select id="persona"><option value="">(no persona)</option></select>
@@ -92,10 +94,46 @@
   <label class="field">Creativity (temperature) <span id="temp-val"></span>
     <input id="set-temperature" type="range" min="0" max="1.5" step="0.05"></label>
   <label class="field">Max reply length (tokens)<input id="set-max-tokens" type="number" min="32" max="4096" step="32"></label>
+  <details>
+    <summary class="small">Built-in engine</summary>
+    <label class="field">Engine build
+      <select id="set-engine-variant"><option value="auto">GPU (Vulkan / Metal) if possible</option><option value="cpu">CPU only</option></select></label>
+    <label class="field">Context size (how much of the chat the model remembers)
+      <input id="set-ctx" type="number" min="1024" max="131072" step="1024"></label>
+    <label class="field">GPU layers (999 = all; lower it if you run out of VRAM)
+      <input id="set-ngl" type="number" min="0" max="999"></label>
+  </details>
   <p class="muted small">Library: <code id="lib-path"></code></p>
   <div class="dialog-buttons">
     <button class="btn" id="settings-cancel">Cancel</button>
     <button class="btn primary" id="settings-save">Save</button>
+  </div>
+</dialog>
+
+<dialog id="engine-dialog">
+  <h3>🧠 Built-in engine</h3>
+  <p class="muted small">Runs models on this computer with llama.cpp. No Ollama needed.</p>
+  <div class="step">
+    <b>1. Engine</b>
+    <div id="eng-status" class="small"></div>
+    <button class="btn" id="eng-install">Install engine</button>
+  </div>
+  <div class="step">
+    <b>2. Model slot</b>
+    <div class="small muted">Put any <code>.gguf</code> model in this folder and it appears in the Model list:</div>
+    <code id="eng-folder" class="path"></code>
+    <div class="row wrap">
+      <button class="btn" id="eng-open-folder">📂 Open folder</button>
+      <select id="eng-starter"></select>
+      <button class="btn" id="eng-download">⬇ Download</button>
+    </div>
+    <ul id="eng-models" class="small"></ul>
+  </div>
+  <div id="eng-job" class="job" hidden><div class="bar"><span id="eng-bar"></span></div><div id="eng-msg" class="small"></div></div>
+  <pre id="eng-error" class="error-box" hidden></pre>
+  <div class="dialog-buttons">
+    <button class="btn" id="eng-stop">Stop engine</button>
+    <button class="btn primary" id="eng-close">Close</button>
   </div>
 </dialog>
 

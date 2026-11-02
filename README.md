@@ -14,7 +14,7 @@ localCAI moves your Character.AI chats, pinned messages, memories, personas, ava
 
 ## Install
 
-You need **Python 3.10+** and a local model runner such as [Ollama](https://ollama.com), LM Studio, llama.cpp or KoboldCpp.
+You need **Python 3.10+**. That's it: localCAI has a **built-in model engine** (llama.cpp), so Ollama or LM Studio are optional.
 
 **Easiest (no terminal):** download the repo (Code → Download ZIP), unzip it and double-click **`start-localcai.bat`** (Windows) or **`start-localcai.sh`** (macOS/Linux). The app opens in your browser.
 
@@ -22,9 +22,17 @@ You need **Python 3.10+** and a local model runner such as [Ollama](https://olla
 
 ```bash
 pip install git+https://github.com/ErrorC4s/localCAI
-ollama pull qwen3:4b        # or any model you like
 localcai                    # opens the app in your browser
 ```
+
+### First run: set up the built-in engine
+
+1. Click **🧠** next to the Model list.
+2. **Install engine**: downloads the official llama.cpp build for your computer (GPU via Vulkan on Windows/Linux, Metal on Apple Silicon; a CPU-only build is in Settings).
+3. **Model slot**: click **Download** for the starter model (Qwen3 4B Instruct, ~2.5 GB), or drop any `.gguf` file into the models folder (**📂 Open folder**).
+4. Pick the model in the **Model** list. It loads automatically (the status shows *● ready*).
+
+Already use Ollama, LM Studio, llama.cpp or KoboldCpp? Just pick it in **Backend** instead.
 
 ### The browser extension
 
@@ -35,13 +43,14 @@ See [`extension/README.md`](extension/README.md). Short version: open `chrome://
 Run `localcai` and it opens at `http://127.0.0.1:8765`:
 
 - **Import files**: drop in `.lcai.json`, CAI Tools / SillyTavern chats, Tavern character cards (JSON/PNG) or a `.zip`
-- **Backend / Model**: choose your runner and model from dropdowns (custom URLs in ⚙ Settings)
+- **Backend / Model**: the built-in engine (default) or your own runner, and the model, from dropdowns (custom URLs in ⚙ Settings)
+- **🧠 Engine**: install llama.cpp, download a starter model, open the model slot folder, stop the engine
 - **You are**: pick one of your C.ai personas so the character knows who you are
 - **Chats**: continue an imported chat or start a new one, stream replies, stop or regenerate
 - **⬇ Card**: download a Character Card V2 PNG for SillyTavern, RisuAI, etc.
-- ⚙ **Settings**: your name, creativity (temperature) and reply length
+- ⚙ **Settings**: your name, creativity (temperature), reply length, and for the built-in engine: build (GPU/CPU), context size and GPU layers
 
-Your library lives in `~/.localcai/library` (override with the `LOCALCAI_HOME` environment variable).
+Your library lives in `~/.localcai/library`, models in `~/.localcai/models` and the engine in `~/.localcai/engine` (override the base folder with the `LOCALCAI_HOME` environment variable). Re-importing a newer export of the same chat **merges** it: nothing is duplicated and no history is lost.
 
 ## What gets carried over
 
@@ -62,7 +71,7 @@ Your library lives in `~/.localcai/library` (override with the `LOCALCAI_HOME` e
 - **Your data only.** Your chats, your pins, characters you created. Other creators' private definitions are never exported (C.ai doesn't send them anyway).
 - **Passive extraction.** The extension reads what the C.ai web app already loads. It sends no requests of its own and never touches your login token.
 - **Minimal collection.** The extension only listens to an allowlist of chat/character endpoints. Billing, subscription, birthday and account details are never collected.
-- **Local-only.** No telemetry, nothing uploaded. The app only listens on `127.0.0.1`.
+- **Local-only.** No telemetry, nothing uploaded. The app only listens on `127.0.0.1`. The only downloads are the ones you click (the engine from llama.cpp's GitHub releases, models from Hugging Face).
 - **Adults only for chat (18+)**, asked once. If a message looks like a crisis, help-line information is shown on screen. It never blocks the conversation or reports anything.
 
 ## Command line
@@ -102,7 +111,8 @@ Backends: `ollama`, `lmstudio`, `llamacpp`, `koboldcpp`, or a full URL (`--backe
 - [ ] Persona → SillyTavern persona export
 - [ ] Group chats / rooms
 - [ ] Summarised long-term memory for very long chats
-- [ ] One-click installer that also sets up Ollama and a recommended small model
+- [x] Built-in engine (llama.cpp) with a model slot and a one-click starter model
+- [ ] Standalone installer that bundles Python
 
 ## Development
 
@@ -110,6 +120,7 @@ Backends: `ollama`, `lmstudio`, `llamacpp`, `koboldcpp`, or a full URL (`--backe
 pip install -e .[dev]
 pytest                                            # unit tests
 python tests/e2e_ui/test_ui.py                    # web app, driven in headless Chromium
+python tests/e2e_ui/test_engine.py                # built-in engine with fake GitHub / Hugging Face / llama-server
 NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs   # extension against a mocked character.ai
 ```
 

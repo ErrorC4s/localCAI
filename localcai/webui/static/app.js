@@ -55,7 +55,8 @@ async function loadState() {
   const st = S.state.settings;
   const b = $("backend");
   b.innerHTML = "";
-  for (const [key, url] of Object.entries(S.state.backends)) b.add(new Option(`${key}  (${url.replace(/^https?:\/\//, "")})`, key));
+  for (const [key, url] of Object.entries(S.state.backends))
+    b.add(new Option(key === "builtin" ? "Built-in (llama.cpp)" : `${key}  (${url.replace(/^https?:\/\//, "")})`, key));
   if (st.backend && !(st.backend in S.state.backends)) b.add(new Option("custom: " + st.backend, st.backend));
   b.value = st.backend;
   const p = $("persona");
@@ -75,7 +76,7 @@ async function loadModels() {
   const r = await api("/api/models?backend=" + encodeURIComponent($("backend").value));
   sel.innerHTML = "";
   if (!r.models.length) {
-    sel.add(new Option(r.error ? "⚠ runner not reachable" : "no models found", ""));
+    sel.add(new Option(r.builtin ? "— set up in 🧠 —" : r.error ? "⚠ runner not reachable" : "no models found", ""));
     if (current) sel.add(new Option(current, current));
     if (r.error) toast(r.error, "warn");
   } else {
@@ -86,8 +87,62 @@ async function loadModels() {
   sel.value = current || "";
 }
 
-$("backend").onchange = async () => { await saveSettings({ backend: $("backend").value }); loadModels(); };
-$("model").onchange = () => saveSettings({ model: $("model").value });
+$("backend").onchange = async () => { await saveSettings({ backend: $("backend").value }); loadModels(); refreshEngine(); };
+$("model").onchange = async () => {
+  await saveSettings({ model: $("model").value });
+  if ($("backend").value === "builtin" && $("model").value) {
+    await api("/api/engine/start", { json: { model: $("model").value } }).catch((e) => toast(e.message, "error"));
+    refreshEngine();
+  }
+};
+
+// ── Built-in engine ───────────────────────────────────
+let engineTimer = null;
+async function refreshEngine() {
+  const builtin = $("backend").value === "builtin";
+  $("open-engine").hidden = !builtin;
+  const chip = $("engine-chip");
+  if (!builtin) { chip.hidden = true; return; }
+  const st = await api("/api/engine").catch(() => null);
+  if (!st) return;
+  S.engine = st;
+  chip.hidden = false;
+  chip.className = "chip " + st.state;
+  chip.textContent = { off: "● engine off", starting: "● loading model…", ready: "● ready", error: "● engine error" }[st.state];
+  chip.title = st.error || "";
+  renderEngineDialog(st);
+  const busy = st.state === "starting" || (st.job && !st.job.done);
+  clearTimeout(engineTimer);
+  if (busy) engineTimer = setTimeout(refreshEngine, 1000);
+  if (st.job && st.job.done && S.handledJob !== st.job.id) {  // a download finished (handle each job once)
+    if (S.handledJob !== undefined) {
+      if (st.job.error) toast(st.job.error, "error"); else toast(st.job.kind === "install" ? "Engine installed." : "Model downloaded.");
+    }
+    S.handledJob = st.job.id;
+    loadModels();
+  }
+  if (S.handledJob === undefined) S.handledJob = st.job ? st.job.id : null;
+}
+function renderEngineDialog(st) {
+  $("eng-status").textContent = st.installed ? `Installed: ${st.build} (${st.version})` : "Not installed yet (about 30–80 MB download).";
+  $("eng-install").textContent = st.installed ? "Reinstall / update" : "Install engine";
+  $("eng-folder").textContent = st.models_dir;
+  const ul = $("eng-models"); ul.innerHTML = "";
+  for (const m of st.models) { const li = document.createElement("li"); li.textContent = `${m.name} · ${m.size_gb} GB`; ul.appendChild(li); }
+  if (!$("eng-starter").length) for (const [k, label] of Object.entries(st.starters)) $("eng-starter").add(new Option(label, k));
+  const job = st.job, running = job && !job.done;
+  $("eng-job").hidden = !job || (job.done && !job.error);
+  if (job) { $("eng-bar").style.width = Math.round((job.progress || 0) * 100) + "%"; $("eng-msg").textContent = job.error ? `${job.message}: ${job.error}` : job.message; }
+  $("eng-install").disabled = $("eng-download").disabled = !!running;
+  $("eng-error").hidden = !st.error; $("eng-error").textContent = st.error || "";
+}
+$("open-engine").onclick = async () => { await refreshEngine(); $("engine-dialog").showModal(); };
+$("eng-close").onclick = () => { $("engine-dialog").close(); loadModels(); };
+const engineCall = (action, json = {}) => api("/api/engine/" + action, { json }).then(refreshEngine).catch((e) => toast(e.message, "error"));
+$("eng-install").onclick = () => engineCall("install");
+$("eng-download").onclick = () => engineCall("download", { model: $("eng-starter").value });
+$("eng-open-folder").onclick = () => engineCall("open-folder");
+$("eng-stop").onclick = () => engineCall("stop");
 $("refresh-models").onclick = loadModels;
 $("persona").onchange = () => saveSettings({ persona: $("persona").value });
 
@@ -304,6 +359,7 @@ $("open-settings").onclick = () => {
   $("set-custom-url").value = s.backend in S.state.backends ? "" : s.backend;
   $("set-temperature").value = s.temperature; $("temp-val").textContent = s.temperature;
   $("set-max-tokens").value = s.max_tokens;
+  $("set-engine-variant").value = s.engine_variant; $("set-ctx").value = s.ctx_size; $("set-ngl").value = s.gpu_layers;
   $("lib-path").textContent = S.state.library_path;
   $("settings-dialog").showModal();
 };
@@ -311,14 +367,17 @@ $("set-temperature").oninput = () => ($("temp-val").textContent = $("set-tempera
 $("settings-cancel").onclick = () => $("settings-dialog").close();
 $("settings-save").onclick = async () => {
   const patch = { user_name: $("set-user-name").value.trim(), temperature: parseFloat($("set-temperature").value),
-    max_tokens: parseInt($("set-max-tokens").value, 10) || 512 };
+    max_tokens: parseInt($("set-max-tokens").value, 10) || 512,
+    engine_variant: $("set-engine-variant").value,
+    ctx_size: parseInt($("set-ctx").value, 10) || 8192,
+    gpu_layers: Math.max(0, parseInt($("set-ngl").value, 10) || 0) };
   const custom = $("set-custom-url").value.trim();
   if (custom) patch.backend = custom;
-  else if (!(S.state.settings.backend in S.state.backends)) patch.backend = "ollama";
+  else if (!(S.state.settings.backend in S.state.backends)) patch.backend = "builtin";
   await saveSettings(patch);
   $("settings-dialog").close();
   await loadState(); loadModels();
 };
 
 // ── Boot ──────────────────────────────────────────────
-loadState().then(loadModels).catch((e) => toast("Couldn't load: " + e.message, "error"));
+loadState().then(loadModels).then(refreshEngine).catch((e) => toast("Couldn't load: " + e.message, "error"));

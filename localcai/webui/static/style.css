@@ -102,3 +102,17 @@ dialog .field { margin-bottom: 12px; font-size: 12px; }
   .layout { flex-direction: column; }
   .sidebar { width: auto; max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--line); }
 }
+
+.chip { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--panel2); border: 1px solid var(--line);
+  color: var(--muted); align-self: flex-start; margin-top: 3px; }
+.chip.ready { color: #7fd99a; border-color: #2f6b41; } .chip.starting { color: #f0c46c; } .chip.error { color: #e88; }
+.step { background: var(--panel2); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; display: flex;
+  flex-direction: column; gap: 7px; }
+.row.wrap { flex-wrap: wrap; } .step select { flex: 1; min-width: 0; }
+.path { display: block; word-break: break-all; }
+.job .bar { height: 8px; background: var(--panel2); border-radius: 99px; overflow: hidden; }
+.job .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.error-box { background: #2a1a1a; border: 1px solid #6b2f2f; color: #f2c0c0; padding: 8px; border-radius: 8px;
+  white-space: pre-wrap; font-size: 11px; max-height: 160px; overflow: auto; }
+#engine-dialog { width: min(520px, 94vw); }
+details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
