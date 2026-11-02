@@ -109,6 +109,8 @@
       <select id="set-engine-variant"><option value="auto">GPU (Vulkan / Metal) if possible</option><option value="cpu">CPU only</option></select></label>
     <label class="field">Context size (how much of the chat the model remembers)
       <input id="set-ctx" type="number" min="1024" max="131072" step="1024"></label>
+    <label class="field">Graphics card
+      <select id="set-gpu"><option value="auto">Automatic (best dedicated GPU)</option><option value="cpu">None (CPU only)</option></select></label>
     <label class="field">GPU layers (999 = all; lower it if you run out of VRAM)
       <input id="set-ngl" type="number" min="0" max="999"></label>
   </details>

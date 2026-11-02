@@ -3,6 +3,11 @@
 import json, sys, time, os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 args = sys.argv[1:]
+if "--list-devices" in args:  # like a laptop with integrated + dedicated graphics
+    print("Available devices:\n  Vulkan0: Intel(R) Arc(TM) Graphics (18432 MiB, 17000 MiB free)\n"
+          "  Vulkan1: NVIDIA GeForce RTX 4060 Laptop GPU (8151 MiB, 7600 MiB free)")
+    sys.exit(0)
+print("args:", " ".join(args), flush=True)
 model = os.path.basename(args[args.index("-m") + 1])
 port = int(args[args.index("--port") + 1])
 ready_at = time.time() + 1.0

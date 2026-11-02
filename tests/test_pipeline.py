@@ -281,3 +281,26 @@ def test_orphan_engine_is_stopped_but_other_programs_are_not(tmp_path, monkeypat
     finally:
         for pr in (orphan, other):
             pr.kill()
+
+
+def test_pick_dedicated_gpu():
+    from localcai.engine import parse_devices, pick_device
+    laptop = parse_devices("Available devices:\n  Vulkan0: Intel(R) Arc(TM) Graphics (18432 MiB, 17000 MiB free)\n"
+                           "  Vulkan1: NVIDIA GeForce RTX 4060 Laptop GPU (8151 MiB, 7600 MiB free)\n")
+    assert pick_device(laptop)["id"] == "Vulkan1"
+    amd = parse_devices("  Vulkan0: AMD Radeon(TM) Graphics (8192 MiB, 8000 MiB free)\n  Vulkan1: AMD Radeon RX 7800 XT (16368 MiB, 1 MiB free)")
+    assert pick_device(amd)["id"] == "Vulkan1"
+    assert pick_device([]) is None
+
+
+def test_stream_errors_are_raised(monkeypatch):
+    import io
+    from localcai.runtime import client
+    body = b'data: {"error": {"message": "Context size has been exceeded."}}\n\n'
+    class R(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+    monkeypatch.setattr(client.urllib.request, "urlopen", lambda *a, **k: R(body))
+    import pytest
+    with pytest.raises(OSError, match="Context size"):
+        list(client.stream_chat("http://x/v1", "m", [{"role": "user", "content": "hi"}]))

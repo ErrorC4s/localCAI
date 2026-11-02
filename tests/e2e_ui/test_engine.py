@@ -127,6 +127,9 @@ def main():
 
             st = json.load(urllib.request.urlopen(f"http://127.0.0.1:{UI_PORT}/api/engine"))
             assert st["state"] == "ready" and st["model"] == MODEL
+            assert st["device"]["name"].startswith("NVIDIA"), "dedicated GPU picked over integrated"
+            log = Path(home, "engine", "engine.log").read_text()
+            assert "--device Vulkan1" in log and "-np 1" in log, log
             pid_file = Path(home, "engine", "engine.pid")
             assert pid_file.exists(), "engine PID recorded"
             page.click("#open-engine"); page.click("#eng-stop"); page.click("#eng-close")

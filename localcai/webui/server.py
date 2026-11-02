@@ -33,10 +33,11 @@ from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
-                 "engine_variant", "ctx_size", "gpu_layers", "recall"}
+                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device"}
 DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
-            "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True}
+            "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True,
+            "gpu_device": "auto"}
 
 # Background jobs (history analysis). One at a time; the UI polls /api/job.
 JOB: dict = {}
@@ -49,7 +50,7 @@ def model_url() -> str:
     if not s["model"]:
         raise RuntimeError("Pick a model first (top bar).")
     if s["backend"] == "builtin":
-        ENGINE.start(s["model"], int(s["ctx_size"]), int(s["gpu_layers"]))
+        ENGINE.start(s["model"], int(s["ctx_size"]), int(s["gpu_layers"]), device=s["gpu_device"])
         return ENGINE.base_url
     return resolve_base_url(s["backend"])
 IMPORT_EXT = {".json", ".jsonl", ".png", ".zip"}
@@ -139,6 +140,8 @@ def make_handler(app: App, port: int):
                     return self.send_json(dict(JOB))
                 if u.path == "/api/engine":
                     return self.send_json(ENGINE.status())
+                if u.path == "/api/engine/devices":
+                    return self.send_json({"devices": ENGINE.devices()})
                 if u.path == "/api/models":
                     if (q.get("backend") or settings()["backend"]) == "builtin":
                         st = ENGINE.status()
@@ -282,7 +285,7 @@ def make_handler(app: App, port: int):
             elif action == "start":
                 if not body.get("model"):
                     raise ValueError("model required")
-                ENGINE.start_async(body["model"], int(s["ctx_size"]), int(s["gpu_layers"]))
+                ENGINE.start_async(body["model"], int(s["ctx_size"]), int(s["gpu_layers"]), s["gpu_device"])
                 ok = True
             elif action == "stop":
                 ENGINE.stop()
@@ -501,8 +504,13 @@ def make_handler(app: App, port: int):
                     reply.append(tok)
                     self.wfile.write(tok.encode("utf-8"))
                     self.wfile.flush()
-            except (OSError, BrokenPipeError):
+            except BrokenPipeError:
                 pass  # client hit Stop: keep what we have
+            except OSError as e:  # the model failed mid-reply: tell the user in the chat
+                try:
+                    self.wfile.write(f"\n\n[localCAI: the model stopped with an error: {e}]".encode("utf-8"))
+                except OSError:
+                    pass
             text_out = "".join(reply).strip()
             if swipe_row is not None:
                 if text_out:

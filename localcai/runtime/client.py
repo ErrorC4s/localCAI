@@ -73,8 +73,15 @@ def _stream_chat(base_url: str, model: str, messages: list[dict], temperature: f
             if payload == "[DONE]":
                 break
             try:
-                delta = json.loads(payload)["choices"][0].get("delta", {})
-            except (ValueError, KeyError, IndexError):
+                obj = json.loads(payload)
+            except ValueError:
+                continue
+            if isinstance(obj, dict) and obj.get("error"):  # e.g. llama-server "Context size has been exceeded"
+                err = obj["error"]
+                raise OSError(err.get("message") if isinstance(err, dict) else str(err))
+            try:
+                delta = obj["choices"][0].get("delta", {})
+            except (KeyError, IndexError, TypeError):
                 continue
             if delta.get("content"):
                 yield delta["content"]

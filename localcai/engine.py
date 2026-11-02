@@ -200,6 +200,37 @@ def kill_orphan() -> None:
     _pid_file().unlink(missing_ok=True)
 
 
+_DEV_LINE = re.compile(r"^\s*([A-Za-z]+\d+):\s*(.+?)\s*\((\d+)\s*MiB", re.M)
+_INTEGRATED = re.compile(r"intel.*(uhd|iris|hd graphics|arc\(tm\) graphics|graphics$)|radeon\(tm\) graphics|"
+                         r"radeon graphics|vega \d+ graphics|apple|llvmpipe|swiftshader|microsoft basic", re.I)
+
+
+def parse_devices(text: str) -> list[dict]:
+    """Parse `llama-server --list-devices` output → [{id, name, mib}]."""
+    return [{"id": m.group(1), "name": m.group(2).strip(), "mib": int(m.group(3))} for m in _DEV_LINE.finditer(text)]
+
+
+def pick_device(devices: list[dict]) -> dict | None:
+    """Prefer a discrete GPU: NVIDIA > AMD > other; never an integrated GPU when a discrete one exists."""
+    if not devices:
+        return None
+    def rank(d):
+        n = d["name"].lower()
+        discrete = not _INTEGRATED.search(d["name"])
+        vendor = 3 if ("nvidia" in n or "geforce" in n or "rtx" in n) else 2 if ("radeon rx" in n or "amd" in n) else 1
+        return (discrete, vendor if discrete else 0, d["mib"])
+    return max(devices, key=rank)
+
+
+def list_devices(server: Path) -> list[dict]:
+    try:
+        out = subprocess.run([str(server), "--list-devices"], capture_output=True, text=True, timeout=60,
+                             cwd=server.parent, creationflags=0x08000000 if sys.platform == "win32" else 0)
+        return parse_devices(out.stdout + "\n" + out.stderr)
+    except (OSError, subprocess.SubprocessError):
+        return []
+
+
 # ── the engine ─────────────────────────────────────────────────────────────
 class Engine:
     def __init__(self):
@@ -210,6 +241,8 @@ class Engine:
         self.state = "off"            # off | starting | ready | error
         self.error = ""
         self.job: dict | None = None  # background install / download progress
+        self.device: dict | None = None
+        self._devices: tuple[str, list[dict]] | None = None
         self._job_seq = 0
 
     # info --------------------------------------------------------------
@@ -231,8 +264,20 @@ class Engine:
             inst = self.installed()
             return {"installed": bool(inst), "build": inst and inst.get("asset"), "version": inst and inst.get("tag"),
                     "state": self.state, "model": self.model, "error": self.error, "job": self.job,
+                    "device": self.device,
                     "models_dir": str(models_dir()), "models": list_slot_models(),
                     "starters": {k: v["label"] for k, v in STARTER_MODELS.items()}}
+
+    def devices(self, server: Path | None = None) -> list[dict]:
+        """GPUs llama.cpp can see (cached per engine build)."""
+        if server is None:
+            inst = self.installed()
+            if not inst:
+                return []
+            server = Path(inst["server"])
+        if not self._devices or self._devices[0] != str(server):
+            self._devices = (str(server), list_devices(server))
+        return self._devices[1]
 
     def log_tail(self, n: int = 12) -> str:
         try:
@@ -336,11 +381,14 @@ class Engine:
         return name
 
     # process control ---------------------------------------------------------
-    def start(self, model: str, ctx: int = 8192, gpu_layers: int = 999, timeout: float = 300) -> None:
+    def start(self, model: str, ctx: int = 8192, gpu_layers: int = 999, timeout: float = 300,
+              device: str = "auto") -> None:
         """Start (or switch to) a model and wait until it's ready. Raises RuntimeError on failure."""
         with self.lock:
-            if self.state == "ready" and self.model == model and self.proc and self.proc.poll() is None:
+            want = (model, int(ctx), int(gpu_layers), device)
+            if self.state == "ready" and getattr(self, "_running", None) == want and self.proc and self.proc.poll() is None:
                 return
+            self._running = want
             inst = self.installed()
             path = (models_dir() / model).resolve()
             problem = None
@@ -358,8 +406,19 @@ class Engine:
             if sys.platform.startswith("linux"):
                 env["LD_LIBRARY_PATH"] = f"{server.parent}:{env.get('LD_LIBRARY_PATH', '')}"
             log = (engine_dir() / "engine.log").open("w", encoding="utf-8")
+            # one conversation at a time: the whole context goes to it (no parallel slots sharing it)
             cmd = [str(server), "-m", str(path), "--host", "127.0.0.1", "--port", str(self.port),
-                   "-c", str(int(ctx)), "-ngl", str(int(gpu_layers)), "--jinja"]
+                   "-c", str(int(ctx)), "-ngl", str(int(gpu_layers)), "-np", "1", "--jinja"]
+            if int(gpu_layers) > 0 and device != "cpu":
+                if device and device != "auto":
+                    chosen = next((d for d in self.devices(server) if d["id"] == device), None)
+                else:
+                    chosen = pick_device(self.devices(server))
+                if chosen:
+                    cmd += ["--device", chosen["id"]]
+                self.device = chosen
+            else:
+                self.device = None
             flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
             kill_orphan()
             self.proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=server.parent,
@@ -389,10 +448,10 @@ class Engine:
             self.state, self.error = "error", "The model took too long to load."
         raise RuntimeError(self.error)
 
-    def start_async(self, model: str, ctx: int, gpu_layers: int) -> None:
+    def start_async(self, model: str, ctx: int, gpu_layers: int, device: str = "auto") -> None:
         def run():
             try:
-                self.start(model, ctx, gpu_layers)
+                self.start(model, ctx, gpu_layers, device=device)
             except RuntimeError:
                 pass  # state/error already recorded for the UI
         with self.lock:

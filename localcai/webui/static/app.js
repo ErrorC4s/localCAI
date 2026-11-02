@@ -110,7 +110,7 @@ async function refreshEngine() {
   chip.className = "chip " + st.state;
   chip.textContent = !st.installed ? "● engine not installed — click 🧠"
     : { off: "● engine off", starting: "● loading model…", ready: "● ready", error: "● engine error" }[st.state];
-  chip.title = st.error || "";
+  chip.title = st.error || (st.device ? "Running on " + st.device.name : "");
   renderEngineDialog(st);
   const busy = st.state === "starting" || (st.job && !st.job.done);
   clearTimeout(engineTimer);
@@ -126,7 +126,8 @@ async function refreshEngine() {
   if (S.handledJob === undefined) S.handledJob = st.job ? st.job.id : null;
 }
 function renderEngineDialog(st) {
-  $("eng-status").textContent = st.installed ? `Installed: ${st.build} (${st.version})` : "Not installed yet (about 30–80 MB download).";
+  $("eng-status").textContent = (st.installed ? `Installed: ${st.build} (${st.version})` : "Not installed yet (about 30–80 MB download).")
+    + (st.state === "ready" ? (st.device ? ` · running on ${st.device.name}` : " · running on the CPU") : "");
   $("eng-install").textContent = st.installed ? "Reinstall / update" : "Install engine";
   $("eng-folder").textContent = st.models_dir;
   const ul = $("eng-models"); ul.innerHTML = "";
@@ -463,6 +464,11 @@ $("open-settings").onclick = () => {
   $("set-max-tokens").value = s.max_tokens;
   $("set-recall").checked = s.recall !== false;
   $("set-engine-variant").value = s.engine_variant; $("set-ctx").value = s.ctx_size; $("set-ngl").value = s.gpu_layers;
+  api("/api/engine/devices").then((r) => {
+    const sel = $("set-gpu"); sel.length = 2;
+    for (const d of r.devices) sel.add(new Option(`${d.name} (${Math.round(d.mib / 1024)} GB)`, d.id));
+    sel.value = s.gpu_device || "auto";
+  }).catch(() => {});
   $("lib-path").textContent = S.state.library_path;
   $("settings-dialog").showModal();
 };
@@ -474,7 +480,8 @@ $("settings-save").onclick = async () => {
     engine_variant: $("set-engine-variant").value,
     recall: $("set-recall").checked,
     ctx_size: parseInt($("set-ctx").value, 10) || 8192,
-    gpu_layers: Math.max(0, parseInt($("set-ngl").value, 10) || 0) };
+    gpu_layers: Math.max(0, parseInt($("set-ngl").value, 10) || 0),
+    gpu_device: $("set-gpu").value };
   const custom = $("set-custom-url").value.trim();
   if (custom) patch.backend = custom;
   else if (!(S.state.settings.backend in S.state.backends)) patch.backend = "builtin";
