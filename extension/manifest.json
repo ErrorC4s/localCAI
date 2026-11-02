@@ -45,7 +45,15 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "extractor@localcai",
-      "strict_min_version": "128.0"
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
     }
   },
   "icons": {
@@ -53,5 +61,6 @@
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "homepage_url": "https://github.com/ErrorC4s/localCAI"
 }

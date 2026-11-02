@@ -117,7 +117,7 @@ Backends: `ollama`, `lmstudio`, `llamacpp`, `koboldcpp`, or a full URL (`--backe
 - [ ] Verify live-message capture over WebSocket
 - [x] Extractor: load a chat's full history automatically
 - [ ] Extractor: export all chats in one go
-- [ ] Publish the extension on the Chrome Web Store & Firefox Add-ons
+- [ ] Publish the extension on the Chrome Web Store & Firefox Add-ons (submission kit ready in [`store/`](store/listing.md))
 - [ ] Map personas to the chats they were used in
 - [ ] Persona → SillyTavern persona export
 - [ ] Group chats / rooms
@@ -137,6 +137,10 @@ NODE_PATH=$(npm root -g) node tests/e2e_extension/load_all.mjs   # "Load full hi
 ```
 
 Pure Python standard library at runtime, no dependencies, so it stays easy to install for non-developers. The `.lcai.json` format is documented in [`docs/lcai-format.md`](docs/lcai-format.md).
+
+## Privacy
+
+See [PRIVACY.md](PRIVACY.md). Short version: no servers, no analytics, nothing leaves your computer.
 
 ## License
 
