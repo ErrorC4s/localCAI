@@ -131,3 +131,10 @@ details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted);
 .edit-buttons { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
 #char-dialog { width: min(640px, 94vw); }
 .char-fields textarea { width: 100%; resize: vertical; }
+
+.job-bar { display: flex; gap: 10px; align-items: center; margin: 10px 18px 0; padding: 8px 12px; background: var(--panel2); border-radius: 10px; }
+.job-bar .bar { width: 160px; height: 7px; background: var(--bg); border-radius: 99px; overflow: hidden; }
+.job-bar .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+#memory-dialog { width: min(640px, 94vw); }
+#story-text { width: 100%; resize: vertical; }
+.check-row { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 12px; }

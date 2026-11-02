@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "localcai"
-version = "0.6.0"
+version = "0.7.0"
 description = "Bring your Character.AI characters and chats home and run them on a local model."
 readme = "README.md"
 requires-python = ">=3.10"

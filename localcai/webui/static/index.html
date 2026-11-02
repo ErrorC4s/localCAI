@@ -59,9 +59,13 @@
         <input id="bg-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
         <button id="bg-remove" class="btn" title="Remove this chat's background" hidden>🖼✕</button>
         <button id="edit-char" class="btn" title="Edit character">✎</button>
+        <button id="learn-style" class="btn" title="Learn how this character talks from your chat history">🔍</button>
+        <button id="open-memory" class="btn" title="Chat memory">📖</button>
         <a id="download-card" class="btn" download>⬇ Card</a>
         <button id="delete-char" class="btn" title="Delete character (moved to the library's trash folder)">🗑</button>
       </div>
+      <div id="job-bar" class="job-bar" hidden><div class="bar"><span id="job-fill"></span></div>
+        <span id="job-msg" class="small"></span><button class="link" id="job-stop">Stop</button></div>
       <div id="crisis" class="crisis" hidden>
         <b>If you're going through something hard, you don't have to face it alone.</b>
         <ul id="helplines"></ul>
@@ -98,6 +102,7 @@
   <label class="field">Creativity (temperature) <span id="temp-val"></span>
     <input id="set-temperature" type="range" min="0" max="1.5" step="0.05"></label>
   <label class="field">Max reply length (tokens)<input id="set-max-tokens" type="number" min="32" max="4096" step="32"></label>
+  <label class="check-row"><input type="checkbox" id="set-recall"> Recall earlier moments from the whole chat when relevant</label>
   <details>
     <summary class="small">Built-in engine</summary>
     <label class="field">Engine build
@@ -148,6 +153,32 @@
     <button class="btn" id="char-cancel">Cancel</button>
     <button class="btn primary" id="char-save">Save</button>
   </div>
+</dialog>
+
+<dialog id="memory-dialog">
+  <h3>📖 Chat memory</h3>
+  <p class="muted small">Everything here is sent to the model with every reply, so the character keeps it in mind.</p>
+  <div class="step">
+    <b>Always remembered</b>
+    <div id="mem-counts" class="small"></div>
+  </div>
+  <div class="step">
+    <b>The story so far</b>
+    <textarea id="story-text" rows="9" placeholder="Write the important things about your story and relationship, or generate them from the chat history below."></textarea>
+    <div class="row wrap">
+      <button class="btn" id="story-save">Save</button>
+      <span class="grow"></span>
+      <select id="story-scope">
+        <option value="500">From the last 500 messages</option>
+        <option value="2000" selected>From the last 2,000 messages</option>
+        <option value="5000">From the last 5,000 messages</option>
+        <option value="0">From the whole chat (slow)</option>
+      </select>
+      <button class="btn primary" id="story-generate">✨ Generate from history</button>
+    </div>
+    <div class="small muted" id="story-hint"></div>
+  </div>
+  <div class="dialog-buttons"><button class="btn" id="memory-close">Close</button></div>
 </dialog>
 
 <div id="toasts" class="toasts"></div>

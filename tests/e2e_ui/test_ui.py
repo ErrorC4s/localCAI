@@ -175,6 +175,29 @@ def main(shot=None):
             assert "Loves riddles." in sent["messages"][0]["content"], "edited description used"
             card = json.loads((Path(home) / "library" / "characters" / "Luna.card.json").read_text("utf-8"))
             assert card["data"]["description"].endswith("Loves riddles.")
+            # 🔍 learn style from history → personality + example dialogue written into the card
+            page.click("#learn-style")   # confirm() accepted by the dialog handler
+            expect(page.locator(".toast", has_text="Learned her style")).to_have_count(1, timeout=20000)
+            card = json.loads((Path(home) / "library" / "characters" / "Luna.card.json").read_text("utf-8"))
+            assert "Alishan" in card["data"]["personality"], "style notes saved"
+            assert "Hello~" in card["data"]["mes_example"], "a creator's own example dialogue is never overwritten"
+
+            # 📖 chat memory: generate the story so far, then it's used in the prompt
+            page.click("#open-memory")
+            expect(page.locator("#mem-counts")).to_contain_text("pinned in this chat")
+            page.select_option("#story-scope", "0")
+            page.click("#story-generate")
+            expect(page.locator(".toast", has_text="story so far is ready")).to_have_count(1, timeout=20000)
+            expect(page.locator("#memory-dialog")).to_be_visible()
+            expect(page.locator("#story-text")).not_to_have_value("")
+            page.fill("#story-text", "- Luna and Alex share tea every night.")
+            page.click("#story-save")
+            page.click("#memory-close")
+            page.fill("#input", "tea time?")
+            page.click("#send")
+            page.wait_for_timeout(800)
+            sent = json.load(open(last_path, encoding="utf-8"))
+            assert "share tea every night" in sent["messages"][0]["content"], "story in prompt"
             n_before = page.locator(".msg").count() - 4  # keep later count checks relative
 
             # crisis banner (shown, never blocking)

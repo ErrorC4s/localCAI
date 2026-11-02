@@ -460,6 +460,7 @@ $("open-settings").onclick = () => {
   $("set-custom-url").value = s.backend in S.state.backends ? "" : s.backend;
   $("set-temperature").value = s.temperature; $("temp-val").textContent = s.temperature;
   $("set-max-tokens").value = s.max_tokens;
+  $("set-recall").checked = s.recall !== false;
   $("set-engine-variant").value = s.engine_variant; $("set-ctx").value = s.ctx_size; $("set-ngl").value = s.gpu_layers;
   $("lib-path").textContent = S.state.library_path;
   $("settings-dialog").showModal();
@@ -470,6 +471,7 @@ $("settings-save").onclick = async () => {
   const patch = { user_name: $("set-user-name").value.trim(), temperature: parseFloat($("set-temperature").value),
     max_tokens: parseInt($("set-max-tokens").value, 10) || 512,
     engine_variant: $("set-engine-variant").value,
+    recall: $("set-recall").checked,
     ctx_size: parseInt($("set-ctx").value, 10) || 8192,
     gpu_layers: Math.max(0, parseInt($("set-ngl").value, 10) || 0) };
   const custom = $("set-custom-url").value.trim();
@@ -480,5 +482,56 @@ $("settings-save").onclick = async () => {
   await loadState(); loadModels();
 };
 
+// ── History analysis: 🔍 learn style, 📖 chat memory ───
+let jobTimer = null;
+async function watchJob(onDone) {
+  clearTimeout(jobTimer);
+  const j = await api("/api/job").catch(() => null);
+  if (!j || !j.kind) { $("job-bar").hidden = true; return; }
+  $("job-bar").hidden = j.done;
+  $("job-fill").style.width = Math.round((j.progress || 0) * 100) + "%";
+  $("job-msg").textContent = j.message || "";
+  if (!j.done) { jobTimer = setTimeout(() => watchJob(onDone), 1000); return; }
+  if (j.error) toast(j.error, "error"); else toast(j.message);
+  if (onDone) onDone(j);
+}
+$("job-stop").onclick = () => api("/api/job/stop", { json: {} });
+
+$("learn-style").onclick = async () => {
+  if (!S.chat) return toast("Open a chat with some history first.", "warn");
+  if (!(await ensureAdult())) return;
+  if (!confirm("Learn how this character talks?\n\nThe model reads a sample of her replies (a minute or two), writes style notes into the character, and picks example dialogues. You can edit or undo it any time with ✎.")) return;
+  try {
+    await api("/api/analyze/style", { json: { character: S.character, chat: S.chat } });
+    refreshEngine();
+    watchJob(async () => { await loadState(); await openCharacter(S.character, S.chat); });
+  } catch (e) { toast(e.message, "error"); }
+};
+
+async function openMemory() {
+  const r = await api(`/api/chat?character=${enc(S.character)}&chat=${enc(S.chat)}`);
+  const pinned = r.rows.filter((x) => (x.extra || {}).pinned).length;
+  const book = (r.card.character_book || {}).entries || [];
+  $("mem-counts").textContent = `📌 ${pinned} pinned in this chat · 🧠 ${book.length} memories from Character.AI (pins and chat memory)`;
+  $("story-text").value = ((r.meta || {}).chat_metadata || {}).localcai_story || "";
+  $("story-hint").textContent = `This chat has ${r.rows.length.toLocaleString()} messages. Generating reads them in parts with your model; you can stop any time and keep what was read.`;
+  $("memory-dialog").showModal();
+}
+$("open-memory").onclick = () => (S.chat ? openMemory() : toast("Open a chat first.", "warn"));
+$("memory-close").onclick = () => $("memory-dialog").close();
+$("story-save").onclick = async () => {
+  await api("/api/story/save", { json: { chat: S.chat, text: $("story-text").value } }).catch((e) => toast(e.message, "error"));
+  toast("Saved. The character will keep this in mind.");
+};
+$("story-generate").onclick = async () => {
+  if (!(await ensureAdult())) return;
+  try {
+    await api("/api/analyze/story", { json: { character: S.character, chat: S.chat, scope: +$("story-scope").value } });
+    $("memory-dialog").close();
+    refreshEngine();
+    watchJob(() => { if (S.chat) openMemory(); });
+  } catch (e) { toast(e.message, "error"); }
+};
+
 // ── Boot ──────────────────────────────────────────────
-loadState().then(loadModels).then(refreshEngine).catch((e) => toast("Couldn't load: " + e.message, "error"));
+loadState().then(loadModels).then(refreshEngine).then(() => watchJob()).catch((e) => toast("Couldn't load: " + e.message, "error"));

@@ -24,6 +24,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from .. import __version__, chatlog
 from ..engine import ENGINE, models_dir
+from .. import analyze
+from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
@@ -31,10 +33,25 @@ from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
-                 "engine_variant", "ctx_size", "gpu_layers"}
+                 "engine_variant", "ctx_size", "gpu_layers", "recall"}
 DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
-            "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999}
+            "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True}
+
+# Background jobs (history analysis). One at a time; the UI polls /api/job.
+JOB: dict = {}
+JOB_LOCK = threading.Lock()
+
+
+def model_url() -> str:
+    """URL of the configured model, starting the built-in engine if needed (raises RuntimeError)."""
+    s = settings()
+    if not s["model"]:
+        raise RuntimeError("Pick a model first (top bar).")
+    if s["backend"] == "builtin":
+        ENGINE.start(s["model"], int(s["ctx_size"]), int(s["gpu_layers"]))
+        return ENGINE.base_url
+    return resolve_base_url(s["backend"])
 IMPORT_EXT = {".json", ".jsonl", ".png", ".zip"}
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
 
@@ -118,6 +135,8 @@ def make_handler(app: App, port: int):
                                            "settings": settings(),
                                            "backends": {"builtin": "built-in llama.cpp", **BACKENDS},
                                            "helplines": HELPLINES, "library_path": str(app.lib)})
+                if u.path == "/api/job":
+                    return self.send_json(dict(JOB))
                 if u.path == "/api/engine":
                     return self.send_json(ENGINE.status())
                 if u.path == "/api/models":
@@ -202,6 +221,19 @@ def make_handler(app: App, port: int):
                 if path in ("/api/chat/edit", "/api/chat/delete", "/api/chat/pin", "/api/chat/swipe",
                             "/api/chat/background-remove"):
                     return self.chat_edit(path.rsplit("/", 1)[1], self.body_json())
+                if path in ("/api/analyze/style", "/api/analyze/story"):
+                    return self.start_job(path.rsplit("/", 1)[1], self.body_json())
+                if path == "/api/job/stop":
+                    JOB["stop"] = True
+                    return self.send_json(dict(JOB))
+                if path == "/api/story/save":
+                    body = self.body_json()
+                    p = app.safe_file("chats", body["chat"], "")
+                    with app.lock:
+                        meta, rows = chatlog.load(p)
+                        meta.setdefault("chat_metadata", {})["localcai_story"] = str(body.get("text", "")).strip()
+                        chatlog.save(p, meta, rows)
+                    return self.send_json({"ok": True})
                 if path == "/api/character/save":
                     return self.character_save(self.body_json())
                 if path in ("/api/chat/new", "/api/chat/send", "/api/chat/regenerate"):
@@ -333,6 +365,72 @@ def make_handler(app: App, port: int):
                 pp.write_bytes(embed_card_in_png(pp.read_bytes(), card))  # keep the PNG card in sync
             return self.send_json({"ok": True, "card": d})
 
+        def start_job(self, kind: str, body: dict):
+            if not settings()["age_confirmed"]:
+                return self.send_json({"error": "Please confirm you are 18 or older first."}, 403)
+            with JOB_LOCK:
+                if JOB and not JOB.get("done"):
+                    return self.send_json({"error": "Another analysis is still running."}, 409)
+                JOB.clear()
+                JOB.update(kind=kind, done=False, error="", message="Starting…", progress=0.0, stop=False)
+            character, chat = body["character"], body["chat"]
+            card_path = app.safe_file("characters", character, ".card.json")
+            chat_path = app.safe_file("chats", chat, "")
+            scope = int(body.get("scope") or 0)
+
+            def run():
+                try:
+                    card = json.loads(card_path.read_text("utf-8"))
+                    d = card.setdefault("data", {})
+                    char = d.get("name", "Character")
+                    _, user = app.persona()
+                    meta, rows = chatlog.load(chat_path)
+                    JOB["message"] = "Loading the model…"
+                    url, model = model_url(), settings()["model"]
+                    ask = lambda prompt, sys_="": analyze.complete(url, model, prompt, sys_)
+                    if kind == "style":
+                        JOB.update(message="Reading her replies…", progress=0.2)
+                        notes = analyze.style_notes(rows, char, user, lambda p: ask(p, analyze.STYLE_SYSTEM))
+                        JOB.update(message="Picking example dialogues…", progress=0.9)
+                        examples = analyze.pick_examples(rows, user, char)
+                        auto = d.setdefault("extensions", {}).setdefault(analyze.AUTO_MARK, {})
+                        if not d.get("personality") or auto.get("personality"):
+                            d["personality"] = notes
+                            auto["personality"] = True
+                        else:
+                            d["personality"] = d["personality"].rstrip() + "\n\n[Style notes from your chats]\n" + notes
+                        if examples and (not d.get("mes_example") or auto.get("mes_example")):
+                            d["mes_example"] = examples
+                            auto["mes_example"] = True
+                        with app.lock:
+                            card_path.write_text(json.dumps(card, ensure_ascii=False, indent=2), "utf-8")
+                            pp = card_path.with_name(card_path.name.replace(".card.json", ".card.png"))
+                            if pp.exists():
+                                from ..exporters import embed_card_in_png
+                                pp.write_bytes(embed_card_in_png(pp.read_bytes(), card))
+                        JOB.update(message="Learned her style.", progress=1.0)
+                    else:
+                        part = rows[-scope:] if scope else rows
+                        def prog(done, total):
+                            JOB.update(progress=done / max(total, 1),
+                                       message=f"Reading part {min(done + 1, total)} of {total}…")
+                        story = analyze.story_summary(part, char, user, lambda p: ask(p, analyze.STORY_SYSTEM),
+                                                      prog, lambda: JOB.get("stop"))
+                        if story:
+                            with app.lock:
+                                meta2, rows2 = chatlog.load(chat_path)
+                                meta2.setdefault("chat_metadata", {})["localcai_story"] = story
+                                chatlog.save(chat_path, meta2, rows2)
+                        JOB.update(message="Stopped. Saved what was read so far." if JOB.get("stop")
+                                   else "The story so far is ready.", progress=1.0, story=story)
+                except Exception as e:  # report to the UI
+                    JOB.update(error=str(e) or e.__class__.__name__, message="Failed")
+                finally:
+                    JOB["done"] = True
+
+            threading.Thread(target=run, daemon=True).start()
+            return self.send_json(dict(JOB))
+
         def chat_new(self, body: dict):
             card = app.card(body["character"])
             d = card.get("data", card)
@@ -370,16 +468,19 @@ def make_handler(app: App, port: int):
             if not s["model"]:
                 return self.send_json({"error": "Pick a model first (top bar)."}, 400)
 
-            if s["backend"] == "builtin":
-                try:
-                    ENGINE.start(s["model"], int(s["ctx_size"]), int(s["gpu_layers"]))
-                except RuntimeError as e:
-                    return self.send_json({"error": str(e)}, 502)
-                url = ENGINE.base_url
-            else:
-                url = resolve_base_url(s["backend"])
-            msgs = build_messages(card, chatlog.to_history(rows), user, persona=persona,
-                                  memories=chatlog.pinned_memories(rows + ([swipe_row] if swipe_row else [])))
+            try:
+                url = model_url()
+            except RuntimeError as e:
+                return self.send_json({"error": str(e)}, 502)
+            story = (meta.get("chat_metadata") or {}).get("localcai_story", "")
+            recalled = []
+            if s.get("recall", True) and len(rows) > 45:
+                query = " ".join(r.get("mes", "") for r in rows[-2:])
+                recalled = recall(rows, query, exclude_last=40, cache_key=str(path))
+            budget = max(6000, int(int(s["ctx_size"]) * 3.2) - int(s["max_tokens"]) * 4)
+            msgs = build_messages(card, chatlog.to_history(rows), user, max_chars=budget, persona=persona,
+                                  memories=chatlog.pinned_memories(rows + ([swipe_row] if swipe_row else [])),
+                                  story=story, recalled=recalled)
             gen = stream_chat(url, s["model"], msgs, temperature=float(s["temperature"]),
                               max_tokens=int(s["max_tokens"]))
             try:

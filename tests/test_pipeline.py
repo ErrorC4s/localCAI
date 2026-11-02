@@ -209,3 +209,51 @@ def test_reimport_merges_instead_of_duplicating(tmp_path):
     import_into(tmp_path / "a.lcai.json", tmp_path / "lib")
     _, rows = chatlog.load(files[0])
     assert len(rows) == 5
+
+
+def _long_chat(n=300):
+    rows = []
+    for i in range(n):
+        rows.append({"name": "Alex", "is_user": True, "mes": f"line {i}: how was the lighthouse?" if i == 20 else f"user line {i}"})
+        rows.append({"name": "Mira", "is_user": False,
+                     "mes": f'*She tilts her head, giggling softly.* "He-he... answer {i}, hubby~" *She leans closer.*' * 3})
+    return rows
+
+
+def test_pick_examples_spreads_across_history():
+    from localcai.analyze import pick_examples
+    ex = pick_examples(_long_chat(), "Alex", "Mira", k=4)
+    assert ex.count("<START>") == 4 and "{{user}}:" in ex and "{{char}}:" in ex
+    assert "Alex" not in ex  # user's name replaced by the macro
+
+
+def test_story_summary_map_reduce_and_stop():
+    from localcai.analyze import story_summary
+    calls = []
+    def ask(p):
+        calls.append(p)
+        return "- something happened"
+    out = story_summary(_long_chat(400), "Mira", "Alex", ask)
+    assert out == "- something happened"
+    maps = [c for c in calls if c.startswith("Part ")]
+    reduces = [c for c in calls if c.startswith("These are notes")]
+    assert len(maps) > 5 and len(reduces) >= 1
+    calls.clear()
+    story_summary(_long_chat(400), "Mira", "Alex", ask, stopped=lambda: len(calls) >= 2)
+    assert len([c for c in calls if c.startswith("Part ")]) == 2  # stops early, keeps what it read
+
+
+def test_style_notes_uses_character_replies_only():
+    from localcai.analyze import style_notes
+    seen = {}
+    style_notes(_long_chat(), "Mira", "Alex", lambda p: seen.setdefault("p", p) and "- giggles 'he-he'")
+    assert "He-he" in seen["p"] and "user line" not in seen["p"]
+
+
+def test_prompt_has_story_and_recall_sections():
+    card = {"data": {"name": "Mira"}}
+    msgs = build_messages(card, [{"role": "user", "content": "hi"}], "Alex",
+                          story="- They met at the lighthouse.", recalled=["Alex: remember Misty the cat"])
+    sys = msgs[0]["content"]
+    assert "[The story so far between Mira and Alex]" in sys and "lighthouse" in sys
+    assert "[Earlier moments that may be relevant now]" in sys and "Misty" in sys

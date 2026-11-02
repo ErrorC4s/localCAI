@@ -22,7 +22,8 @@ def active_lore(book: dict | None, recent_text: str) -> list[str]:
 
 
 def build_messages(card: dict, history: list[dict], user_name: str = "User",
-                   max_chars: int = 24000, persona: str = "", memories: list[str] | None = None) -> list[dict]:
+                   max_chars: int = 24000, persona: str = "", memories: list[str] | None = None,
+                   story: str = "", recalled: list[str] | None = None) -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]"""
     d = card.get("data", card)
     char = d.get("name", "Character")
@@ -45,6 +46,10 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
             lore.append(m)
     if lore:
         parts.append("[Memories — always keep these in mind]\n" + "\n".join(f"- {x}" for x in lore))
+    if story:
+        parts.append(f"[The story so far between {char} and {user_name}]\n{story}")
+    if recalled:
+        parts.append("[Earlier moments that may be relevant now]\n" + "\n".join(f"- {x}" for x in recalled))
     if d.get("mes_example"):
         parts.append("[Example dialogue — style reference only]\n" + d["mes_example"])
     system = _fill("\n\n".join(parts), char, user_name)
