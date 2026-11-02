@@ -1,4 +1,8 @@
-## localCAI v0.8.22 · Extractor 0.5.0
+## localCAI v0.8.23 · Extractor 0.5.0
+
+- OOC guard now only reviews what the character *says*: *actions* and narration are left out of the check (and out of the length check), and a reply that is only action isn't checked at all.
+
+### Earlier in v0.8.22
 
 - OOC guard: if the rewrite comes out (nearly) the same as the first try, it's dropped: no duplicate reply and no misleading "auto-fixed" badge.
 

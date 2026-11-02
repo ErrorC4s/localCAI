@@ -24,16 +24,15 @@ About {char}: {about}
 {last_user}
 >>>
 
-{char}'s reply:
+What {char} says in the reply (actions and narration left out, they are not reviewed):
 <<<
 {reply}
 >>>
 
-Does the reply break character? Only these count as problems:
+Do these words break character? Only these count as problems:
 1. It says or hints that {char} is an AI, a model, a bot, a character or part of a story.
 2. {char} acts like an assistant: offers to help with tasks, writes code, lists, or explanations {char} would not give.
 3. {char} knows or uses things from outside {char}'s world (other games, books, shows, real-world tech or brands the setting wouldn't have) instead of reacting to them in character.
-4. It writes {user}'s actions, words or feelings.
 If none of these happen, answer OK. Otherwise answer FIX: and one short instruction, e.g. "FIX: {char} has never heard of that game; react with confusion instead."
 """
 
@@ -43,6 +42,16 @@ def length_issue(reply: str, target_words: int) -> str:
     if target_words and _words(reply) > max(target_words * 2.2, target_words + 25):
         return f"Much shorter: about {target_words} words, like {{char}}'s usual replies."
     return ""
+
+
+_ACTION = re.compile(r"\*[^*]+\*")
+
+
+def spoken_part(reply: str) -> str:
+    """Only what the character says: *actions* are not reviewed."""
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", reply or "")  # **bold** is emphasis in speech, keep it
+    text = _ACTION.sub(" ", text).replace("*", " ")
+    return re.sub(r"[ \t]+", " ", re.sub(r"\n\s*\n+", "\n", text)).strip()
 
 
 def same_reply(a: str, b: str, threshold: float = 0.9) -> bool:
@@ -75,14 +84,17 @@ def check_reply(ask: Callable[[str, str], str], card: dict, user: str, last_user
     """Return an instruction for rewriting the reply, or "" if it's in character."""
     d = card.get("data", card)
     char = d.get("name", "Character")
+    speech = spoken_part(reply)
+    if not re.search(r"\w", speech):
+        return ""  # all action, nothing said: nothing to review
     fixes = []
-    lengthy = length_issue(reply, target_words)
+    lengthy = length_issue(speech, target_words)
     if lengthy:
         fixes.append(lengthy.replace("{char}", char))
     try:
         verdict = ask(CHECK_SYSTEM, CHECK_PROMPT.format(
             char=char, user=user, about=summarize_card(d) or "(no description)",
-            last_user=(last_user or "")[-1200:], reply=reply[-2500:]))
+            last_user=(last_user or "")[-1200:], reply=speech[-2500:]))
     except OSError:
         verdict = ""
     fix = parse_verdict(verdict)

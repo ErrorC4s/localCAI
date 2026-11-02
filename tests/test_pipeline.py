@@ -619,3 +619,21 @@ def test_rewrite_that_copies_the_original_is_dropped():
     a = '*Mira nods slowly.* "Okay, I think I can help with that."'
     assert same_reply(a, a) and same_reply(a, a.replace("slowly", "slowly,"))
     assert not same_reply(a, '*tilts head* "A what? ...Ask Tess."')
+
+
+
+def test_guard_reviews_only_spoken_words():
+    from localcai.runtime.guard import check_reply, spoken_part
+    assert spoken_part('*leans in and writes code on the board* "Hi." *smiles*') == '"Hi."'
+    seen = {}
+    def ask(system, prompt):
+        seen["p"] = prompt
+        return "OK"
+    card = {"data": {"name": "Mira"}}
+    long_action = "*" + "she slowly paces around the room " * 20 + "* " + '"Hey."'
+    assert check_reply(ask, card, "Sam", "hi", long_action, 15) == ""     # long actions are fine
+    assert "paces" not in seen["p"] and '"Hey."' in seen["p"]
+    seen.clear()
+    assert check_reply(ask, card, "Sam", "hi", "*nods quietly*", 15) == "" and "p" not in seen
+    assert "writes Sam's actions" not in str(seen)
+    assert spoken_part("*sips tea* Oolong from **Darjeeling**~") == "Oolong from Darjeeling~"
