@@ -63,7 +63,7 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
     if d.get("mes_example"):
         parts.append("[Example dialogue — style reference only]\n" + d["mes_example"])
     char_pr = character_pronouns(d)
-    user_pr = user_pronouns or guess_pronouns(persona)
+    user_pr = user_pronouns or guess_pronouns(persona) or guess_user_pronouns(history)
     parts.append(perspective_block(char, user_name, char_pr, user_pr))
     if pacing:
         parts.append(PACING.format(char=char, user=user_name))
@@ -83,8 +83,13 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         extra.append("[Relevant memories]\n" + "\n".join(f"- {x}" for x in triggered))
     if history and history[-1]["role"] == "user" and _FIRST_PERSON.search(history[-1]["content"]):
         u = f"{user_name} ({user_pr})" if user_pr else user_name
+        bodies = {"he/him": "a man", "she/her": "a woman"}
+        who = ""
+        if user_pr in bodies or char_pr in bodies:
+            who = " Keep bodies straight: " + ", ".join(
+                f"{n} is {bodies[p]}" for n, p in ((user_name, user_pr), (char, char_pr)) if p in bodies) + "."
         extra.append(f'Perspective: in the message below, "I/my" is {u} and "you/your" is {char}. '
-                     f'Reply as {char}: in your reply "I/my" is {char} and "you/your" is {user_name}.')
+                     f'Reply as {char}: in your reply "I/my" is {char} and "you/your" is {user_name}.{who}')
     if pacing and history and history[-1]["role"] == "user":
         hint = moment_hint(history[-1]["content"])
         if hint:
@@ -131,6 +136,22 @@ def alternate(msgs: list[dict]) -> list[dict]:
 _FIRST_PERSON = re.compile(r"\b(?:I|I'm|I've|I'll|me|my|myself)\b|我", re.I)
 _SHE = re.compile(r"\b(?:she|her|hers|herself|girl|woman|female|wife|mother|lady)\b|她", re.I)
 _HE = re.compile(r"\b(?:he|him|his|himself|boy|man|male|husband|father|guy)\b|他", re.I)
+
+
+# only words aimed at the user ("hubby", "my husband"), not the character talking about itself ("your wife")
+_CALLS_HIM = re.compile(r"\bhubby\b|\bdaddy\b|\bmy (?:husband|man|boy|prince|lord|king|boyfriend)\b|老公", re.I)
+_CALLS_HER = re.compile(r"\bwifey\b|\bmommy\b|\bmy (?:wife|girl|lady|princess|queen|girlfriend)\b|老婆", re.I)
+
+
+def guess_user_pronouns(history: list[dict]) -> str:
+    """How the character addresses the user in its own replies ("hubby", "my lady", 老公…)."""
+    text = "\n".join(m["content"] for m in history if m["role"] == "assistant")
+    him, her = len(_CALLS_HIM.findall(text)), len(_CALLS_HER.findall(text))
+    if him >= 3 and him >= 3 * her:
+        return "he/him"
+    if her >= 3 and her >= 3 * him:
+        return "she/her"
+    return ""
 
 
 def guess_pronouns(text: str) -> str:

@@ -28,7 +28,7 @@ from .. import analyze
 from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
-from ..runtime.client import other_speakers, strip_name_prefix, trim_to_sentence
+from ..runtime.client import other_speakers, strip_markers, strip_name_prefix, trim_to_sentence
 from ..runtime.prompt import PRONOUN_CHOICES, reply_words_for
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
@@ -526,7 +526,7 @@ def make_handler(app: App, port: int):
             extra = ({"top_p": 0.9, "top_k": 40, "min_p": 0.05, "repeat_penalty": 1.08}
                      if s["backend"] == "builtin" else None)
             # never let the model write the user's turn in chat-log style ("Sam: …")
-            extra = {**(extra or {}), "stop": [f"\n{user}:", f"\n**{user}:**", f"\n{user}："]}
+            extra = {**(extra or {}), "stop": [f"\n{user}:", f"\n**{user}:**", f"\n{user}：", "<|im_end|>", "<|im_start|>"]}
             gen = strip_name_prefix(stream_chat(url, s["model"], msgs, temperature=float(s["temperature"]),
                                                 max_tokens=int(s["max_tokens"]), info=info, extra=extra), char, info)
             try:
@@ -554,7 +554,7 @@ def make_handler(app: App, port: int):
                     self.wfile.write(f"\n\n[localCAI: the model stopped with an error: {e}]".encode("utf-8"))
                 except OSError:
                     pass
-            text_out = "".join(reply).strip()
+            text_out = strip_markers("".join(reply)).strip()
             if info.get("finish_reason") == "length":
                 text_out = trim_to_sentence(text_out)  # hit max_tokens: don't save half a sentence
             if info.get("name_prefix") and other_speakers(text_out, char):

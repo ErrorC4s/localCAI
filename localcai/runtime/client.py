@@ -27,6 +27,17 @@ def list_models(base_url: str, timeout: float = 5) -> list[str]:
         return [m["id"] for m in json.load(r).get("data", [])]
 
 
+# Chat-format markers some models write out as plain text when their tokenizer has no such special token
+TEMPLATE_MARKERS = ("<|im_end|>", "<|im_start|>", "<|eot_id|>", "<|end_of_text|>", "<|endoftext|>", "</s>",
+                    "[/INST]", "[INST]", "<end_of_turn>", "<start_of_turn>")
+
+
+def strip_markers(text: str) -> str:
+    """Cut a reply at the first leaked chat-format marker (everything after it is the model running on)."""
+    cut = min((i for i in (text.find(m) for m in TEMPLATE_MARKERS) if i >= 0), default=-1)
+    return (text[:cut] if cut >= 0 else text).rstrip()
+
+
 def name_patterns(char: str) -> list[str]:
     """Ways a model may label the character's own lines: the full name and its first word."""
     names = {char.strip()}

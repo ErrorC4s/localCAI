@@ -519,3 +519,20 @@ def test_gguf_metadata_reads_chat_template(tmp_path):
     assert gguf_metadata(a)["tokenizer.chat_template"] == "{{ messages }}"
     assert "tokenizer.chat_template" not in gguf_metadata(b)
     assert gguf_metadata(b)["general.architecture"] == "llama"
+
+
+
+def test_markers_and_user_pronouns_from_chat():
+    from localcai.runtime.client import strip_markers
+    from localcai.runtime.prompt import build_messages, guess_user_pronouns
+    assert strip_markers("*smiles* hubby?♡<|im_end|>") == "*smiles* hubby?♡"
+    assert strip_markers("ok</s>\n<|im_start|>user\nhi") == "ok"
+    hist = [{"role": "assistant", "content": "Hi hubby~"}, {"role": "user", "content": "hey"},
+            {"role": "assistant", "content": "my husband is back! He he, hubby~ Your wife missed you."},
+            {"role": "user", "content": "*I guide your palm to my chest*"}]
+    assert guess_user_pronouns(hist) == "he/him"
+    card = {"data": {"name": "Mira Vale", "description": "She is a trainer. Her eyes spiral."}}
+    last = build_messages(card, hist, "Sam")[-1]["content"]
+    assert "Keep bodies straight: Sam is a man, Mira Vale is a woman." in last
+
+    assert guess_user_pronouns([{"role": "assistant", "content": "I'm your wife, your wife, your wife!"}]) == ""

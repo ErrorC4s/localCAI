@@ -1,4 +1,13 @@
-## localCAI v0.8.15 · Extractor 0.5.0
+## localCAI v0.8.16 · Extractor 0.5.0
+
+**Cleaner replies with ChatML models**
+- Models that write chat-format markers as plain text (e.g. `<|im_end|>` from Rocinante) now stop there, and any leaked marker is cut from the saved reply.
+
+**Fewer body / role mix-ups**
+- If you haven't set your pronouns, localCAI now guesses them from how the character addresses you in your history ("hubby", "my lady", 老公 …), and each turn tells the model which of you is a man or a woman.
+- Recommended: still set your pronouns in ⚙ Settings, it's the most reliable.
+
+### Earlier in v0.8.15
 
 **Fixes models that wrote nonsense (e.g. Rocinante 12B)**
 - Some model files ship without a chat template. llama.cpp then can't lay out the conversation and the model only sees a few stray tokens, so it rambles about something unrelated. localCAI now reads the file's header before loading and uses ChatML when no template is inside.
