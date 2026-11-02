@@ -87,7 +87,7 @@ async function loadModels() {
   const r = await api("/api/models?backend=" + encodeURIComponent($("backend").value));
   sel.innerHTML = "";
   if (!r.models.length) {
-    sel.add(new Option(r.builtin ? "— set up in 🧠 —" : r.error ? "⚠ runner not reachable" : "no models found", ""));
+    sel.add(new Option(r.builtin ? "— set up the engine first —" : r.error ? "runner not reachable" : "no models found", ""));
     if (current) sel.add(new Option(current, current));
     if (r.error) toast(r.error, "warn");
   } else {
@@ -120,7 +120,7 @@ async function refreshEngine() {
   chip.hidden = false;
   const cpu = st.state === "ready" && !st.device;
   chip.className = "chip " + st.state + (cpu ? " slow" : "");
-  chip.textContent = !st.installed ? "● engine not installed — click 🧠"
+  chip.textContent = !st.installed ? "● engine not installed — set it up"
     : cpu ? "● ready · CPU (slow)"
     : { off: "● engine off", starting: "● loading model…", ready: "● ready", error: "● engine error" }[st.state];
   chip.title = st.error || (st.device ? "Running on " + st.device.name : "");
@@ -155,7 +155,7 @@ function renderEngineDialog(st) {
   sel.length = 0;
   for (const [k, label] of Object.entries(st.starters)) {
     const f = fits.starters[k];
-    sel.add(new Option(`${f ? { gpu: "🟢", partial: "🟡", cpu: "🔴" }[f.kind] + " " : ""}${label}`, k));
+    sel.add(new Option(`${f ? { gpu: "[fits GPU]", partial: "[GPU+CPU, slower]", cpu: "[CPU, slow]" }[f.kind] + " " : ""}${label}`, k));
   }
   if (keep) sel.value = keep;
   const sf = fits.starters[sel.value];
@@ -201,7 +201,7 @@ function renderCharacters() {
 const PRONOUN_NAMES = { "she/her": "she/her", "he/him": "he/him", "they/them": "they/them", group: "several characters" };
 function pronounLabel(c) {
   if (c.pronouns) return PRONOUN_NAMES[c.pronouns] || c.pronouns;
-  return c.pronouns_guess ? `${c.pronouns_guess} (guessed)` : "pronouns: not set (✎ Edit)";
+  return c.pronouns_guess ? `${c.pronouns_guess} (guessed)` : "pronouns: not set (Edit)";
 }
 function pronounSelect(current, guess, guessText, extra = true) {
   const sel = document.createElement("select");
@@ -326,7 +326,7 @@ function msgEl(row, index) {
   }
   const nm = document.createElement("span"); nm.textContent = row.name || "";
   who.append(face, nm);
-  if (row.extra && row.extra.pinned) { const p = document.createElement("span"); p.className = "pin"; p.textContent = "📌 pinned"; who.appendChild(p); }
+  if (row.extra && row.extra.pinned) { const p = document.createElement("span"); p.className = "pin"; p.innerHTML = ic("pinned") + " pinned"; who.appendChild(p); }
   if (row.extra && row.extra.edited) { const e = document.createElement("span"); e.className = "edited"; e.textContent = "edited"; who.appendChild(e); }
   const body = document.createElement("div"); body.className = "body"; body.innerHTML = render(row.mes || "");
   el.append(who, body);
@@ -342,7 +342,8 @@ const editCall = (action, index, extra = {}) =>
 
 function tool(label, title, fn) {
   const b = document.createElement("button");
-  b.className = "tool"; b.type = "button"; b.textContent = label; b.title = title;
+  b.className = "tool"; b.type = "button"; b.title = title;
+  if (label.startsWith("ic:")) b.innerHTML = ic(label.slice(3)); else b.textContent = label;
   b.onclick = (ev) => { ev.stopPropagation(); fn(); };
   return b;
 }
@@ -354,25 +355,25 @@ function msgTools(row, i, el) {
   const sid = row.swipe_id || 0;
   if (!row.is_user && (swipes.length > 1 || isLast)) {
     const nav = document.createElement("span"); nav.className = "swipes";
-    const prev = tool("◀", "Previous reply", () => editCall("swipe", i, { to: sid - 1 }));
+    const prev = tool("ic:prev", "Previous reply", () => editCall("swipe", i, { to: sid - 1 }));
     prev.disabled = sid === 0;
     const count = document.createElement("span"); count.textContent = `${sid + 1}/${swipes.length}`;
     const atEnd = sid === swipes.length - 1;
-    const next = tool("▶", atEnd ? "Generate another reply" : "Next reply", () =>
+    const next = tool("ic:next", atEnd ? "Generate another reply" : "Next reply", () =>
       atEnd ? (isLast ? $("regen").click() : null) : editCall("swipe", i, { to: sid + 1 }));
     next.disabled = atEnd && !isLast;
     nav.append(prev, count, next);
     bar.appendChild(nav);
   }
   bar.append(
-    ...(!row.is_user && isLast ? [tool("✨", "Tell the character how to change this reply", () => openDirect())] : []),
-    tool("✏", "Edit", () => startEdit(row, i, el)),
-    tool((row.extra || {}).pinned ? "📍" : "📌", (row.extra || {}).pinned ? "Unpin" : "Pin (the character always remembers pinned messages)",
+    ...(!row.is_user && isLast ? [tool("ic:sparkle", "Tell the character how to change this reply", () => openDirect())] : []),
+    tool("ic:pencil", "Edit", () => startEdit(row, i, el)),
+    tool((row.extra || {}).pinned ? "ic:pinned" : "ic:pin", (row.extra || {}).pinned ? "Unpin" : "Pin (the character always remembers pinned messages)",
       () => editCall("pin", i, { pinned: !(row.extra || {}).pinned })),
-    tool("⤺", "Rewind: delete this and everything after it", () => {
+    tool("ic:rewind", "Rewind: delete this and everything after it", () => {
       if (confirm(`Delete this message and the ${S.rows.length - i - 1} after it?`)) editCall("delete", i, { from_here: true });
     }),
-    tool("🗑", "Delete this message", () => { if (confirm("Delete this message?")) editCall("delete", i); }),
+    tool("ic:trash", "Delete this message", () => { if (confirm("Delete this message?")) editCall("delete", i); }),
   );
   return bar;
 }
@@ -648,7 +649,7 @@ $("job-stop").onclick = () => api("/api/job/stop", { json: {} });
 $("learn-style").onclick = async () => {
   if (!S.chat) return toast("Open a chat with some history first.", "warn");
   if (!(await ensureAdult())) return;
-  if (!confirm("Learn how this character talks?\n\nThe model reads a sample of her replies (a minute or two), writes style notes into the character, and picks example dialogues. You can edit or undo it any time with ✎.")) return;
+  if (!confirm("Learn how this character talks?\n\nThe model reads a sample of her replies (a minute or two), writes style notes into the character, and picks example dialogues. You can edit or undo it any time with Edit.")) return;
   try {
     await api("/api/analyze/style", { json: { character: S.character, chat: S.chat } });
     refreshEngine();
@@ -660,7 +661,7 @@ async function openMemory() {
   const r = await api(`/api/chat?character=${enc(S.character)}&chat=${enc(S.chat)}`);
   const pinned = r.rows.filter((x) => (x.extra || {}).pinned).length;
   const book = (r.card.character_book || {}).entries || [];
-  $("mem-counts").textContent = `📌 ${pinned} pinned in this chat · 🧠 ${book.length} memories from Character.AI (pins and chat memory)`;
+  $("mem-counts").innerHTML = `${ic("pinned")} ${pinned} pinned in this chat · ${ic("memory")} ${book.length} memories from Character.AI (pins and chat memory)`;
   $("story-text").value = ((r.meta || {}).chat_metadata || {}).localcai_story || "";
   $("story-hint").textContent = `This chat has ${r.rows.length.toLocaleString()} messages. Generating reads them in parts with your model; you can stop any time and keep what was read.`;
   $("memory-dialog").showModal();

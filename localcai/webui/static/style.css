@@ -195,3 +195,12 @@ details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted);
 .chip-btn { background: var(--panel2); border: 1px solid var(--line); color: var(--text); border-radius: 99px;
   padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
 .chip-btn:hover { border-color: var(--accent2); }
+
+/* icons (icons.js) */
+.ic { width: 1.15em; height: 1.15em; vertical-align: -0.22em; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.icon .ic { width: 18px; height: 18px; vertical-align: -4px; }
+.tool .ic { width: 17px; height: 17px; vertical-align: -3.5px; }
+h3 .ic { width: 20px; height: 20px; vertical-align: -3px; margin-right: 2px; color: var(--accent2); }
+.msg .pin .ic { color: #f0c46c; }
+.note-box .ic { color: #f0c46c; }

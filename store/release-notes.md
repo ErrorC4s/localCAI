@@ -1,4 +1,9 @@
-## localCAI v0.8.19 · Extractor 0.5.0
+## localCAI v0.8.20 · Extractor 0.5.0
+
+**Own icon set**
+- All emoji in the app are replaced by localCAI's own line icons (engine, settings, background, edit, learn style, memory, pin, rewind, rewrite…). They look the same on every Windows version and follow the theme colours.
+
+### Earlier in v0.8.19
 
 **✨ Change a reply with an instruction**
 - New ✨ button on the character's latest reply: type what should be different ("Shorter.", "She gets jealous.", "More teasing, less talking.", "讓她哭出來") and the reply is rewritten to follow it.

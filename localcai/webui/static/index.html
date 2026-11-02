@@ -16,8 +16,8 @@
   <label class="field grow">Model
     <span class="row">
       <select id="model"><option value="">—</option></select>
-      <button id="refresh-models" class="icon" title="Refresh model list">↻</button>
-      <button id="open-engine" class="icon" title="Built-in engine & models">🧠</button>
+      <button id="refresh-models" class="icon" title="Refresh model list"><i data-ic="refresh"></i></button>
+      <button id="open-engine" class="icon" title="Built-in engine & models"><i data-ic="engine"></i></button>
       <span id="engine-chip" class="chip" hidden></span>
     </span>
   </label>
@@ -25,12 +25,12 @@
   <label class="field">You are
     <select id="persona"><option value="">(no persona)</option></select>
   </label>
-  <button id="open-settings" class="icon" title="Settings">⚙</button>
+  <button id="open-settings" class="icon" title="Settings"><i data-ic="settings"></i></button>
 </header>
 
 <div class="layout">
   <aside class="sidebar">
-    <label class="btn primary block" for="file-input">⬆ Import files</label>
+    <label class="btn primary block" for="file-input"><i data-ic="upload"></i> Import files</label>
     <input id="file-input" type="file" multiple accept=".json,.jsonl,.png,.zip" hidden>
     <p class="hint">Drop <code>.lcai.json</code>, CAI Tools / SillyTavern files, character cards or a <code>.zip</code> anywhere.</p>
     <nav id="characters" class="char-list"></nav>
@@ -56,13 +56,13 @@
           <div class="muted" id="head-sub"></div>
         </div>
         <select id="chat-picker" title="Chats"></select>
-        <button id="new-chat" class="btn">＋ New chat</button>
-        <button id="open-bg" class="btn" title="Background picture for this chat or character">🖼<span class="lbl"> Background</span></button>
-        <button id="edit-char" class="btn" title="Edit character">✎<span class="lbl"> Edit</span></button>
-        <button id="learn-style" class="btn" title="Learn how this character talks from your chat history">🔍<span class="lbl"> Learn style</span></button>
-        <button id="open-memory" class="btn" title="Chat memory">📖<span class="lbl"> Memory</span></button>
-        <a id="download-card" class="btn" download>⬇ Card</a>
-        <button id="delete-char" class="btn" title="Delete character (moved to the library's trash folder)">🗑</button>
+        <button id="new-chat" class="btn"><i data-ic="plus"></i> New chat</button>
+        <button id="open-bg" class="btn" title="Background picture for this chat or character"><i data-ic="image"></i><span class="lbl"> Background</span></button>
+        <button id="edit-char" class="btn" title="Edit character"><i data-ic="pencil"></i><span class="lbl"> Edit</span></button>
+        <button id="learn-style" class="btn" title="Learn how this character talks from your chat history"><i data-ic="learn"></i><span class="lbl"> Learn style</span></button>
+        <button id="open-memory" class="btn" title="Chat memory"><i data-ic="book"></i><span class="lbl"> Memory</span></button>
+        <a id="download-card" class="btn" download><i data-ic="download"></i> Card</a>
+        <button id="delete-char" class="btn" title="Delete character (moved to the library's trash folder)"><i data-ic="trash"></i></button>
       </div>
       <div id="job-bar" class="job-bar" hidden><div class="bar"><span id="job-fill"></span></div>
         <span id="job-msg" class="small"></span><button class="link" id="job-stop">Stop</button></div>
@@ -75,8 +75,8 @@
       <form id="composer" class="composer">
         <textarea id="input" rows="2" placeholder="Message… (Enter to send, Shift+Enter for a new line)"></textarea>
         <div class="composer-buttons">
-          <button type="button" id="regen" class="btn" title="Regenerate last reply">↻</button>
-          <button type="button" id="stop" class="btn" hidden>■ Stop</button>
+          <button type="button" id="regen" class="btn" title="Regenerate last reply"><i data-ic="refresh"></i></button>
+          <button type="button" id="stop" class="btn" hidden><i data-ic="stop"></i> Stop</button>
           <button type="submit" id="send" class="btn primary">Send</button>
         </div>
       </form>
@@ -133,12 +133,12 @@
 </dialog>
 
 <dialog id="engine-dialog">
-  <h3>🧠 Built-in engine</h3>
+  <h3><i data-ic="engine"></i> Built-in engine</h3>
   <p class="muted small">Runs models on this computer with llama.cpp. No Ollama needed.</p>
   <div class="step">
     <b>1. Engine</b>
     <div id="eng-status" class="small"></div>
-    <div id="eng-upgrade" class="note-box small" hidden>⚡ Your computer has an NVIDIA graphics card. Click <b>Reinstall / update</b> to get the NVIDIA (CUDA) engine: replies get many times faster. (Download ~300–600 MB, once.)</div>
+    <div id="eng-upgrade" class="note-box small" hidden><i data-ic="bolt"></i> Your computer has an NVIDIA graphics card. Click <b>Reinstall / update</b> to get the NVIDIA (CUDA) engine: replies get many times faster. (Download ~300–600 MB, once.)</div>
     <button class="btn" id="eng-install">Install engine</button>
   </div>
   <div class="step">
@@ -146,9 +146,9 @@
     <div class="small muted">Put any <code>.gguf</code> model in this folder and it appears in the Model list:</div>
     <code id="eng-folder" class="path"></code>
     <div class="row wrap">
-      <button class="btn" id="eng-open-folder">📂 Open folder</button>
+      <button class="btn" id="eng-open-folder"><i data-ic="folder"></i> Open folder</button>
       <select id="eng-starter"></select>
-      <button class="btn" id="eng-download">⬇ Download</button>
+      <button class="btn" id="eng-download"><i data-ic="download"></i> Download</button>
     </div>
     <div id="eng-fit" class="small fit"></div>
     <ul id="eng-models" class="small"></ul>
@@ -163,19 +163,19 @@
 
 <dialog id="direct-dialog">
   <form id="direct-form" method="dialog">
-    <h3>✨ Change this reply</h3>
-    <p class="muted small">Tell the character what to do differently. The new version is added as another reply, so you can flip back with ◀ ▶.</p>
+    <h3><i data-ic="sparkle"></i> Change this reply</h3>
+    <p class="muted small">Tell the character what to do differently. The new version is added as another reply, so you can flip back with the <i data-ic="prev"></i><i data-ic="next"></i> arrows.</p>
     <input id="direct-text" maxlength="600" placeholder="e.g. Shorter. / She gets jealous. / More teasing, less talking. / 讓她哭出來">
     <div id="direct-recent" class="chip-row"></div>
     <div class="dialog-buttons">
       <button type="button" class="btn" id="direct-cancel">Cancel</button>
-      <button type="submit" class="btn primary">✨ Rewrite</button>
+      <button type="submit" class="btn primary"><i data-ic="sparkle"></i> Rewrite</button>
     </div>
   </form>
 </dialog>
 
 <dialog id="bg-dialog">
-  <h3>🖼 Background</h3>
+  <h3><i data-ic="image"></i> Background</h3>
   <div id="bg-preview" class="bg-preview"><span id="bg-source"></span></div>
   <div class="row wrap">
     <select id="bg-scope">
@@ -202,7 +202,7 @@
 </dialog>
 
 <dialog id="memory-dialog">
-  <h3>📖 Chat memory</h3>
+  <h3><i data-ic="book"></i> Chat memory</h3>
   <p class="muted small">Everything here is sent to the model with every reply, so the character keeps it in mind.</p>
   <div class="step">
     <b>Always remembered</b>
@@ -220,7 +220,7 @@
         <option value="5000">From the last 5,000 messages</option>
         <option value="0">From the whole chat (slow)</option>
       </select>
-      <button class="btn primary" id="story-generate">✨ Generate from history</button>
+      <button class="btn primary" id="story-generate"><i data-ic="sparkle"></i> Generate from history</button>
     </div>
     <div class="small muted" id="story-hint"></div>
   </div>
@@ -228,6 +228,7 @@
 </dialog>
 
 <div id="toasts" class="toasts"></div>
+<script src="/static/icons.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
