@@ -1,4 +1,12 @@
-## localCAI v0.8.8 · Extractor 0.5.0
+## localCAI v0.8.9 · Extractor 0.5.0
+
+**A cleaner chat screen**
+- Messages look closer to C.ai: the character's picture sits beside the bubble, paragraphs are evenly spaced, and there's no more empty strip inside each bubble (the ✏ 📌 ⤺ 🗑 tools now appear just under the message).
+- Text styling tells the parts apart: *actions* in soft italics, "spoken words" bright, and (scene / narration) paragraphs dimmed.
+- Top bar tidied: the engine status sits next to the model, "You are" and ⚙ move to the right.
+- Chat header buttons have names (Background, Edit, Learn style, Memory) on wide windows.
+
+### Earlier in v0.8.8
 
 **Recommended models, one click away**
 - 🧠 Engine → Download now offers roleplay-tuned community models next to Qwen3 4B: **Stheno 8B v3.2**, **Mag Mell 12B R1** and **Rocinante 12B v1.1** (Q4_K_M GGUF from Hugging Face). They write more like C.ai and refuse much less than general assistant models.

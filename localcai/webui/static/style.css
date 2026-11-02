@@ -141,3 +141,32 @@ details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted);
 
 .note-box { background: #2b2752; border: 1px solid #5b50c8; border-radius: 8px; padding: 8px 10px; }
 .chip.slow { color: #f0c46c; border-color: #8a6d2c; }
+
+/* ── v0.8.9 look ─────────────────────────────────────── */
+.topbar { align-items: flex-end; }
+.topbar .spacer { flex: 1; }
+.field.grow { max-width: 640px; }
+.topbar .chip { align-self: center; margin: 0; white-space: nowrap; }
+.chat-head { flex-wrap: wrap; row-gap: 8px; }
+@media (max-width: 1500px) { .chat-head .lbl { display: none; } }
+
+.messages { gap: 26px; padding: 22px 28px 30px; }
+.msg { max-width: min(880px, 78%); padding: 12px 16px; font-size: 15px; line-height: 1.6; white-space: normal; }
+.msg .body p { margin: 0 0 .6em; white-space: pre-wrap; }
+.msg .body p:last-child { margin-bottom: 0; }
+.msg em { color: #b8b8cc; }
+.msg .say { color: #fff; }
+.msg .scene { color: var(--muted); font-size: 14px; }
+.msg .scene em { color: inherit; }
+/* character avatar sits beside the bubble, like on C.ai */
+.msg:not(.user) { margin-left: 46px; border-top-left-radius: 4px; }
+.msg.user { border-top-right-radius: 4px; }
+.msg:not(.user) .who .avatar.tiny { position: absolute; left: -46px; top: 0; width: 36px; height: 36px; font-size: 14px; }
+.msg .who { font-size: 12px; margin-bottom: 5px; }
+.msg:not(.user) .who span:nth-child(2) { color: var(--accent2); font-weight: 600; }
+/* tools float under the bubble instead of leaving an empty strip inside it */
+.tools { position: absolute; top: 100%; right: 6px; left: 6px; margin-top: 2px; }
+.msg.user .tools { left: auto; }
+.tool { font-size: 14px; padding: 2px 7px; }
+.edit-box { min-height: 120px; }
+.field.grow select { min-width: 260px; } .field.grow { min-width: 300px; }

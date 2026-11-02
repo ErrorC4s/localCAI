@@ -18,9 +18,10 @@
       <select id="model"><option value="">—</option></select>
       <button id="refresh-models" class="icon" title="Refresh model list">↻</button>
       <button id="open-engine" class="icon" title="Built-in engine & models">🧠</button>
+      <span id="engine-chip" class="chip" hidden></span>
     </span>
-    <span id="engine-chip" class="chip" hidden></span>
   </label>
+  <span class="spacer"></span>
   <label class="field">You are
     <select id="persona"><option value="">(no persona)</option></select>
   </label>
@@ -55,12 +56,12 @@
         </div>
         <select id="chat-picker" title="Chats"></select>
         <button id="new-chat" class="btn">＋ New chat</button>
-        <label class="btn" for="bg-input" title="Set a background image for this chat">🖼</label>
+        <label class="btn" for="bg-input" title="Set a background image for this chat">🖼<span class="lbl"> Background</span></label>
         <input id="bg-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
         <button id="bg-remove" class="btn" title="Remove this chat's background" hidden>🖼✕</button>
-        <button id="edit-char" class="btn" title="Edit character">✎</button>
-        <button id="learn-style" class="btn" title="Learn how this character talks from your chat history">🔍</button>
-        <button id="open-memory" class="btn" title="Chat memory">📖</button>
+        <button id="edit-char" class="btn" title="Edit character">✎<span class="lbl"> Edit</span></button>
+        <button id="learn-style" class="btn" title="Learn how this character talks from your chat history">🔍<span class="lbl"> Learn style</span></button>
+        <button id="open-memory" class="btn" title="Chat memory">📖<span class="lbl"> Memory</span></button>
         <a id="download-card" class="btn" download>⬇ Card</a>
         <button id="delete-char" class="btn" title="Delete character (moved to the library's trash folder)">🗑</button>
       </div>

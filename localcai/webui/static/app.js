@@ -44,8 +44,15 @@ const charAvatar = (c) => (c.has_avatar ? `/api/avatar/${enc(c.file)}.png` : nul
 function personaInfo() { return S.state.library.personas.find((p) => p.name === $("persona").value); }
 // Safe mini-markdown: escape first, then *italic* / **bold**. Never injects raw HTML.
 function render(text) {
-  const esc = text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  return esc.replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>").replace(/\*([^*\n]+?)\*/g, "<em>$1</em>");
+  // Like C.ai: *actions* in soft italics, "spoken words" bright, (scene / narration) dimmed.
+  const esc = String(text).trim().replace(/\r\n?/g, "\n")
+    .replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  return esc.split(/\n{2,}/).map((para) => {
+    let h = para.replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>").replace(/\*([^*\n]+?)\*/g, "<em>$1</em>")
+      .replace(/(&quot;|“)([^\n]*?)(&quot;|”)/g, '<span class="say">$1$2$3</span>');
+    const scene = /^\(([\s\S]*)\)$/.test(para.trim());
+    return `<p${scene ? ' class="scene"' : ""}>${h}</p>`;
+  }).join("");
 }
 const fill = (t, char, user) => (t || "").replaceAll("{{char}}", char).replaceAll("{{user}}", user);
 
