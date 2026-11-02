@@ -280,6 +280,8 @@ async function reply(path, payload) {
   const body = bot.querySelector(".body");
   S.abort = new AbortController();
   $("stop").hidden = false; $("send").disabled = true; $("regen").disabled = true;
+  // the built-in engine may be loading the model for this reply: keep its status chip live
+  const poll = $("backend").value === "builtin" ? setInterval(refreshEngine, 1000) : null;
   let text = "";
   try {
     const res = await api(path, { json: payload, stream: true, signal: S.abort.signal });
@@ -297,6 +299,7 @@ async function reply(path, payload) {
     if (e.name !== "AbortError") { toast(e.message, "error"); bot.remove(); }
   } finally {
     S.abort = null; $("stop").hidden = true; bot.classList.remove("streaming");
+    if (poll) { clearInterval(poll); refreshEngine(); }
   }
   await openChat(S.chat); // reload from disk: the server is the source of truth
   return true;
