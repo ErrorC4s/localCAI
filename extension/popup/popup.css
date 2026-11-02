@@ -1,5 +1,7 @@
 body { width: 300px; margin: 0; padding: 14px 16px; font: 13px/1.45 system-ui, sans-serif; color: #e8e8ef; background: #1c1d26; }
-h1 { margin: 0; font-size: 18px; letter-spacing: .3px; }
+h1 { margin: 0; font-size: 18px; letter-spacing: .3px; display: flex; align-items: center; gap: 8px; font-weight: 400; }
+h1 b { color: #8b7dff; }
+.logo { width: 26px; height: 26px; }
 .sub { margin: 2px 0 12px; color: #9a9bb0; font-size: 12px; }
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 10px; }
 .stats div { background: #262836; border-radius: 8px; padding: 8px 10px; }

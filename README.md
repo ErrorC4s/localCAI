@@ -1,6 +1,6 @@
-# localCAI
+<p align="center"><img src="assets/logo-wordmark.svg" alt="localCAI" width="360"></p>
 
-**Bring your characters home.**
+<p align="center"><b>Bring your characters home.</b></p>
 
 localCAI moves your Character.AI chats, pinned messages, memories, personas, avatars, backgrounds and the characters you created into open, portable files, then lets you keep chatting with them on **a local model you choose**. No cloud, no filters you didn't pick, and no platform that can take them away.
 
