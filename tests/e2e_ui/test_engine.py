@@ -52,7 +52,10 @@ class CDN(BaseHTTPRequestHandler):
             assets = [{"name": n, "browser_download_url": f"{base}/dl/{n}"} for n in (
                 "llama-b9999-bin-win-vulkan-x64.zip", "llama-b9999-bin-ubuntu-x64.tar.gz",
                 "llama-b9999-bin-ubuntu-vulkan-x64.tar.gz", "llama-b9999-bin-macos-arm64.tar.gz")]
-            return self.send(json.dumps({"tag_name": "b9999", "assets": assets}).encode(), "application/json")
+            # like the real API: the newest "release" can be a tag with no binaries at all
+            releases = [{"tag_name": "v0.8.0", "assets": [{"name": "nightly-tag.txt", "browser_download_url": base + "/x"}]},
+                        {"tag_name": "b9999", "assets": assets, "prerelease": True}]
+            return self.send(json.dumps(releases).encode(), "application/json")
         if self.path.startswith("/dl/"):
             return self.send(TARBALL)
         if self.path == f"/hf/api/models/{REPO}":

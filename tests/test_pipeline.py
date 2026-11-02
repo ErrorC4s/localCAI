@@ -178,7 +178,7 @@ def test_engine_picks_the_right_build():
     assert pick("macos", "arm64", "auto") == "llama-b9000-bin-macos-arm64.tar.gz"
     assert pick("ubuntu", "x64", "auto") == "llama-b9000-bin-ubuntu-vulkan-x64.tar.gz"
     assert pick("ubuntu", "x64", "cpu") == "llama-b9000-bin-ubuntu-x64.tar.gz"
-    assert pick("win", "arm64", "auto") is None
+    assert pick("win", "arm64", "auto") is None  # no arm64 builds in this list
 
 
 def test_reimport_merges_instead_of_duplicating(tmp_path):

@@ -30,8 +30,10 @@ from pathlib import Path
 
 from .library import home
 
+# llama.cpp's "latest" release can be a tag without binaries (e.g. v0.8.0); the builds live in the
+# frequent bNNNNN releases. So we list recent releases and take the newest one with a matching build.
 RELEASE_API = os.environ.get("LOCALCAI_LLAMA_RELEASE_API",
-                             "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest")
+                             "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=20")
 HF_BASE = os.environ.get("LOCALCAI_HF_BASE", "https://huggingface.co").rstrip("/")
 UA = {"User-Agent": "localCAI (+https://github.com/ErrorC4s/localCAI)"}
 
@@ -65,7 +67,8 @@ def platform_key() -> tuple[str, str]:
 
 def asset_patterns(system: str, arch: str, variant: str) -> list[re.Pattern]:
     ext = r"\.zip$" if system == "win" else r"\.(zip|tar\.gz)$"
-    gpu = {("win", "x64"): ["vulkan-x64"], ("ubuntu", "x64"): ["vulkan-x64"], ("ubuntu", "arm64"): ["vulkan-arm64"]}
+    gpu = {("win", "x64"): ["vulkan-x64"], ("win", "arm64"): ["vulkan-arm64"],
+           ("ubuntu", "x64"): ["vulkan-x64"], ("ubuntu", "arm64"): ["vulkan-arm64"]}
     cpu = {("win", "x64"): ["cpu-x64"], ("win", "arm64"): ["cpu-arm64"], ("ubuntu", "x64"): ["x64"],
            ("ubuntu", "arm64"): ["arm64"], ("macos", "arm64"): ["arm64"], ("macos", "x64"): ["x64"]}
     names = ([] if variant == "cpu" else gpu.get((system, arch), [])) + cpu.get((system, arch), [])
@@ -219,10 +222,19 @@ class Engine:
     def install(self, variant: str = "auto") -> dict:
         system, arch = platform_key()
         self.job and self.job.update(message="Finding the right llama.cpp build…")
-        rel = _get_json(RELEASE_API)
-        asset = pick_asset(rel.get("assets", []), system, arch, variant)
+        data = _get_json(RELEASE_API)
+        releases = data if isinstance(data, list) else [data]
+        rel, asset = None, None
+        for r in releases:  # newest first; skip drafts and releases without binaries
+            if r.get("draft"):
+                continue
+            asset = pick_asset(r.get("assets", []), system, arch, variant)
+            if asset:
+                rel = r
+                break
         if not asset:
-            raise RuntimeError(f"No llama.cpp build found for {system}-{arch}. Use Ollama or LM Studio instead.")
+            raise RuntimeError(f"Couldn't find a llama.cpp build for {system}-{arch} in the {len(releases)} newest "
+                               "releases. Try again later, or use Ollama / LM Studio as the backend.")
         self.stop()
         target = engine_dir() / rel.get("tag_name", "latest")
         if target.exists():
