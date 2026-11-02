@@ -274,11 +274,15 @@ class Engine:
             if self.state == "ready" and self.model == model and self.proc and self.proc.poll() is None:
                 return
             inst = self.installed()
-            if not inst:
-                raise RuntimeError("The built-in engine isn't installed yet. Open 🧠 Engine and click Install.")
             path = (models_dir() / model).resolve()
-            if models_dir().resolve() not in path.parents or not path.is_file() or path.suffix.lower() != ".gguf":
-                raise RuntimeError(f"Model not found in the models folder: {model}")
+            problem = None
+            if not inst:
+                problem = "The built-in engine isn't installed yet. Open 🧠 Engine and click Install."
+            elif models_dir().resolve() not in path.parents or not path.is_file() or path.suffix.lower() != ".gguf":
+                problem = f"Model not found in the models folder: {model}"
+            if problem:  # record it so the UI never sits on "loading…"
+                self.state, self.error = ("off" if not inst else "error"), problem
+                raise RuntimeError(problem)
             self.stop()
             self.port = _free_port(8766)
             server = Path(inst["server"])

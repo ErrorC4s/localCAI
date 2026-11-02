@@ -108,7 +108,8 @@ async function refreshEngine() {
   S.engine = st;
   chip.hidden = false;
   chip.className = "chip " + st.state;
-  chip.textContent = { off: "● engine off", starting: "● loading model…", ready: "● ready", error: "● engine error" }[st.state];
+  chip.textContent = !st.installed ? "● engine not installed — click 🧠"
+    : { off: "● engine off", starting: "● loading model…", ready: "● ready", error: "● engine error" }[st.state];
   chip.title = st.error || "";
   renderEngineDialog(st);
   const busy = st.state === "starting" || (st.job && !st.job.done);

@@ -79,16 +79,30 @@ def main():
                 time.sleep(0.1)
         with sync_playwright() as p:
             page = p.chromium.launch().new_page(viewport={"width": 1280, "height": 820})
+            page.on("pageerror", lambda e: print("PAGEERROR", e))
             page.goto(f"http://127.0.0.1:{UI_PORT}/")
             expect(page.locator("#backend")).to_have_value("builtin")          # default for new users
-            expect(page.locator("#engine-chip")).to_have_text("● engine off")
+            expect(page.locator("#engine-chip")).to_contain_text("not installed")
+
+            # picking a model before installing must not hang on "loading…"
+            Path(home, "models").mkdir(parents=True, exist_ok=True)
+            Path(home, "models", "early.gguf").write_bytes(GGUF)
+            page.click("#refresh-models")
+            page.select_option("#model", "early.gguf")
+            expect(page.locator("#engine-chip")).to_contain_text("not installed")
+            for _ in range(30):
+                st = json.load(urllib.request.urlopen(f"http://127.0.0.1:{UI_PORT}/api/engine"))
+                if st["error"]:
+                    break
+                time.sleep(0.2)
+            assert st["state"] != "starting" and "isn't installed" in st["error"], st
 
             page.click("#open-engine")
             expect(page.locator("#eng-status")).to_contain_text("Not installed")
             page.click("#eng-install")
             expect(page.locator("#eng-status")).to_contain_text("llama-b9999-bin-ubuntu-vulkan-x64.tar.gz", timeout=20000)
             page.click("#eng-download")
-            expect(page.locator("#eng-models li")).to_contain_text(MODEL, timeout=20000)
+            expect(page.locator("#eng-models li", has_text=MODEL)).to_have_count(1, timeout=20000)
             page.click("#eng-close")
 
             expect(page.locator(f"#model option[value='{MODEL}']")).to_have_count(1)
