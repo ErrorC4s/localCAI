@@ -35,11 +35,11 @@ from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
-                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing"}
+                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns"}
 DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
             "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True,
-            "gpu_device": "auto", "reply_length": "auto", "pacing": True}
+            "gpu_device": "auto", "reply_length": "auto", "pacing": True, "user_pronouns": ""}
 
 # Background jobs (history analysis). One at a time; the UI polls /api/job.
 JOB: dict = {}
@@ -493,7 +493,8 @@ def make_handler(app: App, port: int):
                                   memories=chatlog.pinned_memories(rows + ([swipe_row] if swipe_row else [])),
                                   story=story, recalled=recalled,
                                   reply_words=reply_words_for(str(s.get("reply_length", "auto")), history),
-                                  pacing=s.get("pacing", True) is not False)
+                                  pacing=s.get("pacing", True) is not False,
+                                  user_pronouns=str(s.get("user_pronouns") or ""))
             info: dict = {}
             # Built-in engine: sampler settings that keep small models from rambling and looping.
             extra = ({"top_p": 0.9, "top_k": 40, "min_p": 0.05, "repeat_penalty": 1.08}

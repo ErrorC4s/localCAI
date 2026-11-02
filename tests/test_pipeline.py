@@ -442,3 +442,20 @@ def test_strip_name_prefix_while_streaming():
     assert out == "Hm.\nTess: Jo, where are we?\nBram: Hold on." and pre.startswith("Bram:")
     assert other_speakers(out, "Bram the Smith") == {"Tess"}
     assert other_speakers("Mmm... not now.\n\n*smiles* fine", "Mira Vale") == set()
+
+
+
+def test_perspective_and_pronouns():
+    from localcai.runtime.prompt import build_messages, guess_pronouns
+    assert guess_pronouns("{{char}} is a moon witch. She loves her husband.") == "she/her"
+    assert guess_pronouns("He is a tall knight. His armor is old.") == "he/him"
+    assert guess_pronouns("A ghost.") == ""
+    card = {"data": {"name": "Mira Vale", "description": "She is a moon witch. Her eyes glow silver."}}
+    msgs = build_messages(card, [{"role": "user", "content": "*I guide your palm to my chest*"}], "Sam",
+                          persona="Sam is a man. He wears a red scarf.")
+    assert "You play Mira Vale (she/her). You are talking with Sam (he/him)." in msgs[0]["content"]
+    assert 'Perspective: in the message below, "I/my" is Sam (he/him)' in msgs[-1]["content"]
+    assert msgs[-1]["content"].endswith("*I guide your palm to my chest*")
+
+    msgs2 = build_messages(card, [{"role": "user", "content": "*I smile*"}], "Sam", user_pronouns="he/him")
+    assert "talking with Sam (he/him)" in msgs2[0]["content"]

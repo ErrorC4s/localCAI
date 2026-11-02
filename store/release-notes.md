@@ -1,4 +1,10 @@
-## localCAI v0.8.11 · Extractor 0.5.0
+## localCAI v0.8.12 · Extractor 0.5.0
+
+**Fewer role mix-ups**
+- C.ai chats are written in first person on both sides, which confuses small models ("I" in your message is you, "I" in the reply is the character). The prompt now spells out who is who, and each turn reminds the model that "I" in your message means you.
+- The character's pronouns are detected from its description; set yours in ⚙ Settings → "Your pronouns" (or let it guess from your persona).
+
+### Earlier in v0.8.11
 
 **Group scenes keep their speaker names**
 - Only the label at the very start of a reply ("Mira Vale: …") is removed. If the reply turns out to be a group scene with other characters talking ("Bram: … / Tess: …"), the opening label is put back so every line says who's speaking.

@@ -29,7 +29,7 @@ HISTORY_BLOCK = 16  # history is dropped in blocks, so the prompt's beginning st
 def build_messages(card: dict, history: list[dict], user_name: str = "User",
                    max_chars: int = 24000, persona: str = "", memories: list[str] | None = None,
                    story: str = "", recalled: list[str] | None = None,
-                   reply_words: int = 0, pacing: bool = True) -> list[dict]:
+                   reply_words: int = 0, pacing: bool = True, user_pronouns: str = "") -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
     Built to be prompt-cache friendly: everything that stays the same from turn to turn
@@ -62,6 +62,9 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         parts.append(f"[The story so far between {char} and {user_name}]\n{story}")
     if d.get("mes_example"):
         parts.append("[Example dialogue — style reference only]\n" + d["mes_example"])
+    char_pr = guess_pronouns(" ".join(str(d.get(k) or "") for k in ("description", "personality", "scenario")))
+    user_pr = user_pronouns or guess_pronouns(persona)
+    parts.append(perspective_block(char, user_name, char_pr, user_pr))
     if pacing:
         parts.append(PACING.format(char=char, user=user_name))
     if reply_words:
@@ -78,6 +81,10 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
     extra = []
     if triggered:
         extra.append("[Relevant memories]\n" + "\n".join(f"- {x}" for x in triggered))
+    if history and history[-1]["role"] == "user" and _FIRST_PERSON.search(history[-1]["content"]):
+        u = f"{user_name} ({user_pr})" if user_pr else user_name
+        extra.append(f'Perspective: in the message below, "I/my" is {u} and "you/your" is {char}. '
+                     f'Reply as {char}: in your reply "I/my" is {char} and "you/your" is {user_name}.')
     if pacing and history and history[-1]["role"] == "user":
         hint = moment_hint(history[-1]["content"])
         if hint:
@@ -104,6 +111,31 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
                 break
     # (The greeting is part of `history` — the chat loop seeds it as the first assistant turn.)
     return [{"role": "system", "content": system}] + kept
+
+
+_FIRST_PERSON = re.compile(r"\b(?:I|I'm|I've|I'll|me|my|myself)\b|我", re.I)
+_SHE = re.compile(r"\b(?:she|her|hers|herself|girl|woman|female|wife|mother|lady)\b|她", re.I)
+_HE = re.compile(r"\b(?:he|him|his|himself|boy|man|male|husband|father|guy)\b|他", re.I)
+
+
+def guess_pronouns(text: str) -> str:
+    """'she/her' or 'he/him' when a description clearly talks about one, else ''."""
+    she, he = len(_SHE.findall(text or "")), len(_HE.findall(text or ""))
+    if she >= 2 and she >= 2 * he:
+        return "she/her"
+    if he >= 2 and he >= 2 * she:
+        return "he/him"
+    return ""
+
+
+def perspective_block(char: str, user: str, char_pr: str = "", user_pr: str = "") -> str:
+    c = f"{char} ({char_pr})" if char_pr else char
+    u = f"{user} ({user_pr})" if user_pr else user
+    return (f"[Who is who]\nYou play {c}. You are talking with {u}.\n"
+            f'In {user}\'s messages, "I/me/my" means {user} and "you/your" means {char}. '
+            f'In your replies it is the other way round: "I/me/my" is {char} and "you/your" is {user}. '
+            f"Never swap them: {char}'s own body, feelings and actions are \"my\", {user}'s are \"your\". "
+            f"Keep to first and second person; don't switch to talking about {char} or {user} as he/she.")
 
 
 PACING = """[How to write {char}'s replies]
