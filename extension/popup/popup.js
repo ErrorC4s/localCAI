@@ -31,7 +31,21 @@ async function refresh() {
   }
 }
 
-$("export").onclick = async () => download((await ask("export")).doc, `localcai-${stamp()}.lcai.json`);
+$("export").onclick = async () => {
+  const btn = $("export"), prog = $("progress");
+  btn.disabled = true;
+  try {
+    const doc = (await ask("export")).doc;
+    if ($("with-images").checked) {
+      prog.hidden = false;
+      await LocalCAIAssets.embed(doc, (d, n) => (prog.textContent = n ? `Downloading images… ${d}/${n}` : ""));
+      prog.textContent = doc.asset_errors.length
+        ? `Saved. ${doc.asset_errors.length} image(s) couldn't be downloaded.` : "";
+      prog.hidden = !prog.textContent;
+    }
+    download(doc, `localcai-${stamp()}.lcai.json`);
+  } finally { btn.disabled = false; }
+};
 $("raw").onclick = async () => download((await ask("raw")).doc, `localcai-raw-${stamp()}.json`);
 $("clear").onclick = async () => { await ask("clear"); refresh(); };
 

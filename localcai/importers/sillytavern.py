@@ -67,8 +67,12 @@ def character_from_card(card: dict, source: str = "tavern-card") -> Character:
 
 
 def import_card(path: Path) -> Bundle:
-    card = card_from_png(path) if path.suffix.lower() == ".png" else json.loads(path.read_text("utf-8"))
-    return Bundle(characters=[character_from_card(card)])
+    is_png = path.suffix.lower() == ".png"
+    card = card_from_png(path) if is_png else json.loads(path.read_text("utf-8"))
+    c = character_from_card(card)
+    if is_png:
+        c.avatar_png = path.read_bytes()  # the card's own picture is the avatar
+    return Bundle(characters=[c])
 
 
 def import_chat_jsonl(path: Path) -> Bundle:

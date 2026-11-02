@@ -29,6 +29,7 @@ SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max
 DEFAULTS = {"backend": "ollama", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False}
 IMPORT_EXT = {".json", ".jsonl", ".png", ".zip"}
+IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
 
 
 def settings() -> dict:
@@ -119,9 +120,21 @@ def make_handler(app: App, port: int):
                     card = app.card(q["character"])
                     meta, rows = chatlog.load(app.safe_file("chats", q["chat"], ""))
                     return self.send_json({"meta": meta, "rows": rows, "card": card.get("data", card)})
+                m = re.fullmatch(r"/api/avatar/(.+)\.png", u.path)
+                if m:  # the card PNG doubles as the avatar image
+                    p = app.safe_file("characters", unquote(m.group(1)), ".card.png")
+                    return self.raw(p.read_bytes(), "image/png", cache=True)
+                m = re.fullmatch(r"/api/image/(characters|chats|personas)/([^/]+)", u.path)
+                if m:
+                    name = unquote(m.group(2))
+                    ctype = IMAGE_TYPES.get(Path(name).suffix.lower())
+                    if not ctype:
+                        raise FileNotFoundError(name)
+                    p = app.safe_file(m.group(1), name, "")
+                    return self.raw(p.read_bytes(), ctype, cache=True)
                 m = re.fullmatch(r"/api/card/(.+)\.png", u.path)
                 if m:
-                    p = app.safe_file("characters", m.group(1), ".card.png")
+                    p = app.safe_file("characters", unquote(m.group(1)), ".card.png")
                     return self.raw(p.read_bytes(), "image/png", download=p.name)
                 self.send_json({"error": "not found"}, 404)
             except (FileNotFoundError, KeyError, ValueError) as e:
@@ -134,16 +147,17 @@ def make_handler(app: App, port: int):
             ctype = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
             self.raw(p.read_bytes(), ctype + ("; charset=utf-8" if ctype.startswith("text/") or "javascript" in ctype else ""))
 
-        def raw(self, data: bytes, ctype: str, download: str | None = None):
+        def raw(self, data: bytes, ctype: str, download: str | None = None, cache: bool = False):
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Cache-Control", "max-age=60" if cache else "no-store")
             if download:
                 self.send_header("Content-Disposition", f'attachment; filename="{download}"')
             else:
                 self.send_header("Content-Security-Policy",
-                                 "default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'")
+                                 "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'")
             self.end_headers()
             self.wfile.write(data)
 

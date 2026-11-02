@@ -124,3 +124,36 @@ def test_persona_goes_into_prompt():
     msgs = build_messages(card, [{"role": "user", "content": "hi"}], user_name="Sam",
                           persona="A tired night-shift baker who loves tea.")
     assert "[About Sam]" in msgs[0]["content"] and "night-shift baker" in msgs[0]["content"]
+
+
+def test_images_land_in_library(tmp_path):
+    import struct
+    from localcai.library import import_into, list_library
+    rep = import_into(FX / "extension_export.lcai.json", tmp_path)
+    luna = next(c for c in rep.characters if c["name"] == "Luna")
+    assert luna["avatar"] and luna["background"]
+    png = (tmp_path / "characters" / "Luna.card.png").read_bytes()
+    assert struct.unpack(">II", png[16:24]) == (8, 6)          # real avatar, not the placeholder
+    assert card_from_png(tmp_path / "characters" / "Luna.card.png")["data"]["name"] == "Luna"
+    lib = list_library(tmp_path)
+    l = next(c for c in lib["characters"] if c["name"] == "Luna")
+    assert l["has_avatar"] and l["background"] == "Luna.background.png"
+    rex = next(c for c in lib["characters"] if c["name"] == "Rex")
+    assert not rex["has_avatar"]                               # failed download → placeholder
+    assert lib["personas"][0]["avatar"] == "Alex.avatar.png"
+    assert (tmp_path / "personas" / "Alex.avatar.png").exists()
+    assert any("Rex avatar" in w for w in rep.warnings)
+
+
+def test_bad_images_are_rejected():
+    import base64
+    from localcai.images import decode_data_url, png_or_none
+    b64 = lambda b: base64.b64encode(b).decode()
+    assert decode_data_url("data:image/svg+xml;base64," + b64(b"<svg onload=alert(1)>")) is None
+    assert decode_data_url("data:image/png;base64," + b64(b"<html>not a png</html>")) is None
+    assert decode_data_url("data:text/html;base64," + b64(b"x")) is None
+    assert decode_data_url("data:image/png;base64,!!!notbase64") is None
+    assert decode_data_url(12345) is None
+    jpeg = decode_data_url("data:image/jpeg;base64," + b64(b"\xff\xd8\xff\xe0rest"))
+    assert jpeg == ("image/jpeg", b"\xff\xd8\xff\xe0rest")
+    assert png_or_none("data:image/jpeg;base64," + b64(b"\xff\xd8\xff\xe0rest")) is None

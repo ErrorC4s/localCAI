@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..images import decode_data_url, png_or_none
 from ..schema import Bundle, Character, Chat, Message
 
 SUPPORTED_VERSIONS = {1}
@@ -30,6 +31,8 @@ def import_lcai(path: Path, data: dict | None = None) -> Bundle:
             example_dialogue=(c.get("definition") or "").replace("END_OF_DIALOG", "<START>").strip(),
             creator=c.get("creator", ""),
             avatar_url=c.get("avatar_url"),
+            avatar_png=png_or_none(c.get("avatar_png")),
+            background=decode_data_url(c.get("background")),
             source="lcai",
             extra={"id": c.get("id"), "is_own": c.get("is_own", False)},
         ))
@@ -53,6 +56,13 @@ def import_lcai(path: Path, data: dict | None = None) -> Bundle:
         b.chats.append(Chat(character_name=ch.get("character_name", "Unknown"),
                             user_name=ch.get("user_name") or "User", messages=msgs,
                             title=ch.get("title", ""), created=ch.get("created"), source="lcai",
-                            memories=[m for m in ch.get("memories", []) if m.get("value")]))
-    b.personas = [p for p in data.get("personas", []) if p.get("name")]
+                            memories=[m for m in ch.get("memories", []) if m.get("value")],
+                            background=decode_data_url(ch.get("background"))))
+    for p in data.get("personas", []):
+        if p.get("name"):
+            b.personas.append({"name": p["name"], "description": p.get("description", ""),
+                               "avatar_png": png_or_none(p.get("avatar_png")),
+                               "background": decode_data_url(p.get("background"))})
+    for err in data.get("asset_errors", []) or []:
+        b.warnings.append(f"image not downloaded by the extension: {err}")
     return b

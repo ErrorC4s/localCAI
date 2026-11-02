@@ -21,6 +21,9 @@ Everything else (official exports, CAI Tools, Wilds) is converted on a best-effo
       "definition": "{{user}}: Hi\n{{char}}: …",   // "" when not available to this user
       "definition_withheld": false,   // true = the character's creator kept it private
       "avatar_url": "https://…",
+      "avatar_png": "data:image/png;base64,…",      // optional: embedded avatar, always PNG
+      "background_url": "https://…",
+      "background": "data:image/webp;base64,…",     // optional: embedded background, original format
       "creator": "alex",
       "is_own": true                  // created by the exporting user
     }
@@ -34,6 +37,7 @@ Everything else (official exports, CAI Tools, Wilds) is converted on a best-effo
       "title": "Moon night",
       "created": "2026-10-01T10:00:00Z",
       "user_name": "Alex",
+      "background_url": null, "background": null,   // per-chat background, if the chat has one
       "memories": [                   // C.ai's own chat memory ("conversation facts")
         { "about": "Luna", "category": "likes", "value": "Earl Grey tea" }
       ],
@@ -51,8 +55,12 @@ Everything else (official exports, CAI Tools, Wilds) is converted on a best-effo
   ],
 
   "personas": [                       // the user's own personas, if captured
-    { "name": "Alex", "description": "…" }
-  ]
+    { "name": "Alex", "description": "…",
+      "avatar_url": "https://…", "avatar_png": "data:image/png;base64,…",
+      "background_url": null, "background": null }
+  ],
+
+  "asset_errors": ["Rex avatar: HTTP 404"]     // images the extension couldn't download
 }
 ```
 
@@ -62,4 +70,6 @@ Everything else (official exports, CAI Tools, Wilds) is converted on a best-effo
 - `pinned: true` turns and chat `memories` become constant lorebook entries on import.
 - Private definitions of **other creators'** characters are never exported (`definition: ""`,
   `definition_withheld: true`).
+- Embedded images are `data:` URLs. Readers must check the MIME type **and** the file signature,
+  and accept only PNG / JPEG / WebP / GIF (never SVG, which can carry scripts).
 - Unknown extra fields must be ignored by readers. Bump `version` only for breaking changes.

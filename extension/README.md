@@ -1,6 +1,6 @@
 # localCAI Extractor (browser extension)
 
-Saves **your own** Character.AI chats, pins, memories, personas and characters as a `.lcai.json` file that the localCAI app can import.
+Saves **your own** Character.AI chats, pins, memories, personas, avatars, backgrounds and characters as a `.lcai.json` file that the localCAI app can import.
 
 ## Install (developer mode)
 
@@ -17,7 +17,7 @@ Saves **your own** Character.AI chats, pins, memories, personas and characters a
 1. Open character.ai and go to the chat you want to keep.
 2. **Refresh the page** (F5). The extension must be running before the page loads.
 3. **Scroll up to the oldest message.** The extension can only see what the page actually loads.
-4. Click the localCAI icon → **Export .lcai.json**.
+4. Click the localCAI icon → **Export .lcai.json**. With *Include avatars & backgrounds* ticked (default), the pictures are downloaded from C.ai's image server and embedded in the file.
 5. Drag the file into the localCAI app (or run `localcai import <file>`).
 
 ## How it works
@@ -36,6 +36,7 @@ Saves **your own** Character.AI chats, pins, memories, personas and characters a
 
 - `src/inject.js`: hooks fetch / XHR / WebSocket in the page and applies the endpoint allowlist
 - `src/bridge.js`: collects captures and answers the popup
+- `src/assets.js`: downloads avatars (converted to PNG) and backgrounds and embeds them as `data:` URLs
 - `src/normalize.js`: **every C.ai-specific format rule lives here**; when C.ai changes something, this is the one file to edit
 - Test: `NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs` (Playwright + a mocked character.ai; never touches the real site)
 

@@ -37,6 +37,10 @@
     ("greeting" in o || "definition" in o || "has_definition" in o || "avatar_file_name" in o);
   const isChatMeta = (o) => typeof o.chat_id === "string" && (o.character_id || o.character_name) && !isTurn(o);
 
+  // C.ai serves avatars from its CDN by file name (the exporter also tries a larger size).
+  const AVATAR_CDN = "https://characterai.io/i/400/static/avatars/";
+  const avatarUrl = (o) => str(first(o, "avatar_url")) || (o.avatar_file_name ? AVATAR_CDN + str(o.avatar_file_name) : null);
+
   function currentUsername(captures) {
     for (const c of captures) for (const o of walk(c.data)) {
       const u = o.user && typeof o.user === "object" ? o.user : null;
@@ -92,7 +96,6 @@
       // Other creators' definitions are only kept when the platform marks them public.
       const defPublic = /public/i.test(str(first(c, "definition_visibility", "definitionVisibility")));
       const keepDef = isOwn || defPublic;
-      const avatarFile = str(c.avatar_file_name);
       const extraGreetings = Array.isArray(c.additional_greetings) ? c.additional_greetings.map(str).filter(Boolean) : [];
       return {
         id, name: c.name,
@@ -102,8 +105,8 @@
         alternate_greetings: extraGreetings,
         definition: keepDef ? defn : "",
         definition_withheld: (!keepDef && defn.length > 0) || (!defn && c.has_definition === true),
-        avatar_url: str(first(c, "avatar_url")) ||
-          (avatarFile ? "https://characterai.io/i/400/static/avatars/" + avatarFile : null),
+        avatar_url: avatarUrl(c),
+        background_url: str(first(c, "background_image_url", "background_url")) || null,
         creator, is_own: isOwn,
       };
     });
@@ -141,12 +144,15 @@
         created: str(meta.create_time) || outTurns[0]?.created || null,
         user_name: user?.author.name || me || "User",
         memories: facts.get(chatId) || [],
+        background_url: str(first(meta, "background_image_url", "background_url")) || null,
         turns: outTurns,
       };
     });
     const outPersonas = [...personas.values()].map((p) => ({
       name: str(first(p, "participant__name", "title", "name")),
       description: str(first(p, "definition", "description")),
+      avatar_url: avatarUrl(p),
+      background_url: str(first(p, "background_image_url", "background_url")) || null,
     }));
 
     return {

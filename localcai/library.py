@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .exporters import write_card, write_chat
 from .exporters.card_v2 import _safe
+from .images import ext_for
 from .importers import import_path
 from .memory import merge_books, pins_to_lorebook
 from .schema import Character
@@ -66,10 +67,15 @@ def import_into(src: str | Path, out: str | Path, swap_roles: bool = False,
     for c in bundle.characters:
         book = merge_books(c.extra.get("character_book"), pins_to_lorebook(bundle.chats, c.name))
         jp, pp = write_card(c, out / "characters", book)
+        if c.background:
+            _write_image(out / "characters", f"{_safe(c.name)}.background", c.background)
         rep.characters.append({"name": c.name, "memories": len(book["entries"]) if book else 0,
+                               "avatar": c.avatar_png is not None, "background": c.background is not None,
                                "card_json": str(jp), "card_png": str(pp)})
     for chat in bundle.chats:
         p = write_chat(chat, out / "chats")
+        if chat.background:
+            _write_image(out / "chats", f"{p.stem}.background", chat.background)
         rep.chats.append({"character": chat.character_name, "messages": len(chat.messages),
                           "pinned": len(chat.pins), "memories": len(chat.memories), "path": str(p)})
 
@@ -77,11 +83,38 @@ def import_into(src: str | Path, out: str | Path, swap_roles: bool = False,
         pfile = out / "personas" / "personas.json"
         existing = json.loads(pfile.read_text("utf-8")) if pfile.exists() else []
         merged = {p["name"]: p for p in existing}
-        merged.update({p["name"]: p for p in bundle.personas})  # newest wins
+        for per in bundle.personas:  # newest wins; images become files next to personas.json
+            entry = {"name": per["name"], "description": per.get("description", "")}
+            old = merged.get(per["name"], {})
+            if per.get("avatar_png"):
+                entry["avatar"] = _write_image(out / "personas", f"{_safe(per['name'])}.avatar",
+                                               ("image/png", per["avatar_png"]))
+            elif old.get("avatar"):
+                entry["avatar"] = old["avatar"]
+            if per.get("background"):
+                entry["background"] = _write_image(out / "personas", f"{_safe(per['name'])}.background",
+                                                   per["background"])
+            elif old.get("background"):
+                entry["background"] = old["background"]
+            merged[per["name"]] = entry
         pfile.parent.mkdir(parents=True, exist_ok=True)
         pfile.write_text(json.dumps(list(merged.values()), ensure_ascii=False, indent=2), "utf-8")
         rep.personas = [p["name"] for p in bundle.personas]
     return rep
+
+
+def _write_image(folder: Path, stem: str, image: tuple[str, bytes]) -> str:
+    folder.mkdir(parents=True, exist_ok=True)
+    for old in folder.glob(f"{stem}.*"):  # replace an older image in another format
+        old.unlink()
+    path = folder / f"{stem}.{ext_for(image[0])}"
+    path.write_bytes(image[1])
+    return path.name
+
+
+def _find(folder: Path, stem: str) -> str | None:
+    hits = [p for p in folder.glob(f"{stem}.*") if p.suffix.lower() in (".png", ".jpg", ".webp", ".gif")]
+    return hits[0].name if hits else None
 
 
 def list_library(lib: Path) -> dict:
@@ -99,11 +132,15 @@ def list_library(lib: Path) -> dict:
                 n = sum(1 for l in cp.read_text("utf-8").splitlines() if l.strip()) - 1
             except OSError:
                 continue
-            chats.append({"file": cp.name, "messages": max(n, 0), "modified": cp.stat().st_mtime})
+            chats.append({"file": cp.name, "messages": max(n, 0), "modified": cp.stat().st_mtime,
+                          "background": _find(lib / "chats", f"{cp.stem}.background")})
         book = d.get("character_book") or {}
-        chars.append({"name": name, "file": jp.name.removesuffix(".card.json"),
+        stem = jp.name.removesuffix(".card.json")
+        local = (d.get("extensions", {}) or {}).get("localcai", {}) or {}
+        chars.append({"name": name, "file": stem,
+                      "has_avatar": bool(local.get("has_avatar")),
+                      "background": _find(lib / "characters", f"{stem}.background"),
                       "tagline": d.get("creator_notes", ""), "creator": d.get("creator", ""),
-                      "avatar_url": (d.get("extensions", {}).get("localcai", {}) or {}).get("avatar_url"),
                       "memories": len(book.get("entries", [])), "chats": chats})
     pfile = lib / "personas" / "personas.json"
     personas = json.loads(pfile.read_text("utf-8")) if pfile.exists() else []

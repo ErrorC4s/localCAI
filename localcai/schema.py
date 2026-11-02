@@ -33,6 +33,8 @@ class Character:
     example_dialogue: str = "" # C.ai "definition"
     creator: str = ""
     avatar_url: str | None = None
+    avatar_png: bytes | None = None                 # real avatar image (PNG)
+    background: tuple[str, bytes] | None = None      # (mime, data)
     tags: list[str] = field(default_factory=list)
     source: str = "unknown"
     extra: dict[str, Any] = field(default_factory=dict)
@@ -48,6 +50,7 @@ class Chat:
     source: str = "unknown"
     # C.ai "conversation facts" (its built-in chat memory): [{"about","category","value"}]
     memories: list[dict] = field(default_factory=list)
+    background: tuple[str, bytes] | None = None      # (mime, data)
 
     @property
     def pins(self) -> list[Message]:
@@ -59,7 +62,8 @@ class Bundle:
     """Everything one import produced."""
     characters: list[Character] = field(default_factory=list)
     chats: list[Chat] = field(default_factory=list)
-    personas: list[dict] = field(default_factory=list)   # [{"name","description"}]
+    # [{"name","description", "avatar_png"?: bytes, "background"?: (mime, bytes)}]
+    personas: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
     def merge(self, other: "Bundle") -> "Bundle":

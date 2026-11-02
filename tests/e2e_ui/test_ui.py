@@ -57,6 +57,8 @@ def main(shot=None):
         assert http("GET", "/api/state", {"Host": f"evil.example:{UI_PORT}"}) == 403, "DNS-rebinding guard"
         assert http("POST", "/api/settings", {"Content-Type": "application/json"}, b"{}") == 403, "CSRF guard"
         assert http("GET", "/api/card/..%2F..%2Fconfig.png") == 404, "path traversal"
+        assert http("GET", "/api/image/personas/..%2F..%2Fconfig.json") == 404, "path traversal (images)"
+        assert http("GET", "/api/image/characters/x.svg") == 404, "only raster images are served"
 
         with sync_playwright() as p:
             page = p.chromium.launch().new_page(viewport={"width": 1280, "height": 820})
@@ -81,6 +83,10 @@ def main(shot=None):
             page.click(".char-item:has-text('Luna')")
             expect(page.locator("#head-name")).to_have_text("Luna")
             expect(page.locator(".msg .pin")).to_have_count(1)
+            # real avatar (8x6 test image) in the sidebar, header and messages; background applied
+            assert page.eval_on_selector("#head-avatar img", "i => i.complete && i.naturalWidth") == 8
+            assert page.locator(".char-item:has-text('Rex') .avatar img").count() == 0  # no picture → initial
+            assert "Luna.background.png" in page.eval_on_selector("#messages", "e => e.style.backgroundImage")
             n_before = page.locator(".msg").count()
 
             # first message triggers the age gate
@@ -102,6 +108,8 @@ def main(shot=None):
             expect(page.locator(".msg")).to_have_count(n_before + 4)
             sent = json.load(open(last, encoding="utf-8"))
             assert "[About Alex]" in sent["messages"][0]["content"], "persona in prompt"
+            user_face = page.locator(".msg.user .who img").last
+            expect(user_face).to_have_attribute("src", "/api/image/personas/Alex.avatar.png")
 
             # regenerate keeps the count
             page.click("#regen")

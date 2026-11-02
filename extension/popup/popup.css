@@ -13,3 +13,4 @@ button:disabled { opacity: .45; cursor: default; }
 .primary { background: #6d5dfc; font-weight: 600; }
 .ghost { background: transparent; color: #9a9bb0; }
 .foot { margin: 12px 0 0; color: #6f7088; font-size: 11px; text-align: center; }
+.check { display: flex; gap: 6px; align-items: center; font-size: 12px; color: #b6b7c8; margin: 4px 0; }

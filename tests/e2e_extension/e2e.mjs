@@ -3,6 +3,7 @@
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
+import { deflateSync, crc32 } from "node:zlib";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,12 +19,26 @@ const extId = [...createHash("sha256").update(extDir).digest("hex").slice(0, 32)
   .map((c) => String.fromCharCode(97 + parseInt(c, 16))).join("");
 
 // Shapes mirror real neo.character.ai responses (captured 2026-11); content is synthetic.
+// tiny solid-colour PNG for the mocked image CDN
+function png(w, h, rgb) {
+  const chunk = (type, body) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(body.length);
+    const tb = Buffer.concat([Buffer.from(type), body]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(tb) >>> 0);
+    return Buffer.concat([len, tb, crc]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array(w).fill(rgb).flat())]);
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(Buffer.concat(Array(h).fill(row)))), chunk("IEND", Buffer.alloc(0))]);
+}
+
 const ME = { user: { user: { username: "alex", id: 42, account: { name: "Alex", avatar_file_name: "a.webp" },
   subscription: { type: "PLUS" } }, email: "x@example.com", date_of_birth: "2000-01-01T00:00:00Z", name: "Alex" } };
 const CHAR = { character: { external_id: "abc123", name: "Luna", title: "A sleepy moon witch", visibility: "PRIVATE",
   description: "Lives on the moon.", greeting: "*yawns* Oh, {{user}}...", additional_greetings: null,
   definition: "{{user}}: Hi\n{{char}}: Hello~", has_definition: true, user__username: "alex",
-  avatar_file_name: "u/luna.webp" }, status: "OK" };
+  avatar_file_name: "u/luna.webp", background_image_url: "https://characterai.io/bg/moon.png" }, status: "OK" };
 const OTHER = { character: { external_id: "zzz", name: "Rex", title: "Someone else's bot", visibility: "PUBLIC",
   greeting: "Rawr.", has_definition: true, user__username: "someone_else", avatar_file_name: "u/rex.webp" }, status: "OK" };
 const PERSONAS = { personas: [{ id: 7, external_id: "p1", title: "Alex", greeting: "Hello!", description: "My persona",
@@ -82,6 +97,13 @@ await ctx.route("https://neo.character.ai/chat/chat-1/conversation-facts/", (r) 
 await ctx.route("https://subscription.api.character.ai/**", (r) => r.fulfill(json({ balance: 999, secret_marker: "BILLING" })));
 await ctx.route("https://neo.character.ai/turns/count", (r) => r.fulfill(json({ turn_counts: [{ chat_id: "OTHERCHAT" }] })));
 await ctx.route("https://neo.character.ai/turns/**", (r) => r.fulfill(json(HISTORY)));
+// image CDN: 800px Luna avatar exists, the persona only at 400px, Rex's avatar is broken
+const img = (buf, type = "image/png") => ({ status: 200, contentType: type, body: buf });
+await ctx.route("https://characterai.io/i/800/static/avatars/u/luna.webp", (r) => r.fulfill(img(png(8, 6, [200, 80, 80]), "image/webp")));
+await ctx.route("https://characterai.io/i/800/static/avatars/p.webp", (r) => r.fulfill({ status: 404, body: "" }));
+await ctx.route("https://characterai.io/i/400/static/avatars/p.webp", (r) => r.fulfill(img(png(4, 4, [80, 80, 200]))));
+await ctx.route("https://characterai.io/i/*/static/avatars/u/rex.webp", (r) => r.fulfill({ status: 404, body: "" }));
+await ctx.route("https://characterai.io/bg/moon.png", (r) => r.fulfill(img(png(16, 9, [20, 20, 60]))));
 await ctx.routeWebSocket("wss://neo.character.ai/ws/", (ws) => { ws.send(JSON.stringify(WS_NEW)); });
 
 const page = await ctx.newPage();
@@ -96,6 +118,7 @@ const result = await popup.evaluate(async () => {
   const stats = await chrome.tabs.sendMessage(tab.id, { type: "stats" });
   const doc = (await chrome.tabs.sendMessage(tab.id, { type: "export" })).doc;
   const raw = (await chrome.tabs.sendMessage(tab.id, { type: "raw" })).doc;
+  await LocalCAIAssets.embed(doc);
   return { stats, doc, raw };
 });
 await ctx.close();
@@ -111,6 +134,12 @@ if (rex.definition !== "" || !rex.definition_withheld) fail("other creator's def
 if (doc.characters.some((c) => c.name === "Alex")) fail("account/persona misread as a character");
 if (doc.personas.length !== 1 || !doc.personas[0].description.includes("baker")) fail("persona");
 if (doc.chats[0].memories.length !== 2) fail("memories " + JSON.stringify(doc.chats[0].memories));
+if (!luna.avatar_png?.startsWith("data:image/png;base64,")) fail("Luna avatar not embedded as PNG");
+const dims = (d) => { const b = Buffer.from(d.split(",")[1], "base64"); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
+if (dims(luna.avatar_png).join("x") !== "8x6") fail("avatar should come from the 800px URL: " + dims(luna.avatar_png));
+if (!luna.background?.startsWith("data:image/png")) fail("Luna background: " + JSON.stringify({ url: luna.background_url, errs: doc.asset_errors }));
+if (!doc.personas[0].avatar_png || dims(doc.personas[0].avatar_png).join("x") !== "4x4") fail("persona avatar fallback to 400px");
+if (rex.avatar_png || !doc.asset_errors.some((e) => e.startsWith("Rex avatar"))) fail("broken image should be reported, not fatal");
 const t = doc.chats[0].turns;
 if (t.map((x) => x.id).join() !== "t1,t2,t3,t4") fail("turn order " + t.map((x) => x.id));
 if (t[2].candidates[t[2].primary] !== "Earl Grey, obviously.") fail("primary candidate");

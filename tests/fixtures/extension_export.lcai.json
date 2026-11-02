@@ -1,10 +1,10 @@
 {
   "format": "localcai",
   "version": 1,
-  "exported_at": "2026-11-02T02:22:43.211Z",
+  "exported_at": "2026-11-02T02:29:41.735Z",
   "exporter": {
     "name": "localCAI extension",
-    "version": "0.2.1",
+    "version": "0.3.0",
     "source": "character.ai"
   },
   "characters": [
@@ -18,8 +18,11 @@
       "definition": "{{user}}: Hi\n{{char}}: Hello~",
       "definition_withheld": false,
       "avatar_url": "https://characterai.io/i/400/static/avatars/u/luna.webp",
+      "background_url": "https://characterai.io/bg/moon.png",
       "creator": "alex",
-      "is_own": true
+      "is_own": true,
+      "avatar_png": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAYAAAD+Bd/7AAAAIUlEQVR4AczKMQ0AAAwCwQaFyK4rcAArn/x2eFJpXGkBGAAA//899xDKAAAABklEQVQDAKSTE0XsZxcYAAAAAElFTkSuQmCC",
+      "background": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAIAAAC0SDtlAAAAE0lEQVR4nGMQEbEhCTGMahgUGgBhKThB+oMENQAAAABJRU5ErkJggg=="
     },
     {
       "id": "zzz",
@@ -31,6 +34,7 @@
       "definition": "",
       "definition_withheld": true,
       "avatar_url": "https://characterai.io/i/400/static/avatars/u/rex.webp",
+      "background_url": null,
       "creator": "someone_else",
       "is_own": false
     }
@@ -55,6 +59,7 @@
           "value": "Lisbon"
         }
       ],
+      "background_url": null,
       "turns": [
         {
           "id": "t1",
@@ -115,7 +120,13 @@
   "personas": [
     {
       "name": "Alex",
-      "description": "A tired night-shift baker."
+      "description": "A tired night-shift baker.",
+      "avatar_url": "https://characterai.io/i/400/static/avatars/p.webp",
+      "background_url": null,
+      "avatar_png": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGMICDgBRwzEcQBB0haBBn7IOAAAAABJRU5ErkJggg=="
     }
+  ],
+  "asset_errors": [
+    "Rex avatar: HTTP 404"
   ]
 }

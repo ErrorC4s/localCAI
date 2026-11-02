@@ -2,7 +2,7 @@
 
 **Bring your characters home.**
 
-localCAI moves your Character.AI chats, pinned messages, memories, personas and the characters you created into open, portable files, then lets you keep chatting with them on **a local model you choose**. No cloud, no filters you didn't pick, and no platform that can take them away.
+localCAI moves your Character.AI chats, pinned messages, memories, personas, avatars, backgrounds and the characters you created into open, portable files, then lets you keep chatting with them on **a local model you choose**. No cloud, no filters you didn't pick, and no platform that can take them away.
 
 > ⚠️ localCAI is an independent community project. It is **not affiliated with, endorsed by, or sponsored by Character Technologies, Inc.** ("Character.AI").
 
@@ -54,6 +54,8 @@ Your library lives in `~/.localcai/library` (override with the `LOCALCAI_HOME` e
 | 📌 Pinned messages | Always-on lorebook memories |
 | Chat memory ("conversation facts") | Always-on lorebook memories |
 | Your personas | Selectable "You are" profiles |
+| Character & persona avatars | Real pictures (the character's avatar becomes the card PNG) |
+| Character, persona & chat backgrounds | Chat backgrounds in the app |
 
 ## Principles
 
@@ -84,6 +86,7 @@ Backends: `ollama`, `lmstudio`, `llamacpp`, `koboldcpp`, or a full URL (`--backe
 ## Known limitations
 
 - The official C.ai data export hasn't been tested against a real file yet. The importer recognises it by shape. If yours parses badly, please open an issue with a **redacted** sample of its structure.
+- Character and persona backgrounds are supported. Per-chat backgrounds are recognised if C.ai sends them with the chat, but this hasn't been confirmed on a real chat yet.
 - C.ai lets you choose a different persona per chat, but that link isn't in the captured data yet, so you pick the persona in the app.
 - Live messages over WebSocket haven't been verified against the real site yet. History export is confirmed.
 - CAI Tools Tavern-format chats can have user/character swapped. localCAI warns when it notices; fix with `--swap-roles`.

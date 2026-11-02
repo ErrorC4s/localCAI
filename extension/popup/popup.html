@@ -18,12 +18,15 @@
       <div><dt>Pinned</dt><dd id="s-pinned">0</dd></div>
     </dl>
     <p class="hint">Only chats you open in this tab are captured. Scroll up to load older messages.</p>
+    <label class="check"><input type="checkbox" id="with-images" checked> Include avatars &amp; backgrounds</label>
     <button id="export" class="primary">Export .lcai.json</button>
+    <p id="progress" class="hint" hidden></p>
     <button id="raw">Debug: raw data (secrets redacted)</button>
     <button id="clear" class="ghost">Clear</button>
   </div>
 
   <p class="foot">Not affiliated with Character.AI · Your data only</p>
+  <script src="../src/assets.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -26,10 +26,22 @@ function colorFor(name) {
   let h = 0; for (const ch of name) h = (h * 31 + ch.codePointAt(0)) % 360;
   return `hsl(${h} 45% 42%)`;
 }
-function avatar(el, name) {
-  el.textContent = [...(name.trim() || "?")][0].toUpperCase();
+// Real picture when we have one, coloured initial otherwise.
+function avatar(el, name, src) {
+  el.textContent = "";
   el.style.background = colorFor(name);
+  if (src) {
+    const img = new Image();
+    img.alt = ""; img.src = src;
+    img.onerror = () => { img.remove(); el.textContent = [...(name.trim() || "?")][0].toUpperCase(); };
+    el.appendChild(img);
+  } else {
+    el.textContent = [...(name.trim() || "?")][0].toUpperCase();
+  }
 }
+const enc = encodeURIComponent;
+const charAvatar = (c) => (c.has_avatar ? `/api/avatar/${enc(c.file)}.png` : null);
+function personaInfo() { return S.state.library.personas.find((p) => p.name === $("persona").value); }
 // Safe mini-markdown: escape first, then *italic* / **bold**. Never injects raw HTML.
 function render(text) {
   const esc = text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -86,7 +98,7 @@ function renderCharacters() {
   for (const c of S.state.library.characters) {
     const btn = document.createElement("button");
     btn.className = "char-item" + (S.character === c.file ? " active" : "");
-    const av = document.createElement("div"); av.className = "avatar"; avatar(av, c.name);
+    const av = document.createElement("div"); av.className = "avatar"; avatar(av, c.name, charAvatar(c));
     const info = document.createElement("div"); info.className = "grow";
     const nm = document.createElement("div"); nm.textContent = c.name;
     const meta = document.createElement("div"); meta.className = "meta";
@@ -108,7 +120,7 @@ async function openCharacter(file, chatFile) {
   $("welcome").hidden = true;
   $("chat-view").hidden = false;
   $("head-name").textContent = c.name;
-  avatar($("head-avatar"), c.name);
+  avatar($("head-avatar"), c.name, charAvatar(c));
   $("head-sub").textContent = [c.tagline, c.creator && `by ${c.creator}`, `${c.memories} memories`].filter(Boolean).join(" · ");
   $("download-card").href = `/api/card/${encodeURIComponent(file)}.png`;
   const pick = $("chat-picker");
@@ -119,13 +131,23 @@ async function openCharacter(file, chatFile) {
   }
   pick.hidden = !c.chats.length;
   if (chatFile || c.chats.length) await openChat(chatFile || c.chats[0].file);
-  else { S.chat = null; S.rows = []; renderMessages(); }
+  else { S.chat = null; S.rows = []; applyBackground(); renderMessages(); }
 }
 $("chat-picker").onchange = () => openChat($("chat-picker").value);
+
+function applyBackground() {
+  const c = charInfo(S.character);
+  const chat = c && c.chats.find((x) => x.file === S.chat);
+  const url = chat && chat.background ? `/api/image/chats/${enc(chat.background)}`
+    : c && c.background ? `/api/image/characters/${enc(c.background)}` : null;
+  $("messages").style.backgroundImage = url
+    ? `linear-gradient(rgba(21,22,29,.72), rgba(21,22,29,.86)), url("${url}")` : "";
+}
 
 async function openChat(chatFile) {
   S.chat = chatFile;
   $("chat-picker").value = chatFile;
+  applyBackground();
   const r = await api(`/api/chat?character=${encodeURIComponent(S.character)}&chat=${encodeURIComponent(chatFile)}`);
   S.rows = r.rows; S.card = r.card;
   renderMessages();
@@ -143,7 +165,16 @@ function msgEl(row) {
   const el = document.createElement("div");
   el.className = "msg" + (row.is_user ? " user" : "");
   const who = document.createElement("div"); who.className = "who";
-  who.textContent = row.name || "";
+  const face = document.createElement("span"); face.className = "avatar tiny";
+  if (row.is_user) {
+    const p = personaInfo();
+    avatar(face, row.name || "?", p && p.avatar ? `/api/image/personas/${enc(p.avatar)}` : null);
+  } else {
+    const c = charInfo(S.character);
+    avatar(face, row.name || "?", c ? charAvatar(c) : null);
+  }
+  const nm = document.createElement("span"); nm.textContent = row.name || "";
+  who.append(face, nm);
   if (row.extra && row.extra.pinned) { const p = document.createElement("span"); p.className = "pin"; p.textContent = "📌 pinned"; who.appendChild(p); }
   const body = document.createElement("div"); body.className = "body"; body.innerHTML = render(row.mes || "");
   el.append(who, body);

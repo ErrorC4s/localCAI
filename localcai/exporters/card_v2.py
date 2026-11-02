@@ -27,7 +27,8 @@ def to_card_v2(c: Character, character_book: dict | None = None) -> dict:
         "tags": c.tags,
         "creator": c.creator,
         "character_version": "",
-        "extensions": {"localcai": {"source": c.source, "avatar_url": c.avatar_url}},
+        "extensions": {"localcai": {"source": c.source, "avatar_url": c.avatar_url,
+                                    "has_avatar": c.avatar_png is not None}},
     }
     if book:
         data["character_book"] = book
@@ -72,7 +73,7 @@ def write_card(c: Character, out_dir: Path, character_book: dict | None = None,
     jp = out_dir / f"{stem}.card.json"
     jp.write_text(json.dumps(card, ensure_ascii=False, indent=2), "utf-8")
     pp = out_dir / f"{stem}.card.png"
-    pp.write_bytes(embed_card_in_png(avatar_png or placeholder_png(), card))
+    pp.write_bytes(embed_card_in_png(avatar_png or c.avatar_png or placeholder_png(), card))
     return jp, pp
 
 
