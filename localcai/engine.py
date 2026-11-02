@@ -16,6 +16,7 @@ import json
 import os
 import platform
 import re
+from struct import error as struct_error
 import shutil
 import socket
 import stat
@@ -40,23 +41,23 @@ UA = {"User-Agent": "localCAI (+https://github.com/ErrorC4s/localCAI)"}
 # One-click starter model. The exact file is looked up via the Hugging Face API at download time.
 STARTER_MODELS = {
     "qwen3-4b-instruct": {
-        "label": "Qwen3 4B Instruct 2507 · general assistant, small and fast · ~2.5 GB, 4+ GB VRAM",
+        "label": "Qwen3 4B Instruct 2507 · general assistant, small and fast", "size_gb": 2.5, "kv_mb": 0.144,
         "repo": "lmstudio-community/Qwen3-4B-Instruct-2507-GGUF",
         "pattern": r"Q4_K_M\.gguf$",
     },
     # Community roleplay fine-tunes: write more like C.ai and refuse less (adult scenes included).
     "stheno-8b": {
-        "label": "Stheno 8B v3.2 (Llama 3) · roleplay-tuned, fewer refusals · ~4.9 GB, 6–8 GB VRAM",
+        "label": "Stheno 8B v3.2 (Llama 3) · roleplay-tuned, fewer refusals", "size_gb": 4.9, "kv_mb": 0.128,
         "repo": "QuantFactory/L3-8B-Stheno-v3.2-GGUF",
         "pattern": r"Q4_K_M\.gguf$",
     },
     "mag-mell-12b": {
-        "label": "Mag Mell 12B R1 (Mistral Nemo) · roleplay & storytelling, fewer refusals · ~7.5 GB, 8+ GB VRAM",
+        "label": "Mag Mell 12B R1 (Mistral Nemo) · roleplay & storytelling, fewer refusals", "size_gb": 7.5, "kv_mb": 0.16,
         "repo": "inflatebot/MN-12B-Mag-Mell-R1-GGUF",
         "pattern": r"Q4_K_M\.gguf$",
     },
     "rocinante-12b": {
-        "label": "Rocinante 12B v1.1 (Mistral Nemo) · roleplay & adventure, fewer refusals · ~7.5 GB, 8+ GB VRAM",
+        "label": "Rocinante 12B v1.1 (Mistral Nemo) · roleplay & adventure, fewer refusals", "size_gb": 7.5, "kv_mb": 0.16,
         "repo": "TheDrummer/Rocinante-12B-v1.1-GGUF",
         "pattern": r"Q4_K_M\.gguf$",
     },
@@ -250,6 +251,73 @@ def parse_devices(text: str) -> list[dict]:
     return [{"id": m.group(1), "name": m.group(2).strip(), "mib": int(m.group(3))} for m in _DEV_LINE.finditer(text)]
 
 
+def gguf_metadata(path: Path, want: tuple[str, ...] = ("tokenizer.chat_template", "general.architecture",
+                                                       "general.name")) -> dict:
+    """Read a few metadata values from a .gguf header without loading the model."""
+    import struct
+    sizes = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8}
+    out: dict = {}
+    with open(path, "rb") as f:
+        if f.read(4) != b"GGUF":
+            raise ValueError("not a GGUF file")
+        version, = struct.unpack("<I", f.read(4))
+        if version < 2:
+            raise ValueError("GGUF v1 not supported")
+        _tensors, kv_count = struct.unpack("<QQ", f.read(16))
+
+        def read_str() -> bytes:
+            n, = struct.unpack("<Q", f.read(8))
+            return f.read(n)
+
+        def skip(t: int) -> None:
+            if t == 8:
+                n, = struct.unpack("<Q", f.read(8)); f.seek(n, 1)
+            elif t == 9:
+                it, cnt = struct.unpack("<IQ", f.read(12))
+                if it in sizes:
+                    f.seek(sizes[it] * cnt, 1)
+                else:
+                    for _ in range(cnt):
+                        skip(it)
+            else:
+                f.seek(sizes[t], 1)
+
+        for _ in range(kv_count):
+            key = read_str().decode("utf-8", "replace")
+            t, = struct.unpack("<I", f.read(4))
+            if key in want and t == 8:
+                out[key] = read_str().decode("utf-8", "replace")
+                if len(out) == len(want):
+                    break
+            else:
+                skip(t)
+    return out
+
+
+def estimate_fit(size_gb: float, ctx: int, vram_mib: int | None, kv_mb: float | None = None) -> dict:
+    """Rough memory estimate: model weights + KV cache for the context + compute buffers.
+
+    kv_mb is the KV cache per token (MB); unknown models use a typical value for 4–14B models.
+    Returns {"kind": "gpu"|"partial"|"cpu", "need_gb", "gpu_share", "text"}.
+    """
+    kv_gb = ctx * (kv_mb or 0.15) / 1024
+    need = size_gb + kv_gb + 0.5
+    if not vram_mib:
+        return {"kind": "cpu", "need_gb": round(need, 1), "gpu_share": 0.0,
+                "text": f"needs ~{need:.1f} GB · no graphics card found, runs on the CPU (slow)"}
+    vram = vram_mib / 1024 * 0.92  # leave room for Windows and other apps
+    if need <= vram:
+        return {"kind": "gpu", "need_gb": round(need, 1), "gpu_share": 1.0,
+                "text": f"needs ~{need:.1f} GB of {vram_mib / 1024:.0f} GB · fits on your GPU (fast)"}
+    share = max(0.0, min(1.0, (vram - kv_gb - 0.5) / size_gb))
+    if share >= 0.5:
+        return {"kind": "partial", "need_gb": round(need, 1), "gpu_share": round(share, 2),
+                "text": f"needs ~{need:.1f} GB of {vram_mib / 1024:.0f} GB · about {share:.0%} on the GPU, "
+                        "the rest on the CPU (works, but slower)"}
+    return {"kind": "cpu", "need_gb": round(need, 1), "gpu_share": round(share, 2),
+            "text": f"needs ~{need:.1f} GB of {vram_mib / 1024:.0f} GB · mostly on the CPU (slow)"}
+
+
 def pick_device(devices: list[dict]) -> dict | None:
     """Prefer a discrete GPU: NVIDIA > AMD > other; never an integrated GPU when a discrete one exists."""
     if not devices:
@@ -310,6 +378,18 @@ class Engine:
                                     and "-cuda-" not in (inst.get("asset") or ""),
                     "models_dir": str(models_dir()), "models": list_slot_models(),
                     "starters": {k: v["label"] for k, v in STARTER_MODELS.items()}}
+
+    def fits(self, ctx: int, device: str = "auto") -> dict:
+        """How each local and recommended model would run on this computer at this context size."""
+        inst = self.installed()
+        devs = self.devices() if inst else []
+        dev = next((d for d in devs if d["id"] == device), None) if device not in ("auto", "cpu") else None
+        dev = None if device == "cpu" else (dev or pick_device(devs))
+        mib = dev["mib"] if dev else None
+        local = {m["name"]: estimate_fit(m["size_gb"] * 1e9 / 2**30, ctx, mib) for m in list_slot_models()}
+        starters = {k: estimate_fit(v["size_gb"], ctx, mib, v.get("kv_mb")) for k, v in STARTER_MODELS.items()}
+        return {"gpu": dev and dev["name"], "vram_mib": mib, "ctx": ctx, "local": local, "starters": starters,
+                "known_gpu": bool(inst)}
 
     def devices(self, server: Path | None = None) -> list[dict]:
         """GPUs llama.cpp can see (cached per engine build)."""
@@ -466,6 +546,15 @@ class Engine:
             cmd = [str(server), "-m", str(path), "--host", "127.0.0.1", "--port", str(self.port),
                    "-c", str(int(ctx)), "-ngl", str(int(gpu_layers)), "-np", "1", "--jinja"]
             fit_note = ""
+            try:
+                has_template = bool(gguf_metadata(path).get("tokenizer.chat_template"))
+            except (OSError, ValueError, struct_error):
+                has_template = True  # can't tell: leave it to llama.cpp
+            if not has_template:
+                # No chat template inside the file (e.g. Rocinante): without one the model gets a garbled
+                # prompt and writes nonsense. ChatML is what most roleplay fine-tunes are trained on.
+                cmd += ["--chat-template", "chatml"]
+                fit_note += "\n[localCAI] model has no chat template inside: using ChatML"
             if int(gpu_layers) > 0 and device != "cpu":
                 if device and device != "auto":
                     chosen = next((d for d in self.devices(server) if d["id"] == device), None)
@@ -474,7 +563,8 @@ class Engine:
                 if chosen:
                     cmd += ["--device", chosen["id"]]
                     size_mib = path.stat().st_size / 2**20
-                    if int(gpu_layers) >= 999 and chosen.get("mib") and size_mib > chosen["mib"] * 0.8:
+                    fit = estimate_fit(size_mib / 1024, int(ctx), chosen.get("mib"))
+                    if int(gpu_layers) >= 999 and chosen.get("mib") and fit["kind"] != "gpu":
                         # Too big to put all of it on the GPU: let llama.cpp work out how much fits.
                         i = cmd.index("-ngl"); del cmd[i:i + 2]
                         fit_note = (f"\n[localCAI] model is {size_mib / 1024:.1f} GB, GPU has {chosen['mib'] / 1024:.1f} GB:"

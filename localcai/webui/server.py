@@ -142,7 +142,8 @@ def make_handler(app: App, port: int):
                 if u.path == "/api/job":
                     return self.send_json(dict(JOB))
                 if u.path == "/api/engine":
-                    return self.send_json(ENGINE.status())
+                    s = settings()
+                    return self.send_json({**ENGINE.status(), "fits": ENGINE.fits(int(s["ctx_size"]), s["gpu_device"])})
                 if u.path == "/api/engine/devices":
                     return self.send_json({"devices": ENGINE.devices()})
                 if u.path == "/api/models":

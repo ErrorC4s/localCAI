@@ -43,6 +43,7 @@ const enc = encodeURIComponent;
 const charAvatar = (c) => (c.has_avatar ? `/api/avatar/${enc(c.file)}.png` : null);
 function personaInfo() { return S.state.library.personas.find((p) => p.name === $("persona").value); }
 // Safe mini-markdown: escape first, then *italic* / **bold**. Never injects raw HTML.
+const escHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function render(text) {
   // Like C.ai: *actions* in soft italics, "spoken words" bright, (scene / narration) dimmed.
   const esc = String(text).trim().replace(/\r\n?/g, "\n")
@@ -144,8 +145,22 @@ function renderEngineDialog(st) {
   $("eng-upgrade").hidden = !st.cuda_upgrade;
   $("eng-folder").textContent = st.models_dir;
   const ul = $("eng-models"); ul.innerHTML = "";
-  for (const m of st.models) { const li = document.createElement("li"); li.textContent = `${m.name} · ${m.size_gb} GB`; ul.appendChild(li); }
-  if (!$("eng-starter").length) for (const [k, label] of Object.entries(st.starters)) $("eng-starter").add(new Option(label, k));
+  const fits = st.fits || { local: {}, starters: {} };
+  for (const m of st.models) {
+    const li = document.createElement("li"), f = fits.local[m.name];
+    li.innerHTML = `${escHtml(m.name)} · ${m.size_gb} GB` + (f ? ` <span class="fit ${f.kind}">${escHtml(f.text)}</span>` : "");
+    ul.appendChild(li);
+  }
+  const sel = $("eng-starter"), keep = sel.value;
+  sel.length = 0;
+  for (const [k, label] of Object.entries(st.starters)) {
+    const f = fits.starters[k];
+    sel.add(new Option(`${f ? { gpu: "🟢", partial: "🟡", cpu: "🔴" }[f.kind] + " " : ""}${label}`, k));
+  }
+  if (keep) sel.value = keep;
+  const sf = fits.starters[sel.value];
+  $("eng-fit").textContent = sf ? `${sf.text} (at ${fits.ctx} tokens of context${fits.gpu ? ", " + fits.gpu : ""})` : "";
+  $("eng-fit").className = "small fit " + (sf ? sf.kind : "");
   const job = st.job, running = job && !job.done;
   $("eng-job").hidden = !job || (job.done && !job.error);
   if (job) { $("eng-bar").style.width = Math.round((job.progress || 0) * 100) + "%"; $("eng-msg").textContent = job.error ? `${job.message}: ${job.error}` : job.message; }
@@ -156,6 +171,7 @@ $("open-engine").onclick = async () => { await refreshEngine(); $("engine-dialog
 $("eng-close").onclick = () => { $("engine-dialog").close(); loadModels(); };
 const engineCall = (action, json = {}) => api("/api/engine/" + action, { json }).then(refreshEngine).catch((e) => toast(e.message, "error"));
 $("eng-install").onclick = () => engineCall("install");
+$("eng-starter").onchange = () => refreshEngine();
 $("eng-download").onclick = () => engineCall("download", { model: $("eng-starter").value });
 $("eng-open-folder").onclick = () => engineCall("open-folder");
 $("eng-stop").onclick = () => engineCall("stop");

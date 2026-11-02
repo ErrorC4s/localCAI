@@ -110,7 +110,22 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
                 m["content"] = f"({note})\n\n{m['content']}"
                 break
     # (The greeting is part of `history` — the chat loop seeds it as the first assistant turn.)
-    return [{"role": "system", "content": system}] + kept
+    return [{"role": "system", "content": system}] + alternate(kept)
+
+
+def alternate(msgs: list[dict]) -> list[dict]:
+    """user/assistant strictly taking turns, starting with the user — some models' chat templates
+    (Mistral-style) reject anything else. Same-role neighbours are merged; a chat that opens with the
+    character's greeting gets a short opening line from the user."""
+    out: list[dict] = []
+    for m in msgs:
+        if out and out[-1]["role"] == m["role"]:
+            out[-1] = {**out[-1], "content": out[-1]["content"] + "\n\n" + m["content"]}
+        else:
+            out.append(dict(m))
+    if out and out[0]["role"] == "assistant":
+        out.insert(0, {"role": "user", "content": "(The roleplay begins.)"})
+    return out
 
 
 _FIRST_PERSON = re.compile(r"\b(?:I|I'm|I've|I'll|me|my|myself)\b|我", re.I)

@@ -72,7 +72,7 @@ def test_prompt_includes_pins_and_fills_macros():
 
 def test_history_budget_keeps_most_recent():
     card = {"data": {"name": "X"}}
-    hist = [{"role": "user", "content": "a" * 1000} for _ in range(50)] + [{"role": "user", "content": "last"}]
+    hist = [{"role": ("user", "assistant")[i % 2], "content": "a" * 1000} for i in range(50)] + [{"role": "user", "content": "last"}]
     msgs = build_messages(card, hist, max_chars=5000, pacing=False)
     assert msgs[-1]["content"] == "last" and len(msgs) < 10
 
@@ -472,3 +472,50 @@ def test_character_pronouns_setting_and_guess():
     assert character_pronouns(d2) == ""
     msgs = build_messages({"data": d2}, [{"role": "user", "content": "hi"}], "Sam")
     assert "You play Bram. You are talking with Sam." in msgs[0]["content"]
+
+
+
+def test_estimate_fit_on_an_8gb_laptop_gpu():
+    from localcai.engine import STARTER_MODELS, estimate_fit
+    f = lambda k: estimate_fit(STARTER_MODELS[k]["size_gb"], 8192, 8123, STARTER_MODELS[k]["kv_mb"])
+    assert f("qwen3-4b-instruct")["kind"] == "gpu"
+    assert f("stheno-8b")["kind"] == "gpu"
+    big = f("mag-mell-12b")
+    assert big["kind"] == "partial" and 0.5 <= big["gpu_share"] < 1, big
+    assert estimate_fit(4.9, 8192, None)["kind"] == "cpu"
+    assert "8+" not in STARTER_MODELS["mag-mell-12b"]["label"]
+
+
+
+def test_roles_alternate_for_strict_templates():
+    from localcai.runtime.prompt import alternate, build_messages
+    msgs = build_messages({"data": {"name": "Mira"}}, [
+        {"role": "assistant", "content": "He he ke~ hello"},       # greeting first
+        {"role": "user", "content": "hi"}, {"role": "user", "content": "again"},
+        {"role": "assistant", "content": "yes?"}, {"role": "user", "content": "*hugs*"}], "Sam", pacing=False)
+    roles = [m["role"] for m in msgs]
+    assert roles == ["system", "user", "assistant", "user", "assistant", "user"], roles
+    assert msgs[3]["content"] == "hi\n\nagain"
+    assert alternate([]) == []
+
+
+def test_gguf_metadata_reads_chat_template(tmp_path):
+    import struct
+    from localcai.engine import gguf_metadata
+    def s(b): return struct.pack("<Q", len(b)) + b
+    kv = [(b"general.architecture", 8, s(b"llama")),
+          (b"tokenizer.ggml.tokens", 9, struct.pack("<IQ", 8, 3) + s(b"a") + s(b"bb") + s(b"ccc")),
+          (b"tokenizer.ggml.scores", 9, struct.pack("<IQ", 6, 3) + b"\0" * 12),
+          (b"llama.context_length", 4, struct.pack("<I", 8192))]
+    def write(path, extra):
+        items = kv + extra
+        body = b"GGUF" + struct.pack("<IQQ", 3, 0, len(items))
+        for k, t, v in items:
+            body += s(k) + struct.pack("<I", t) + v
+        path.write_bytes(body)
+    a, b = tmp_path / "with.gguf", tmp_path / "without.gguf"
+    write(a, [(b"tokenizer.chat_template", 8, s(b"{{ messages }}"))])
+    write(b, [])
+    assert gguf_metadata(a)["tokenizer.chat_template"] == "{{ messages }}"
+    assert "tokenizer.chat_template" not in gguf_metadata(b)
+    assert gguf_metadata(b)["general.architecture"] == "llama"

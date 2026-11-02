@@ -1,4 +1,14 @@
-## localCAI v0.8.14 · Extractor 0.5.0
+## localCAI v0.8.15 · Extractor 0.5.0
+
+**Fixes models that wrote nonsense (e.g. Rocinante 12B)**
+- Some model files ship without a chat template. llama.cpp then can't lay out the conversation and the model only sees a few stray tokens, so it rambles about something unrelated. localCAI now reads the file's header before loading and uses ChatML when no template is inside.
+- Conversations are always sent as strict user/character turns (a chat that opens with the character's greeting gets a short opening line), which strict Mistral-style templates require.
+
+**Honest hardware estimates**
+- 🧠 Engine shows, for every model, roughly how much memory it needs at your context size and whether it fits on your GPU (🟢), runs partly on the CPU (🟡, slower) or mostly on the CPU (🔴).
+- The recommended-model labels no longer promise "8+ GB VRAM" for 12B models.
+
+### Earlier in v0.8.14
 
 **Custom backgrounds, redone**
 - 🖼 Background opens a panel with a live preview: choose a picture for this chat only or for every chat with the character, remove it, or hide the one imported from Character.AI.

@@ -188,3 +188,5 @@ details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted);
 .bg-preview::after { z-index: 0; backdrop-filter: blur(var(--bg-blur, 0px)); }
 .bg-preview span { position: relative; z-index: 1; margin: 8px; padding: 3px 9px; border-radius: 99px; font-size: 12px;
   background: rgba(0, 0, 0, .55); }
+.fit { color: var(--muted); } .fit.gpu { color: #7fd99a; } .fit.partial { color: #f0c46c; } .fit.cpu { color: #e88; }
+#eng-models li { margin: 3px 0; } #eng-models .fit { display: block; font-size: 11px; }
