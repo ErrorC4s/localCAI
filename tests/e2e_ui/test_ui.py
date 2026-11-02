@@ -86,7 +86,7 @@ def main(shot=None):
             # real avatar (8x6 test image) in the sidebar, header and messages; background applied
             assert page.eval_on_selector("#head-avatar img", "i => i.complete && i.naturalWidth") == 8
             assert page.locator(".char-item:has-text('Rex') .avatar img").count() == 0  # no picture → initial
-            assert "Luna.background.png" in page.eval_on_selector("#messages", "e => e.style.backgroundImage")
+            assert "Luna.background.png" in page.eval_on_selector("#bg-layer", "e => e.style.backgroundImage")
             n_before = page.locator(".msg").count()
 
             # first message triggers the age gate
@@ -161,15 +161,36 @@ def main(shot=None):
             page.locator(".msg").nth(count - 1).locator(".tool[title^='Rewind']").click()
             expect(page.locator(".msg")).to_have_count(count - 1)
 
-            # custom chat background
+            # custom backgrounds: this chat, then every chat with the character, hide the C.ai one
             bg = Path(home) / "bg.png"
             bg.write_bytes(Path(ROOT / "extension" / "icons" / "icon48.png").read_bytes())
+            layer = lambda: page.eval_on_selector("#bg-layer", "e => e.style.backgroundImage")
+            page.click("#open-bg")
+            expect(page.locator("#bg-source")).to_have_text("From Character.AI")
             page.set_input_files("#bg-input", str(bg))
-            expect(page.locator(".toast", has_text="Background set")).to_have_count(1)
-            assert "/api/image/chats/" in page.eval_on_selector("#messages", "e => e.style.backgroundImage")
+            expect(page.locator(".toast", has_text="Background set for this chat")).to_have_count(1)
+            assert "/api/image/chats/" in layer()
+            expect(page.locator("#bg-source")).to_have_text("This chat's picture")
+            page.fill("#bg-dim", "70"); page.dispatch_event("#bg-dim", "change")
+            page.wait_for_timeout(300)
+            assert page.eval_on_selector("#bg-layer", "e => e.style.getPropertyValue('--bg-dim')") == "0.7"
             page.click("#bg-remove")
-            page.wait_for_timeout(400)
-            assert "/api/image/chats/" not in page.eval_on_selector("#messages", "e => e.style.backgroundImage")
+            expect(page.locator("#bg-source")).to_have_text("From Character.AI")
+            page.select_option("#bg-scope", "character")
+            page.set_input_files("#bg-input", str(bg))
+            expect(page.locator(".toast", has_text="every chat with this character")).to_have_count(1)
+            assert "custom-bg" in layer()
+            page.click("#bg-remove")                       # remove the character picture
+            expect(page.locator("#bg-source")).to_have_text("From Character.AI")
+            page.click("#bg-remove")                       # "Hide" the C.ai one for this chat
+            expect(page.locator("#bg-source")).to_contain_text("Hidden")
+            assert layer() == ""
+            page.click("#bg-remove")                       # "Show" again
+            assert "Luna.background.png" in layer()
+            page.click("#bg-close")
+            page.reload(); page.click(".char-item:has-text('Luna')")
+            page.wait_for_timeout(500)
+            assert page.eval_on_selector("#bg-layer", "e => e.style.getPropertyValue('--bg-dim')") == "0.7", "style saved"
             bad = Path(home) / "evil.png"; bad.write_text("<svg onload=alert(1)>")
             assert http("POST", "/api/chat/background", {"X-LocalCAI": "1", "Content-Type": "image/png",
                         "X-Chat": "x.jsonl"}, b"<svg/>") in (400, 404), "fake images rejected"

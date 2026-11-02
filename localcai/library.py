@@ -114,7 +114,17 @@ def _write_image(folder: Path, stem: str, image: tuple[str, bytes]) -> str:
 
 def _find(folder: Path, stem: str) -> str | None:
     hits = [p for p in folder.glob(f"{stem}.*") if p.suffix.lower() in (".png", ".jpg", ".webp", ".gif")]
-    return hits[0].name if hits else None
+    # "?v=<mtime>" so a replaced picture with the same name isn't served from the cache
+    return f"{hits[0].name}?v={int(hits[0].stat().st_mtime)}" if hits else None
+
+
+def _chat_style(cp: Path) -> dict:
+    try:
+        with cp.open(encoding="utf-8") as f:
+            meta = json.loads(f.readline() or "{}")
+        return (meta.get("chat_metadata") or {}).get("localcai_bg") or {}
+    except (OSError, ValueError):
+        return {}
 
 
 def list_library(lib: Path) -> dict:
@@ -134,13 +144,15 @@ def list_library(lib: Path) -> dict:
             except OSError:
                 continue
             chats.append({"file": cp.name, "messages": max(n, 0), "modified": cp.stat().st_mtime,
-                          "background": _find(lib / "chats", f"{cp.stem}.background")})
+                          "background": _find(lib / "chats", f"{cp.stem}.background"),
+                          "bg_style": _chat_style(cp)})
         book = d.get("character_book") or {}
         stem = jp.name.removesuffix(".card.json")
         local = (d.get("extensions", {}) or {}).get("localcai", {}) or {}
         chars.append({"name": name, "file": stem,
                       "has_avatar": bool(local.get("has_avatar")),
                       "background": _find(lib / "characters", f"{stem}.background"),
+                      "custom_background": _find(lib / "characters", f"{stem}.custom-bg"),
                       "tagline": d.get("creator_notes", ""), "creator": d.get("creator", ""),
                       "memories": len(book.get("entries", [])), "chats": chats,
                       "pronouns": local.get("pronouns", ""), "pronouns_guess": guess_card_pronouns(d)})

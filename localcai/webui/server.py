@@ -168,11 +168,11 @@ def make_handler(app: App, port: int):
                     return self.raw(p.read_bytes(), "image/png", cache=True)
                 m = re.fullmatch(r"/api/image/(characters|chats|personas)/([^/]+)", u.path)
                 if m:
-                    name = unquote(m.group(2))
+                    name = unquote(m.group(2)).split("?")[0]
                     ctype = IMAGE_TYPES.get(Path(name).suffix.lower())
                     if not ctype:
                         raise FileNotFoundError(name)
-                    p = app.safe_file(m.group(1), name, "")
+                    p = app.safe_file(m.group(1), name.split("?")[0], "")
                     return self.raw(p.read_bytes(), ctype, cache=True)
                 m = re.fullmatch(r"/api/card/(.+)\.png", u.path)
                 if m:
@@ -229,8 +229,14 @@ def make_handler(app: App, port: int):
                     return self.send_json({"moved": n})
                 if path == "/api/chat/background":
                     return self.chat_background_upload()
+                if path == "/api/character/background-remove":
+                    stem = app.safe_file("characters", self.body_json()["character"], ".card.json").name.removesuffix(".card.json")
+                    with app.lock:
+                        for f in (app.lib / "characters").glob(f"{stem}.custom-bg.*"):
+                            f.unlink()
+                    return self.send_json({"ok": True})
                 if path in ("/api/chat/edit", "/api/chat/delete", "/api/chat/pin", "/api/chat/swipe",
-                            "/api/chat/background-remove"):
+                            "/api/chat/background-remove", "/api/chat/background-style"):
                     return self.chat_edit(path.rsplit("/", 1)[1], self.body_json())
                 if path in ("/api/analyze/style", "/api/analyze/story"):
                     return self.start_job(path.rsplit("/", 1)[1], self.body_json())
@@ -319,6 +325,13 @@ def make_handler(app: App, port: int):
                     for f in (app.lib / "chats").glob(f"{path.stem}.background.*"):
                         f.unlink()
                     return self.send_json({"ok": True})
+                if action == "background-style":
+                    style = {"dim": max(0, min(90, int(body.get("dim", 45)))),
+                             "blur": max(0, min(20, int(body.get("blur", 0)))),
+                             "off": bool(body.get("off", False))}
+                    meta.setdefault("chat_metadata", {})["localcai_bg"] = style
+                    chatlog.save(path, meta, rows)
+                    return self.send_json({"ok": True, "style": style})
                 i = int(body["index"])
                 if not 0 <= i < len(rows):
                     raise ValueError("message index out of range")
@@ -345,8 +358,13 @@ def make_handler(app: App, port: int):
 
         def chat_background_upload(self):
             from ..images import looks_like, ext_for
-            name = unquote(self.headers.get("X-Chat", ""))
-            path = app.safe_file("chats", name, "")
+            character = unquote(self.headers.get("X-Character", ""))
+            if character:  # for every chat with this character
+                card = app.safe_file("characters", character, ".card.json")
+                folder, stem = app.lib / "characters", card.name.removesuffix(".card.json") + ".custom-bg"
+            else:
+                path = app.safe_file("chats", unquote(self.headers.get("X-Chat", "")), "")
+                folder, stem = app.lib / "chats", f"{path.stem}.background"
             n = int(self.headers.get("Content-Length") or 0)
             ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
             if not 0 < n <= 15 * 1024 * 1024:
@@ -355,9 +373,9 @@ def make_handler(app: App, port: int):
             if ctype not in ("image/png", "image/jpeg", "image/webp", "image/gif") or not looks_like(ctype, data):
                 return self.send_json({"error": "Please use a PNG, JPEG, WebP or GIF image."}, 400)
             with app.lock:
-                for f in (app.lib / "chats").glob(f"{path.stem}.background.*"):
+                for f in folder.glob(f"{stem}.*"):
                     f.unlink()
-                (app.lib / "chats" / f"{path.stem}.background.{ext_for(ctype)}").write_bytes(data)
+                (folder / f"{stem}.{ext_for(ctype)}").write_bytes(data)
             return self.send_json({"ok": True})
 
         def character_save(self, body: dict):

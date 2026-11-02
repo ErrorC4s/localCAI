@@ -1,4 +1,12 @@
-## localCAI v0.8.13 · Extractor 0.5.0
+## localCAI v0.8.14 · Extractor 0.5.0
+
+**Custom backgrounds, redone**
+- 🖼 Background opens a panel with a live preview: choose a picture for this chat only or for every chat with the character, remove it, or hide the one imported from Character.AI.
+- Darken and Blur sliders (saved per chat) so long messages stay readable.
+- The picture now fills the whole chat (header and message box included), and message bubbles are see-through so you can actually see it.
+- Replacing a picture shows the new one immediately (no stale cache).
+
+### Earlier in v0.8.13
 
 **Pronouns you can see and fix, for every character and persona**
 - Each character's pronouns are guessed from its description and greeting, shown in the chat header (e.g. "she/her (guessed)"), and can be set in ✎ Edit: she/her, he/him, they/them, or "Several characters" for group / narrator bots (then no pronouns are assumed).

@@ -185,7 +185,7 @@ function renderCharacters() {
 const PRONOUN_NAMES = { "she/her": "she/her", "he/him": "he/him", "they/them": "they/them", group: "several characters" };
 function pronounLabel(c) {
   if (c.pronouns) return PRONOUN_NAMES[c.pronouns] || c.pronouns;
-  return c.pronouns_guess ? `${c.pronouns_guess} (guessed)` : "pronouns unknown — set them in Edit";
+  return c.pronouns_guess ? `${c.pronouns_guess} (guessed)` : "pronouns: not set (✎ Edit)";
 }
 function pronounSelect(current, guess, guessText, extra = true) {
   const sel = document.createElement("select");
@@ -228,14 +228,55 @@ $("delete-char").onclick = async () => {
 };
 $("chat-picker").onchange = () => openChat($("chat-picker").value);
 
+const imgUrl = (sub, val) => { const [n, q] = val.split("?"); return `/api/image/${sub}/${enc(n)}${q ? "?" + q : ""}`; };
+function currentChat() { const c = charInfo(S.character); return c && c.chats.find((x) => x.file === S.chat); }
+function bgStyle() { return { dim: 45, blur: 0, off: false, ...((currentChat() || {}).bg_style || {}) }; }
+function bgSource() {
+  const c = charInfo(S.character), chat = currentChat();
+  if (chat && chat.background) return { url: imgUrl("chats", chat.background), label: "This chat's picture", kind: "chat" };
+  if (c && c.custom_background) return { url: imgUrl("characters", c.custom_background), label: `Your picture for every chat with ${c.name}`, kind: "character" };
+  if (c && c.background) return { url: imgUrl("characters", c.background), label: "From Character.AI", kind: "imported" };
+  return null;
+}
 function applyBackground() {
+  const src = bgSource(), st = bgStyle(), on = !!src && !st.off;
+  const layer = $("bg-layer");
+  layer.style.backgroundImage = on ? `url("${src.url}")` : "";
+  layer.style.setProperty("--bg-dim", st.dim / 100);
+  layer.style.setProperty("--bg-blur", `${st.blur}px`);
+  $("chat-view").classList.toggle("has-bg", on);
+}
+function refreshBgDialog() {
+  const src = bgSource(), st = bgStyle();
+  $("bg-preview").style.backgroundImage = src && !st.off ? `url("${src.url}")` : "";
+  $("bg-source").textContent = !src ? "No background" : st.off ? `Hidden (${src.label})` : src.label;
+  $("bg-remove").textContent = src && src.kind === "imported" && !st.off ? "Hide" : st.off ? "Show" : "Remove";
+  $("bg-remove").disabled = !src;
+  $("bg-dim").value = st.dim; $("bg-dim-val").textContent = `${st.dim}%`;
+  $("bg-blur").value = st.blur; $("bg-blur-val").textContent = `${st.blur}px`;
+  $("bg-preview").style.setProperty("--bg-dim", st.dim / 100);
+  $("bg-preview").style.setProperty("--bg-blur", `${st.blur}px`);
+}
+async function saveBgStyle(patch) {
+  const chat = currentChat(); if (!chat) return;
+  chat.bg_style = { ...bgStyle(), ...patch };
+  applyBackground(); refreshBgDialog();
+  await api("/api/chat/background-style", { json: { chat: S.chat, ...chat.bg_style } }).catch((e) => toast(e.message, "error"));
+}
+$("open-bg").onclick = () => {
+  if (!S.chat) return toast("Start or open a chat first.", "warn");
   const c = charInfo(S.character);
-  const chat = c && c.chats.find((x) => x.file === S.chat);
-  const url = chat && chat.background ? `/api/image/chats/${enc(chat.background)}`
-    : c && c.background ? `/api/image/characters/${enc(c.background)}` : null;
-  $("bg-remove").hidden = !(chat && chat.background);
-  $("messages").style.backgroundImage = url
-    ? `linear-gradient(rgba(21,22,29,.72), rgba(21,22,29,.86)), url("${url}")` : "";
+  $("bg-scope").options[1].text = `For every chat with ${c.name}`;
+  refreshBgDialog(); $("bg-dialog").showModal();
+};
+$("bg-close").onclick = () => $("bg-dialog").close();
+for (const k of ["dim", "blur"]) {
+  $("bg-" + k).oninput = () => {  // live preview while dragging
+    const v = +$("bg-" + k).value, unit = k === "dim" ? "%" : "px";
+    $(`bg-${k}-val`).textContent = v + unit;
+    for (const el of [$("bg-layer"), $("bg-preview")]) el.style.setProperty("--bg-" + k, k === "dim" ? v / 100 : `${v}px`);
+  };
+  $("bg-" + k).onchange = () => saveBgStyle({ [k]: +$("bg-" + k).value });
 }
 
 async function openChat(chatFile) {
@@ -415,14 +456,24 @@ $("regen").onclick = () => {
 $("bg-input").onchange = async (e) => {
   const f = e.target.files[0]; e.target.value = "";
   if (!f || !S.chat) return;
+  const scope = $("bg-scope").value;
+  const headers = { "Content-Type": f.type, ...(scope === "character" ? { "X-Character": enc(S.character) } : { "X-Chat": enc(S.chat) }) };
   try {
-    await api("/api/chat/background", { body: f, headers: { "X-Chat": enc(S.chat), "Content-Type": f.type } });
-    await loadState(); applyBackground(); toast("Background set for this chat.");
+    await api("/api/chat/background", { body: f, headers });
+    await loadState();
+    if (bgStyle().off) await saveBgStyle({ off: false });
+    applyBackground(); refreshBgDialog(); toast("Background set" + (scope === "character" ? " for every chat with this character." : " for this chat."));
   } catch (err) { toast(err.message, "error"); }
 };
 $("bg-remove").onclick = async () => {
-  await api("/api/chat/background-remove", { json: { chat: S.chat, index: 0 } }).catch((e) => toast(e.message, "error"));
-  await loadState(); applyBackground();
+  const src = bgSource(); if (!src) return;
+  if (bgStyle().off) return saveBgStyle({ off: false });
+  if (src.kind === "imported") return saveBgStyle({ off: true });
+  try {
+    if (src.kind === "chat") await api("/api/chat/background-remove", { json: { chat: S.chat, index: 0 } });
+    else await api("/api/character/background-remove", { json: { character: S.character } });
+    await loadState(); applyBackground(); refreshBgDialog();
+  } catch (e) { toast(e.message, "error"); }
 };
 const CHAR_FIELDS = [["description", "Description"], ["personality", "Personality"], ["scenario", "Scenario"],
   ["first_mes", "Greeting (first message)"], ["mes_example", "Example dialogue / definition"],

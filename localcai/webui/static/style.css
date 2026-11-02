@@ -171,3 +171,20 @@ details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted);
 .edit-box { min-height: 120px; }
 .field.grow select { min-width: 260px; } .field.grow { min-width: 300px; }
 .msg .speaker { color: var(--accent2); font-weight: 600; }
+
+/* ── backgrounds (v0.8.14) ─────────────────────────── */
+.chat-view { position: relative; isolation: isolate; overflow: hidden; }
+.bg-layer, .bg-preview { background-size: cover; background-position: center; }
+.bg-layer { position: absolute; inset: -30px; z-index: -1; filter: blur(var(--bg-blur, 0px)); }
+.bg-layer::after, .bg-preview::after { content: ""; position: absolute; inset: 0; background: rgba(12, 13, 19, var(--bg-dim, .45)); }
+.has-bg .messages { background: none !important; }
+.has-bg .chat-head, .has-bg .composer { background: rgba(24, 25, 34, .72); backdrop-filter: blur(12px); }
+.has-bg .msg { background: rgba(32, 34, 46, .80); backdrop-filter: blur(8px); }
+.has-bg .msg.user { background: rgba(46, 42, 85, .84); }
+.has-bg .tools { background: rgba(24, 25, 34, .7); border-radius: 8px; padding: 1px 4px; }
+#bg-dialog { width: min(520px, 94vw); }
+.bg-preview { position: relative; height: 190px; border-radius: 10px; margin-bottom: 12px; background-color: var(--panel2);
+  overflow: hidden; display: flex; align-items: flex-end; }
+.bg-preview::after { z-index: 0; backdrop-filter: blur(var(--bg-blur, 0px)); }
+.bg-preview span { position: relative; z-index: 1; margin: 8px; padding: 3px 9px; border-radius: 99px; font-size: 12px;
+  background: rgba(0, 0, 0, .55); }

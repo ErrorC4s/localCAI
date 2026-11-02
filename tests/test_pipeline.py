@@ -137,7 +137,7 @@ def test_images_land_in_library(tmp_path):
     assert card_from_png(tmp_path / "characters" / "Luna.card.png")["data"]["name"] == "Luna"
     lib = list_library(tmp_path)
     l = next(c for c in lib["characters"] if c["name"] == "Luna")
-    assert l["has_avatar"] and l["background"] == "Luna.background.png"
+    assert l["has_avatar"] and l["background"].split("?")[0] == "Luna.background.png"
     rex = next(c for c in lib["characters"] if c["name"] == "Rex")
     assert not rex["has_avatar"]                               # failed download → placeholder
     assert lib["personas"][0]["avatar"] == "Alex.avatar.png"

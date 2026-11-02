@@ -48,6 +48,7 @@
     </section>
 
     <section id="chat-view" class="chat-view" hidden>
+      <div id="bg-layer" class="bg-layer" aria-hidden="true"></div>
       <div class="chat-head">
         <div class="avatar big" id="head-avatar"></div>
         <div class="grow">
@@ -56,9 +57,7 @@
         </div>
         <select id="chat-picker" title="Chats"></select>
         <button id="new-chat" class="btn">＋ New chat</button>
-        <label class="btn" for="bg-input" title="Set a background image for this chat">🖼<span class="lbl"> Background</span></label>
-        <input id="bg-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
-        <button id="bg-remove" class="btn" title="Remove this chat's background" hidden>🖼✕</button>
+        <button id="open-bg" class="btn" title="Background picture for this chat or character">🖼<span class="lbl"> Background</span></button>
         <button id="edit-char" class="btn" title="Edit character">✎<span class="lbl"> Edit</span></button>
         <button id="learn-style" class="btn" title="Learn how this character talks from your chat history">🔍<span class="lbl"> Learn style</span></button>
         <button id="open-memory" class="btn" title="Chat memory">📖<span class="lbl"> Memory</span></button>
@@ -153,6 +152,24 @@
     <button class="btn" id="eng-stop">Stop engine</button>
     <button class="btn primary" id="eng-close">Close</button>
   </div>
+</dialog>
+
+<dialog id="bg-dialog">
+  <h3>🖼 Background</h3>
+  <div id="bg-preview" class="bg-preview"><span id="bg-source"></span></div>
+  <div class="row wrap">
+    <select id="bg-scope">
+      <option value="chat">For this chat only</option>
+      <option value="character">For every chat with this character</option>
+    </select>
+    <label class="btn primary" for="bg-input">Choose image…</label>
+    <input id="bg-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+    <button class="btn" id="bg-remove">Remove</button>
+  </div>
+  <label class="field">Darken <span id="bg-dim-val"></span><input id="bg-dim" type="range" min="0" max="90" step="5"></label>
+  <label class="field">Blur <span id="bg-blur-val"></span><input id="bg-blur" type="range" min="0" max="20" step="1"></label>
+  <p class="muted small">Darken and blur are saved for this chat. A darker or blurrier picture keeps long messages easy to read.</p>
+  <div class="dialog-buttons"><button class="btn primary" id="bg-close">Done</button></div>
 </dialog>
 
 <dialog id="char-dialog">
