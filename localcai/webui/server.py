@@ -516,15 +516,21 @@ def make_handler(app: App, port: int):
     return H
 
 
-def serve(port: int = 8765, open_browser: bool = True, library: Path | None = None) -> int:
+def create_server(port: int = 8765, library: Path | None = None) -> ThreadingHTTPServer:
     from ..library import default_library
     lib = Path(library or default_library())
     for sub in ("characters", "chats", "personas"):
         (lib / sub).mkdir(parents=True, exist_ok=True)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(App(lib), port))
+    httpd.library = lib
     atexit.register(ENGINE.stop)  # never leave a model running in the background
+    return httpd
+
+
+def serve(port: int = 8765, open_browser: bool = True, library: Path | None = None) -> int:
+    httpd = create_server(port, library)
     url = f"http://127.0.0.1:{port}/"
-    print(f"localCAI is running at {url}  (library: {lib})\nPress Ctrl+C to stop.")
+    print(f"localCAI is running at {url}  (library: {httpd.library})\nPress Ctrl+C to stop.")
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:
@@ -533,4 +539,5 @@ def serve(port: int = 8765, open_browser: bool = True, library: Path | None = No
         print("\nBye!")
     finally:
         httpd.server_close()
+        ENGINE.stop()
     return 0

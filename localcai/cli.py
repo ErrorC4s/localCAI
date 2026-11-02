@@ -1,6 +1,7 @@
 """localCAI command line.
 
-  localcai                                       Open the app in your browser (same as `localcai ui`)
+  localcai                                       Open the app in its own window (`localcai desktop`)
+  localcai ui                                    Open the app in your browser instead
   localcai import <file-or-folder> [-o DIR]      Convert exports into cards + chats (default: your library)
   localcai models [--backend ollama]             List models your local runner has
   localcai chat <card> --model NAME [...]        Chat in the terminal
@@ -132,10 +133,13 @@ def cmd_ui(a: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
-        argv = ["ui"]
+        argv = ["desktop"]
     p = argparse.ArgumentParser(prog="localcai", description="Bring your characters home.")
     p.add_argument("--version", action="version", version=f"localCAI {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    pd = sub.add_parser("desktop", help="open the app in its own window (default)")
+    pd.set_defaults(fn=lambda a: __import__("localcai.desktop", fromlist=["main"]).main())
 
     pu = sub.add_parser("ui", help="open the app in your browser")
     pu.add_argument("--port", type=int, default=8765)

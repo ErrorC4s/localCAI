@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "localcai"
-version = "0.7.1"
+version = "0.8.0"
 description = "Bring your Character.AI characters and chats home and run them on a local model."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,6 +13,7 @@ dependencies = []  # stdlib only, on purpose: easy to install for non-developers
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+desktop = ["pywebview>=5"]  # its own window instead of a browser tab
 
 [project.scripts]
 localcai = "localcai.cli:main"

@@ -16,7 +16,9 @@ localCAI moves your Character.AI chats, pinned messages, memories, personas, ava
 
 You need **Python 3.10+**. That's it: localCAI has a **built-in model engine** (llama.cpp), so Ollama or LM Studio are optional.
 
-**Easiest (no terminal):** download the repo (Code → Download ZIP), unzip it and double-click **`start-localcai.bat`** (Windows) or **`start-localcai.sh`** (macOS/Linux). The app opens in your browser.
+**Windows, easiest:** get **`localCAI.exe`** and double-click it. It opens in its own window with no console and doesn't need Python. To build it yourself: download the repo, then double-click **`build-exe.bat`** (needs Python once, for building).
+
+**Any OS, from source:** download the repo (Code → Download ZIP), unzip it and double-click **`start-localcai.bat`** (Windows) or **`start-localcai.sh`** (macOS/Linux). With `pip install pywebview` it opens in its own window, otherwise in your browser.
 
 **With pip:**
 
@@ -128,7 +130,8 @@ Backends: `ollama`, `lmstudio`, `llamacpp`, `koboldcpp`, or a full URL (`--backe
 - [ ] Group chats / rooms
 - [ ] Summarised long-term memory for very long chats
 - [x] Built-in engine (llama.cpp) with a model slot and a one-click starter model
-- [ ] Standalone installer that bundles Python
+- [x] Windows app (`localCAI.exe`): own window, taskbar logo, no Python needed
+- [ ] macOS app bundle
 
 ## Development
 

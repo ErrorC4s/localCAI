@@ -1,0 +1,45 @@
+name: Build Windows app
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build localCAI.exe
+        shell: cmd
+        run: |
+          python -m pip install --upgrade pyinstaller pywebview
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name localCAI ^
+            --icon assets\logo.ico ^
+            --add-data "assets\logo.ico;assets" ^
+            --add-data "localcai\webui\static;localcai\webui\static" ^
+            --collect-all webview ^
+            packaging\exe_entry.py
+      - name: Package extension
+        run: python tools/package_extension.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: localCAI-windows
+          path: |
+            dist/localCAI.exe
+            dist/localcai-extractor-*.zip
+      - name: Attach to release (tag builds)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/localCAI.exe
+            dist/localcai-extractor-*.zip
+          body_path: store/release-notes-v0.7.1.md
+          prerelease: true

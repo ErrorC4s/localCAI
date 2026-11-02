@@ -10,3 +10,6 @@ localcai_chats/
 # never commit real exports
 *.export.json
 exports/
+build/
+*.spec
+localCAI.exe
