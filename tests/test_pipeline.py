@@ -422,3 +422,17 @@ def test_big_model_lets_llama_cpp_fit_layers(tmp_path, monkeypatch):
     log = (eng.engine_dir() / "engine.log").read_text()
     assert "letting llama.cpp fit" in log
     assert set(eng.STARTER_MODELS) >= {"qwen3-4b-instruct", "stheno-8b", "mag-mell-12b", "rocinante-12b"}
+
+
+def test_strip_name_prefix_while_streaming():
+    from localcai.runtime.client import strip_name_prefix
+    def run(text, char="Mira Vale", step=3):
+        return "".join(strip_name_prefix(iter([text[i:i + step] for i in range(0, len(text), step)]), char))
+    assert run("Mira Vale: *giggles* Hi.") == "*giggles* Hi."
+    assert run("**Mira Vale:** Hi.\nHex: again") == "Hi.\nagain"
+    assert run("Mira Vale：嗨") == "嗨"
+    assert run("Hexagons are neat: yes") == "Hexagons are neat: yes"
+    assert run("*hex maniac: smiles*") == "*hex maniac: smiles*"
+    assert run("*Mira Vale:* hi") == "hi"
+    assert run("Hi") == "Hi"
+    assert run("Mmm... not now.\n\nShe smiles: ok") == "Mmm... not now.\n\nShe smiles: ok"

@@ -1,4 +1,10 @@
-## localCAI v0.8.9 · Extractor 0.5.0
+## localCAI v0.8.10 · Extractor 0.5.0
+
+**No more "Name:" at the start of replies**
+- Roleplay-tuned models (e.g. Stheno) like to begin with "Mira Vale:" in chat-log style. localCAI now removes that label at the start of any line — even while the reply is streaming — since the bubble already shows who is talking.
+- Replies also stop if the model starts writing your next line ("Sam: …") for you.
+
+### Earlier in v0.8.9
 
 **A cleaner chat screen**
 - Messages look closer to C.ai: the character's picture sits beside the bubble, paragraphs are evenly spaced, and there's no more empty strip inside each bubble (the ✏ 📌 ⤺ 🗑 tools now appear just under the message).

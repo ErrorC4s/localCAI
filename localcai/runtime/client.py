@@ -27,6 +27,55 @@ def list_models(base_url: str, timeout: float = 5) -> list[str]:
         return [m["id"] for m in json.load(r).get("data", [])]
 
 
+def name_patterns(char: str) -> list[str]:
+    """Ways a model may label the character's own lines: the full name and its first word."""
+    names = {char.strip()}
+    first = char.strip().split()[0] if char.strip() else ""
+    if len(first) >= 3:
+        names.add(first)
+    return sorted((n for n in names if n), key=len, reverse=True)
+
+
+def strip_name_prefix(tokens: Iterator[str], char: str) -> Iterator[str]:
+    """Remove a leading "Mira Vale:" (or "**Mira:**", "Mira Vale：") at the start of any line.
+
+    Roleplay-tuned models often write chat-log style "Name: text"; the bubble already shows the name.
+    Works while streaming: only the first few characters of each line are held back.
+    """
+    names = name_patterns(char)
+    if not names:
+        yield from tokens
+        return
+    alt = "|".join(re.escape(n) for n in names)
+    rx = re.compile(rf"^[ \t]*(?:(\*\*?)(?:{alt})\1[ \t]*[:：]|(\*\*?)(?:{alt})[ \t]*[:：]\2|(?:{alt})[ \t]*[:：])[ \t]*", re.I)
+    hold = max(len(n) for n in names) + 8
+    buf, at_start = "", True
+    for tok in tokens:
+        buf += tok
+        out = ""
+        while buf:
+            if at_start:
+                nl = buf.find("\n")
+                head = buf if nl < 0 else buf[:nl]
+                if nl < 0 and len(head) < hold:
+                    break  # not enough of this line yet to decide
+                m = rx.match(head)
+                if m:
+                    buf = buf[m.end():]
+                at_start = False
+                continue
+            nl = buf.find("\n")
+            if nl < 0:
+                out += buf; buf = ""
+            else:
+                out += buf[:nl + 1]; buf = buf[nl + 1:]; at_start = True
+        if out:
+            yield out
+    if buf:
+        m = rx.match(buf) if at_start else None
+        yield buf[m.end():] if m else buf
+
+
 def strip_thinking(tokens: Iterator[str]) -> Iterator[str]:
     """Drop <think>…</think> sections that reasoning models emit, even when tags are split across tokens."""
     buf, inside = "", False

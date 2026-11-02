@@ -28,7 +28,7 @@ from .. import analyze
 from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
-from ..runtime.client import trim_to_sentence
+from ..runtime.client import strip_name_prefix, trim_to_sentence
 from ..runtime.prompt import reply_words_for
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
@@ -498,8 +498,10 @@ def make_handler(app: App, port: int):
             # Built-in engine: sampler settings that keep small models from rambling and looping.
             extra = ({"top_p": 0.9, "top_k": 40, "min_p": 0.05, "repeat_penalty": 1.08}
                      if s["backend"] == "builtin" else None)
-            gen = stream_chat(url, s["model"], msgs, temperature=float(s["temperature"]),
-                              max_tokens=int(s["max_tokens"]), info=info, extra=extra)
+            # never let the model write the user's turn in chat-log style ("Sam: …")
+            extra = {**(extra or {}), "stop": [f"\n{user}:", f"\n**{user}:**", f"\n{user}："]}
+            gen = strip_name_prefix(stream_chat(url, s["model"], msgs, temperature=float(s["temperature"]),
+                                                max_tokens=int(s["max_tokens"]), info=info, extra=extra), char)
             try:
                 first = next(gen, "")
             except OSError as e:
