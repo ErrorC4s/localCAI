@@ -1,4 +1,10 @@
-## localCAI v0.8.16 · Extractor 0.5.0
+## localCAI v0.8.17 · Extractor 0.5.0
+
+**Scenes don't jump any more**
+- Each turn the model is reminded where the last reply left off (the last actions in it), and told to continue from there: same place, same positions, nothing skipped.
+- When you only *say* something (no *action*), the model is told you did nothing new physically, so it stops inventing moves for you ("your fingers slide…").
+
+### Earlier in v0.8.16
 
 **Cleaner replies with ChatML models**
 - Models that write chat-format markers as plain text (e.g. `<|im_end|>` from Rocinante) now stop there, and any leaked marker is cut from the saved reply.

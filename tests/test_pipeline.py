@@ -390,7 +390,7 @@ def test_moment_hint_picks_pacing():
     assert "intimate" not in moment_hint("I really like playing this")
     card = {"data": {"name": "Mira"}}
     msgs = build_messages(card, [{"role": "user", "content": "*kisses your forehead*"}], "Sam")
-    assert msgs[-1]["content"].startswith("(Moment: quiet and intimate")
+    assert "Moment: quiet and intimate" in msgs[-1]["content"]
     assert "Moment:" not in build_messages(card, [{"role": "user", "content": "*kisses*"}], "Sam",
                                            pacing=False)[-1]["content"]
 
@@ -536,3 +536,17 @@ def test_markers_and_user_pronouns_from_chat():
     assert "Keep bodies straight: Sam is a man, Mira Vale is a woman." in last
 
     assert guess_user_pronouns([{"role": "assistant", "content": "I'm your wife, your wife, your wife!"}]) == ""
+
+
+
+def test_continuity_note_anchors_scene_and_spoken_turns():
+    from localcai.runtime.prompt import build_messages, continuity_note
+    hist = [{"role": "assistant", "content": "*I sit by the window.* Hi. *I pour you some tea and slide the cup over.*"},
+            {"role": "user", "content": "hm... you're so sweet tonight..."}]
+    note = continuity_note(hist, "Mira", "Sam")
+    assert "pour you some tea and slide the cup over" in note and "same positions" in note
+    assert "Sam only spoke this turn" in note
+    acted = continuity_note(hist[:-1] + [{"role": "user", "content": "*I take the cup* thanks"}], "Mira", "Sam")
+    assert "only spoke" not in acted and "never add actions for Sam" in acted
+    last = build_messages({"data": {"name": "Mira"}}, hist, "Sam")[-1]["content"]
+    assert "Continuity:" in last and last.endswith("hm... you're so sweet tonight...")

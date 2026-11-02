@@ -81,6 +81,10 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
     extra = []
     if triggered:
         extra.append("[Relevant memories]\n" + "\n".join(f"- {x}" for x in triggered))
+    if pacing and history and history[-1]["role"] == "user":
+        c = continuity_note(history, char, user_name)
+        if c:
+            extra.append(c)
     if history and history[-1]["role"] == "user" and _FIRST_PERSON.search(history[-1]["content"]):
         u = f"{user_name} ({user_pr})" if user_pr else user_name
         bodies = {"he/him": "a man", "she/her": "a woman"}
@@ -152,6 +156,34 @@ def guess_user_pronouns(history: list[dict]) -> str:
     if her >= 3 and her >= 3 * him:
         return "she/her"
     return ""
+
+
+_ACTION = re.compile(r"\*([^*\n]{3,})\*")
+
+
+def continuity_note(history: list[dict], char: str, user: str) -> str:
+    """Keep the scene from jumping: where the last reply left off, and whether the user did anything new.
+
+    Small models tend to skip ahead (new place, new position) or invent the user's next move
+    ("your fingers slide…") when the user only said something.
+    """
+    last_user = history[-1]["content"]
+    prev = next((m["content"] for m in reversed(history[:-1]) if m["role"] == "assistant"), "")
+    parts = []
+    acts = _ACTION.findall(prev)
+    if acts:
+        anchor = " … ".join(a.strip() for a in acts[-2:])
+        if len(anchor) > 260:
+            anchor = "…" + anchor[-259:]
+        parts.append(f"Continuity: the scene is exactly where {char}'s last reply left it ({anchor}). "
+                     f"Continue from there: same place, same positions, nothing skipped.")
+    spoke_only = not _ACTION.search(last_user) and not re.match(r"\s*(?:I|I'm|我)\b", last_user)
+    if spoke_only:
+        parts.append(f"{user} only spoke this turn and did nothing new with their body: "
+                     f"don't describe {user} doing or touching anything new, just react to their words.")
+    else:
+        parts.append(f"React to what {user} actually did; never add actions for {user} beyond what they wrote.")
+    return " ".join(parts)
 
 
 def guess_pronouns(text: str) -> str:
