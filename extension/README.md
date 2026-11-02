@@ -16,13 +16,13 @@ Saves **your own** Character.AI chats, pins, memories, personas, avatars, backgr
 
 1. Open character.ai and go to the chat you want to keep.
 2. **Refresh the page** (F5). The extension must be running before the page loads.
-3. Click the localCAI icon → **⏫ Load full history**. The extension scrolls the chat up for you, page by page, until C.ai says there's nothing older (you can stop it any time). It only scrolls: the page loads the messages itself, exactly as if you scrolled by hand.
+3. Click the localCAI icon → **⏫ Load full history**. The extension fetches the older pages of the chat one after another (about 50 messages per page, with a short pause between pages) until C.ai says there's nothing older. Tens of thousands of messages take a minute or two. You can stop it any time. If that doesn't work it automatically falls back to scrolling the chat for you.
 4. Click **Export .lcai.json**. With *Include avatars & backgrounds* ticked (default), the pictures are downloaded from C.ai's image server and embedded in the file.
 5. Drag the file into the localCAI app (or run `localcai import <file>`).
 
 ## How it works
 
-- **Passive**: it reads the responses the C.ai web app already receives. It never sends requests of its own; *Load full history* just scrolls the page, waiting for each page of messages and pausing briefly before the next.
+- **Passive by default**: it reads the responses the C.ai web app already receives. The only requests it makes itself are when you press *Load full history*: the same "older messages" request the web app makes when you scroll up. Your browser attaches your session cookie on its own; the extension never reads, stores or sends any login data.
 - **Allowlisted**: only chat, character, persona and memory endpoints are collected. Billing, subscription, birthday and account details are ignored.
 - **No credentials**: request headers and cookies are never read; query strings are stripped from URLs.
 - **Memory only**: captured data lives in that tab until you close it. Nothing is written to disk or sent anywhere.
@@ -40,4 +40,4 @@ Saves **your own** Character.AI chats, pins, memories, personas, avatars, backgr
 - `src/normalize.js`: **every C.ai-specific format rule lives here**; when C.ai changes something, this is the one file to edit
 - Test: `NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs` (Playwright + a mocked character.ai; never touches the real site)
 
-> Formats confirmed against real data (Nov 2026): chats, swipes, pins, characters, personas, C.ai chat memory. Live messages over WebSocket are not yet verified.
+> Formats confirmed against real data (Nov 2026): chats, swipes, pins, characters, personas, C.ai chat memory; the history endpoint works with the session cookie alone. Live messages over WebSocket are not yet verified.

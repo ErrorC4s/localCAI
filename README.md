@@ -36,7 +36,7 @@ Already use Ollama, LM Studio, llama.cpp or KoboldCpp? Just pick it in **Backend
 
 ### The browser extension
 
-See [`extension/README.md`](extension/README.md). Short version: open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the `extension` folder. Then open a chat on character.ai, **refresh the page**, click the localCAI icon, press **⏫ Load full history** (it scrolls the whole chat for you) and choose **Export .lcai.json**.
+See [`extension/README.md`](extension/README.md). Short version: open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the `extension` folder. Then open a chat on character.ai, **refresh the page**, click the localCAI icon, press **⏫ Load full history** (fetches the whole chat, about a minute for tens of thousands of messages) and choose **Export .lcai.json**.
 
 ## The app
 
@@ -76,7 +76,7 @@ Your library lives in `~/.localcai/library`, models in `~/.localcai/models` and 
 ## Principles
 
 - **Your data only.** Your chats, your pins, characters you created. Other creators' private definitions are never exported (C.ai doesn't send them anyway).
-- **Passive extraction.** The extension reads what the C.ai web app already loads. It sends no requests of its own and never touches your login token.
+- **Passive extraction.** The extension reads what the C.ai web app already loads. The only requests it makes are the web app's own "older messages" requests when you press *Load full history*; the browser adds your session cookie itself, and the extension never reads or stores login data.
 - **Minimal collection.** The extension only listens to an allowlist of chat/character endpoints. Billing, subscription, birthday and account details are never collected.
 - **Local-only.** No telemetry, nothing uploaded. The app only listens on `127.0.0.1`. The only downloads are the ones you click (the engine from llama.cpp's GitHub releases, models from Hugging Face).
 - **Adults only for chat (18+)**, asked once. If a message looks like a crisis, help-line information is shown on screen. It never blocks the conversation or reports anything.
