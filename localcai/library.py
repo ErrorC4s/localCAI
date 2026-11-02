@@ -1,0 +1,110 @@
+"""The local library: where imported characters, chats and personas live.
+
+Default location: ~/.localcai/library (override with the LOCALCAI_HOME env var).
+
+    characters/<name>.card.json + <name>.card.png   Character Card V2
+    chats/<name>.<id>.jsonl                          SillyTavern chat logs
+    personas/personas.json                           your personas
+"""
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from .exporters import write_card, write_chat
+from .exporters.card_v2 import _safe
+from .importers import import_path
+from .memory import merge_books, pins_to_lorebook
+from .schema import Character
+
+
+def home() -> Path:
+    return Path(os.environ.get("LOCALCAI_HOME") or Path.home() / ".localcai")
+
+
+def default_library() -> Path:
+    return home() / "library"
+
+
+@dataclass
+class ImportReport:
+    characters: list[dict] = field(default_factory=list)
+    chats: list[dict] = field(default_factory=list)
+    personas: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def empty(self) -> bool:
+        return not self.characters and not self.chats and not self.personas
+
+
+def import_into(src: str | Path, out: str | Path, swap_roles: bool = False,
+                user_name: str | None = None) -> ImportReport:
+    out = Path(out)
+    bundle = import_path(src)
+    rep = ImportReport(warnings=list(bundle.warnings))
+    if swap_roles:
+        for chat in bundle.chats:
+            for m in chat.messages:
+                m.is_user = not m.is_user
+    if user_name:
+        for chat in bundle.chats:
+            chat.user_name = user_name
+
+    known = {c.name for c in bundle.characters}
+    for chat in bundle.chats:  # a chat without a matching character still deserves a playable card
+        if chat.character_name not in known:
+            first_bot = next((m.text for m in chat.messages if not m.is_user), "")
+            bundle.characters.append(Character(name=chat.character_name, greeting=first_bot,
+                                               source="reconstructed-from-chat"))
+            known.add(chat.character_name)
+            rep.warnings.append(f"'{chat.character_name}': no character definition found, so a minimal "
+                                "card was made from the chat. Edit it to add personality.")
+
+    for c in bundle.characters:
+        book = merge_books(c.extra.get("character_book"), pins_to_lorebook(bundle.chats, c.name))
+        jp, pp = write_card(c, out / "characters", book)
+        rep.characters.append({"name": c.name, "memories": len(book["entries"]) if book else 0,
+                               "card_json": str(jp), "card_png": str(pp)})
+    for chat in bundle.chats:
+        p = write_chat(chat, out / "chats")
+        rep.chats.append({"character": chat.character_name, "messages": len(chat.messages),
+                          "pinned": len(chat.pins), "memories": len(chat.memories), "path": str(p)})
+
+    if bundle.personas:
+        pfile = out / "personas" / "personas.json"
+        existing = json.loads(pfile.read_text("utf-8")) if pfile.exists() else []
+        merged = {p["name"]: p for p in existing}
+        merged.update({p["name"]: p for p in bundle.personas})  # newest wins
+        pfile.parent.mkdir(parents=True, exist_ok=True)
+        pfile.write_text(json.dumps(list(merged.values()), ensure_ascii=False, indent=2), "utf-8")
+        rep.personas = [p["name"] for p in bundle.personas]
+    return rep
+
+
+def list_library(lib: Path) -> dict:
+    chars = []
+    for jp in sorted((lib / "characters").glob("*.card.json")):
+        try:
+            d = json.loads(jp.read_text("utf-8")).get("data", {})
+        except ValueError:
+            continue
+        name = d.get("name", jp.stem)
+        chats = []
+        for cp in sorted((lib / "chats").glob(f"{_safe(name)}.*.jsonl"),
+                         key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                n = sum(1 for l in cp.read_text("utf-8").splitlines() if l.strip()) - 1
+            except OSError:
+                continue
+            chats.append({"file": cp.name, "messages": max(n, 0), "modified": cp.stat().st_mtime})
+        book = d.get("character_book") or {}
+        chars.append({"name": name, "file": jp.name.removesuffix(".card.json"),
+                      "tagline": d.get("creator_notes", ""), "creator": d.get("creator", ""),
+                      "avatar_url": (d.get("extensions", {}).get("localcai", {}) or {}).get("avatar_url"),
+                      "memories": len(book.get("entries", [])), "chats": chats})
+    pfile = lib / "personas" / "personas.json"
+    personas = json.loads(pfile.read_text("utf-8")) if pfile.exists() else []
+    return {"characters": chars, "personas": personas}

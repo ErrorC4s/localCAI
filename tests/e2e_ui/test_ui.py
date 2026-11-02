@@ -1,0 +1,152 @@
+"""Drives the web UI in headless Chromium like a user would.
+
+Run: python tests/e2e_ui/test_ui.py [screenshot.png]
+Needs: pip install playwright (browsers installed).
+"""
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+from playwright.sync_api import expect, sync_playwright
+
+ROOT = Path(__file__).resolve().parents[2]
+FIXTURE = ROOT / "tests" / "fixtures" / "extension_export.lcai.json"
+UI_PORT, LLM_PORT = 8799, 8798
+BASE = f"http://127.0.0.1:{UI_PORT}"
+
+
+def wait_up(url):
+    for _ in range(50):
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            return
+        except urllib.error.HTTPError:
+            return
+        except OSError:
+            time.sleep(0.1)
+    raise RuntimeError(f"{url} never came up")
+
+
+def http(method, path, headers=None, body=None):
+    req = urllib.request.Request(BASE + path, method=method, data=body, headers=headers or {})
+    try:
+        return urllib.request.urlopen(req, timeout=5).status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+def main(shot=None):
+    home = tempfile.mkdtemp(prefix="lcai-home-")
+    last = os.path.join(home, "last_request.json")
+    env = {**os.environ, "LOCALCAI_HOME": home, "PYTHONPATH": str(ROOT)}
+    procs = [
+        subprocess.Popen([sys.executable, str(Path(__file__).parent / "fake_llm.py"), str(LLM_PORT), last]),
+        subprocess.Popen([sys.executable, "-m", "localcai", "ui", "--no-browser", "--port", str(UI_PORT)], env=env, cwd=home),
+    ]
+    try:
+        wait_up(f"http://127.0.0.1:{LLM_PORT}/v1/models")
+        wait_up(BASE + "/")
+
+        # security checks
+        assert http("GET", "/api/state", {"Host": f"evil.example:{UI_PORT}"}) == 403, "DNS-rebinding guard"
+        assert http("POST", "/api/settings", {"Content-Type": "application/json"}, b"{}") == 403, "CSRF guard"
+        assert http("GET", "/api/card/..%2F..%2Fconfig.png") == 404, "path traversal"
+
+        with sync_playwright() as p:
+            page = p.chromium.launch().new_page(viewport={"width": 1280, "height": 820})
+            page.goto(BASE)
+            expect(page.locator("#welcome")).to_be_visible()
+
+            # import
+            page.set_input_files("#file-input", str(FIXTURE))
+            expect(page.locator(".toast", has_text="Imported")).to_have_count(1)
+            expect(page.locator(".char-item")).to_have_count(2)
+            expect(page.locator("#persona option")).to_have_count(2)  # (no persona) + Alex
+
+            # point at the fake model server via Settings
+            page.click("#open-settings")
+            page.fill("#set-custom-url", f"http://127.0.0.1:{LLM_PORT}/v1")
+            page.fill("#set-user-name", "Tester")
+            page.click("#settings-save")
+            expect(page.locator("#model option", has_text="fake-model")).to_have_count(1)
+            page.select_option("#model", "fake-model")
+
+            # open Luna: imported chat with pinned message
+            page.click(".char-item:has-text('Luna')")
+            expect(page.locator("#head-name")).to_have_text("Luna")
+            expect(page.locator(".msg .pin")).to_have_count(1)
+            n_before = page.locator(".msg").count()
+
+            # first message triggers the age gate
+            page.fill("#input", "What tea do I like?")
+            page.keyboard.press("Enter")
+            expect(page.locator("#age-dialog")).to_be_visible()
+            page.click("#age-yes")
+            expect(page.locator(".msg").last.locator("strong")).to_have_text("Alishan")  # streamed + markdown
+            expect(page.locator(".msg")).to_have_count(n_before + 2)
+            sent = json.load(open(last, encoding="utf-8"))
+            assert sent["model"] == "fake-model"
+            assert "Alishan" in sent["messages"][0]["content"], "pinned memory in prompt"
+            assert sent["messages"][-1]["content"] == "What tea do I like?"
+
+            # persona
+            page.select_option("#persona", "Alex")
+            page.fill("#input", "hello again")
+            page.click("#send")
+            expect(page.locator(".msg")).to_have_count(n_before + 4)
+            sent = json.load(open(last, encoding="utf-8"))
+            assert "[About Alex]" in sent["messages"][0]["content"], "persona in prompt"
+
+            # regenerate keeps the count
+            page.click("#regen")
+            page.wait_for_timeout(600)
+            expect(page.locator(".msg")).to_have_count(n_before + 4)
+
+            # crisis banner (shown, never blocking)
+            page.fill("#input", "honestly I want to die")
+            page.click("#send")
+            expect(page.locator("#crisis")).to_be_visible()
+            expect(page.locator("#helplines li")).to_have_count(4)
+            expect(page.locator(".msg")).to_have_count(n_before + 6)
+            page.click("#crisis-close")
+
+            # reload: the chat persisted on disk
+            page.reload()
+            page.click(".char-item:has-text('Luna')")
+            expect(page.locator(".msg")).to_have_count(n_before + 6)
+
+            # new chat starts with the greeting
+            page.click("#new-chat")
+            expect(page.locator(".msg")).to_have_count(1)
+            expect(page.locator(".msg").first).to_contain_text("Oh, Alex")
+            expect(page.locator("#chat-picker option")).to_have_count(2)
+
+            # card download
+            with page.expect_download() as dl:
+                page.click("#download-card")
+            assert dl.value.suggested_filename == "Luna.card.png"
+
+            # XSS: character text is never rendered as HTML
+            page.evaluate("document.querySelector('#messages').innerHTML = ''")
+            assert page.evaluate("typeof render") == "function"
+            assert "<img" not in page.evaluate("render('<img src=x onerror=alert(1)>')")
+
+            if shot:
+                page.click(".char-item:has-text('Luna')")
+                page.select_option("#chat-picker", index=1)
+                page.wait_for_timeout(400)
+                page.screenshot(path=shot)
+        print("UI E2E PASS")
+    finally:
+        for pr in procs:
+            pr.terminate()
+
+
+if __name__ == "__main__":
+    main(sys.argv[1] if len(sys.argv) > 1 else None)

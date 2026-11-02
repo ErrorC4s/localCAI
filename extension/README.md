@@ -1,36 +1,42 @@
 # localCAI Extractor (browser extension)
 
-把你在 Character.AI 上**自己的**聊天、釘選和角色存成 `.lcai.json`，再用 `localcai import` 轉成可以在本地模型上跑的角色卡。
+Saves **your own** Character.AI chats, pins, memories, personas and characters as a `.lcai.json` file that the localCAI app can import.
 
-## 安裝（開發版）
+## Install (developer mode)
+
 **Chrome / Edge / Brave**
-1. 打開 `chrome://extensions`，開啟右上角「開發人員模式」
-2. 按「載入未封裝項目」，選這個 `extension/` 資料夾
+1. Open `chrome://extensions` and switch on **Developer mode** (top right).
+2. Click **Load unpacked** and pick this `extension/` folder (the one containing `manifest.json`).
 
-**Firefox（128 以上，含 Android 版）**
-1. 打開 `about:debugging#/runtime/this-firefox`
-2. 按「載入暫時附加元件」，選 `extension/manifest.json`（重開瀏覽器後要再載一次，等上架 AMO 就不用）
+**Firefox 128+ (including Firefox for Android)**
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on** and pick `extension/manifest.json`. (You'll need to do this again after restarting Firefox until it's published on AMO.)
 
-## 使用
-1. 打開 character.ai，進到你想保存的聊天
-2. **往上滑到最舊的訊息**，擴充功能只看得到網頁實際載入過的內容
-3. 點工具列的 localCAI 圖示 → **匯出 .lcai.json**
-4. `localcai import localcai-xxxx.lcai.json -o 我的角色`
+## Use
 
-## 運作方式
-- **被動**：只讀 C.ai 網頁自己載入的回應內容，不會額外發任何請求，所以看起來跟你正常使用一模一樣。
-- **不碰登入資訊**：不讀 request header 跟 cookie，網址的 query string 也會先去掉。
-- **只存在記憶體**：資料只留在那個分頁裡，關掉就沒了，不會寫入硬碟，也不會傳到任何地方。
-- **別人的私密定義不匯出**：只有你自己建立的角色（或平台標示為公開的定義）才會包含 definition。
+1. Open character.ai and go to the chat you want to keep.
+2. **Refresh the page** (F5). The extension must be running before the page loads.
+3. **Scroll up to the oldest message.** The extension can only see what the page actually loads.
+4. Click the localCAI icon → **Export .lcai.json**.
+5. Drag the file into the localCAI app (or run `localcai import <file>`).
 
-## 除錯匯出（幫助我們修格式）
-「除錯：原始資料」會下載收集到的原始 JSON，token、email、cookie、session 這類欄位會自動遮蔽，看起來像 JWT 的字串也會遮掉。**裡面還是有你的聊天內容**，請私下分享，或先把文字刪掉再貼到 issue。
+## How it works
 
-## 開發
-- `src/inject.js`：在頁面環境攔截 fetch / XHR / WebSocket 的回應
-- `src/bridge.js`：收集資料、回應 popup
-- `src/normalize.js`：**所有 C.ai 格式相關的規則都在這裡**，C.ai 改版時只需要改這一個檔
-- 測試：`NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs`（Playwright + 模擬的 character.ai，不會連到真網站）
+- **Passive**: it reads the responses the C.ai web app already receives. It never sends requests of its own.
+- **Allowlisted**: only chat, character, persona and memory endpoints are collected. Billing, subscription, birthday and account details are ignored.
+- **No credentials**: request headers and cookies are never read; query strings are stripped from URLs.
+- **Memory only**: captured data lives in that tab until you close it. Nothing is written to disk or sent anywhere.
+- **Others' private definitions are never exported**: definitions are kept only for characters you created (C.ai doesn't send other creators' definitions anyway).
 
-> 格式規則已用真實資料確認（2026-11）：對話、重骰、釘選、角色、persona、C.ai 記憶（conversation facts）。
-> 只收集白名單內的端點，帳務、訂閱、生日等資料一律不碰。
+## Debug export
+
+**Debug: raw data** downloads the captured JSON with secrets redacted (tokens, IDs, e-mail, birthday, subscription…). **It still contains your chat text**, so share it privately, or strip the messages before attaching it to an issue.
+
+## Development
+
+- `src/inject.js`: hooks fetch / XHR / WebSocket in the page and applies the endpoint allowlist
+- `src/bridge.js`: collects captures and answers the popup
+- `src/normalize.js`: **every C.ai-specific format rule lives here**; when C.ai changes something, this is the one file to edit
+- Test: `NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs` (Playwright + a mocked character.ai; never touches the real site)
+
+> Formats confirmed against real data (Nov 2026): chats, swipes, pins, characters, personas, C.ai chat memory. Live messages over WebSocket are not yet verified.

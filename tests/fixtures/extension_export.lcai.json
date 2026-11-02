@@ -1,10 +1,10 @@
 {
   "format": "localcai",
   "version": 1,
-  "exported_at": "2026-11-02T02:13:23.958Z",
+  "exported_at": "2026-11-02T02:22:43.211Z",
   "exporter": {
     "name": "localCAI extension",
-    "version": "0.1.0",
+    "version": "0.2.1",
     "source": "character.ai"
   },
   "characters": [

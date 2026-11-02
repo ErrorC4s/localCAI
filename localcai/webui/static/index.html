@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>localCAI</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">local<b>CAI</b></div>
+  <label class="field">Backend
+    <select id="backend"></select>
+  </label>
+  <label class="field grow">Model
+    <span class="row">
+      <select id="model"><option value="">—</option></select>
+      <button id="refresh-models" class="icon" title="Refresh model list">↻</button>
+    </span>
+  </label>
+  <label class="field">You are
+    <select id="persona"><option value="">(no persona)</option></select>
+  </label>
+  <button id="open-settings" class="icon" title="Settings">⚙</button>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <label class="btn primary block" for="file-input">⬆ Import files</label>
+    <input id="file-input" type="file" multiple accept=".json,.jsonl,.png,.zip" hidden>
+    <p class="hint">Drop <code>.lcai.json</code>, CAI Tools / SillyTavern files, character cards or a <code>.zip</code> anywhere.</p>
+    <nav id="characters" class="char-list"></nav>
+  </aside>
+
+  <main id="main">
+    <section id="welcome" class="welcome">
+      <h1>Bring your characters home.</h1>
+      <ol>
+        <li>Install the <b>localCAI Extractor</b> browser extension, open your chat on Character.AI and click <b>Export .lcai.json</b>.</li>
+        <li>Drag the file into this window (or use <b>Import files</b>).</li>
+        <li>Start a local model runner (Ollama, LM Studio, llama.cpp, KoboldCpp), pick it in the top bar and chat.</li>
+      </ol>
+      <p class="muted">Everything stays on this computer. Not affiliated with Character.AI.</p>
+    </section>
+
+    <section id="chat-view" class="chat-view" hidden>
+      <div class="chat-head">
+        <div class="avatar big" id="head-avatar"></div>
+        <div class="grow">
+          <h2 id="head-name"></h2>
+          <div class="muted" id="head-sub"></div>
+        </div>
+        <select id="chat-picker" title="Chats"></select>
+        <button id="new-chat" class="btn">＋ New chat</button>
+        <a id="download-card" class="btn" download>⬇ Card</a>
+      </div>
+      <div id="crisis" class="crisis" hidden>
+        <b>If you're going through something hard, you don't have to face it alone.</b>
+        <ul id="helplines"></ul>
+        <button class="link" id="crisis-close">Close</button>
+      </div>
+      <div id="messages" class="messages"></div>
+      <form id="composer" class="composer">
+        <textarea id="input" rows="2" placeholder="Message… (Enter to send, Shift+Enter for a new line)"></textarea>
+        <div class="composer-buttons">
+          <button type="button" id="regen" class="btn" title="Regenerate last reply">↻</button>
+          <button type="button" id="stop" class="btn" hidden>■ Stop</button>
+          <button type="submit" id="send" class="btn primary">Send</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+
+<div id="drop-overlay" class="overlay" hidden><div class="drop-box">Drop to import</div></div>
+
+<dialog id="age-dialog">
+  <h3>Before you chat</h3>
+  <p>Chatting in localCAI is meant for adults. Are you 18 or older?</p>
+  <div class="dialog-buttons">
+    <button class="btn" id="age-no">No</button>
+    <button class="btn primary" id="age-yes">Yes, I'm 18+</button>
+  </div>
+</dialog>
+
+<dialog id="settings-dialog">
+  <h3>Settings</h3>
+  <label class="field">Your name (when no persona is selected)<input id="set-user-name"></label>
+  <label class="field">Custom backend URL<input id="set-custom-url" placeholder="http://host:port/v1"></label>
+  <label class="field">Creativity (temperature) <span id="temp-val"></span>
+    <input id="set-temperature" type="range" min="0" max="1.5" step="0.05"></label>
+  <label class="field">Max reply length (tokens)<input id="set-max-tokens" type="number" min="32" max="4096" step="32"></label>
+  <p class="muted small">Library: <code id="lib-path"></code></p>
+  <div class="dialog-buttons">
+    <button class="btn" id="settings-cancel">Cancel</button>
+    <button class="btn primary" id="settings-save">Save</button>
+  </div>
+</dialog>
+
+<div id="toasts" class="toasts"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

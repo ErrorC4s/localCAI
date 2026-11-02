@@ -1,8 +1,9 @@
 """localCAI command line.
 
-  localcai import <file-or-folder> [-o out/]      Convert exports into cards + chats
-  localcai models [--backend ollama]              List models your local runner has
-  localcai chat <card> --model NAME [--backend …] Chat with a card on a local model
+  localcai                                       Open the app in your browser (same as `localcai ui`)
+  localcai import <file-or-folder> [-o DIR]      Convert exports into cards + chats (default: your library)
+  localcai models [--backend ollama]             List models your local runner has
+  localcai chat <card> --model NAME [...]        Chat in the terminal
 """
 from __future__ import annotations
 
@@ -12,56 +13,28 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import __version__
-from .exporters import write_card, write_chat
-from .importers import import_path
-from .importers.sillytavern import card_from_png, import_chat_jsonl
-from .memory import merge_books, pins_to_lorebook
+from . import __version__, chatlog
+from .importers.sillytavern import card_from_png
+from .library import default_library, import_into
 from .runtime import build_messages, list_models, resolve_base_url, stream_chat, BACKENDS
 from .safety import RESOURCES, age_gate, looks_like_crisis
-from .schema import Character
 
 
 def cmd_import(a: argparse.Namespace) -> int:
-    bundle = import_path(a.path)
-    if a.swap_roles:
-        for chat in bundle.chats:
-            for m in chat.messages:
-                m.is_user = not m.is_user
-    if a.user_name:
-        for chat in bundle.chats:
-            chat.user_name = a.user_name
-    out = Path(a.output)
-    known = {c.name for c in bundle.characters}
-    # A chat without a matching character still deserves a playable card.
-    for chat in bundle.chats:
-        if chat.character_name not in known:
-            first_bot = next((m.text for m in chat.messages if not m.is_user), "")
-            bundle.characters.append(Character(name=chat.character_name, greeting=first_bot,
-                                               source="reconstructed-from-chat"))
-            known.add(chat.character_name)
-            bundle.warnings.append(f"'{chat.character_name}': no character definition found, "
-                                   "made a minimal card from the chat — edit it to add personality")
-    for c in bundle.characters:
-        book = merge_books(c.extra.get("character_book"), pins_to_lorebook(bundle.chats, c.name))
-        jp, _ = write_card(c, out / "characters", book)
-        pins = len(book["entries"]) if book else 0
-        print(f"  ✓ character  {c.name}  ({pins} memories)  → {jp}")
-    for i, chat in enumerate(bundle.chats):
-        p = write_chat(chat, out / "chats", i)
-        print(f"  ✓ chat       {chat.character_name}  {len(chat.messages)} msgs, "
-              f"{len(chat.pins)} pinned, {len(chat.memories)} memories  → {p}")
-    if bundle.personas:
-        (out / "personas").mkdir(parents=True, exist_ok=True)
-        pp = out / "personas" / "personas.json"
-        pp.write_text(json.dumps(bundle.personas, ensure_ascii=False, indent=2), "utf-8")
-        print(f"  ✓ personas   {', '.join(p['name'] for p in bundle.personas)}  → {pp}")
-    for w in bundle.warnings:
+    out = Path(a.output) if a.output else default_library()
+    rep = import_into(a.path, out, swap_roles=a.swap_roles, user_name=a.user_name)
+    for c in rep.characters:
+        print(f"  ✓ character  {c['name']}  ({c['memories']} memories)  → {c['card_json']}")
+    for c in rep.chats:
+        print(f"  ✓ chat       {c['character']}  {c['messages']} msgs, {c['pinned']} pinned, "
+              f"{c['memories']} memories  → {c['path']}")
+    if rep.personas:
+        print(f"  ✓ personas   {', '.join(rep.personas)}  → {out / 'personas' / 'personas.json'}")
+    for w in rep.warnings:
         print(f"  ! {w}", file=sys.stderr)
-    if not bundle.characters and not bundle.chats:
+    if rep.empty:
         return 1
-    print(f"\nDone. Import {out/'characters'} into SillyTavern, or run:\n"
-          f"  localcai chat \"{out/'characters'}/<name>.card.png\" --model <your-model>")
+    print(f"\nDone. Run `localcai` to open the app, or import {out / 'characters'} into SillyTavern.")
     return 0
 
 
@@ -80,43 +53,45 @@ def _load_card(path: Path) -> dict:
     return card_from_png(path) if path.suffix.lower() == ".png" else json.loads(path.read_text("utf-8"))
 
 
+def load_persona(spec: str | None, name: str | None) -> tuple[str, str | None]:
+    """Returns (description, persona_name). spec = personas.json path or plain text."""
+    if not spec:
+        return "", None
+    p = Path(spec)
+    if p.exists():
+        items = json.loads(p.read_text("utf-8"))
+        items = items if isinstance(items, list) else [items]
+        chosen = next((x for x in items if x.get("name") == name), items[0] if items else None)
+        return (chosen.get("description", ""), chosen.get("name")) if chosen else ("", None)
+    return spec, None
+
+
 def cmd_chat(a: argparse.Namespace) -> int:
     if not age_gate():
-        print("抱歉，聊天功能僅供成人使用。/ Sorry, chat is for adults only.")
+        print("Sorry, chat is for adults only.")
         return 1
     card = _load_card(Path(a.card))
     d = card.get("data", card)
-    char, user = d.get("name", "Character"), a.user_name
+    char = d.get("name", "Character")
+    persona, persona_name = load_persona(a.persona, a.persona_name)
+    user = a.user_name or persona_name or "User"
     url = resolve_base_url(a.backend)
-    persona = ""
-    if a.persona:
-        persona_path = Path(a.persona)
-        if persona_path.exists():
-            items = json.loads(persona_path.read_text("utf-8"))
-            items = items if isinstance(items, list) else [items]
-            pick_ = next((p for p in items if p.get("name") == a.persona_name), items[0] if items else None)
-            if pick_:
-                persona = pick_.get("description", "")
-                if a.user_name == "User" and pick_.get("name"):
-                    user = pick_["name"]
-        else:
-            persona = a.persona  # plain text description
-    history: list[dict] = []
+
     if a.resume:
-        for m in import_chat_jsonl(Path(a.resume)).chats[0].messages:
-            history.append({"role": "user" if m.is_user else "assistant", "content": m.text})
-    elif d.get("first_mes"):
-        history.append({"role": "assistant",
-                        "content": d["first_mes"].replace("{{char}}", char).replace("{{user}}", user)})
+        save = Path(a.resume)
+        meta, rows = chatlog.load(save)
+    else:
+        save = Path(a.save_dir) / f"{char}.{datetime.now():%Y%m%d-%H%M%S}.jsonl"
+        meta, rows = {"user_name": user, "character_name": char}, []
+        if d.get("first_mes"):
+            rows.append(chatlog.row(char, False, d["first_mes"].replace("{{char}}", char).replace("{{user}}", user)))
+
+    print(f"── {char} · {a.model} @ {url} · /quit to exit ──")
     if persona:
-        print(f"(playing as {user}: persona loaded)")
-
-    save = Path(a.resume) if a.resume else Path(a.save_dir) / f"{char}.{datetime.now():%Y%m%d-%H%M%S}.jsonl"
-    save.parent.mkdir(parents=True, exist_ok=True)
-
-    print(f"── {char} · {a.model} @ {url} · /quit to exit ──\n")
-    for m in history[-6:]:
-        print(f"{char if m['role'] == 'assistant' else user}: {m['content']}\n")
+        print(f"(playing as {user}; persona loaded)")
+    print()
+    for r in rows[-6:]:
+        print(f"{r.get('name')}: {r.get('mes')}\n")
     while True:
         try:
             text = input(f"{user}: ").strip()
@@ -129,40 +104,48 @@ def cmd_chat(a: argparse.Namespace) -> int:
             break
         if looks_like_crisis(text):
             print(RESOURCES)
-        history.append({"role": "user", "content": text})
+        rows.append(chatlog.row(user, True, text, datetime.now().isoformat()))
         print(f"\n{char}: ", end="", flush=True)
         reply = []
         try:
-            for tok in stream_chat(url, a.model, build_messages(card, history, user, persona=persona),
+            for tok in stream_chat(url, a.model, build_messages(card, chatlog.to_history(rows), user, persona=persona),
                                    temperature=a.temperature, max_tokens=a.max_tokens):
                 print(tok, end="", flush=True)
                 reply.append(tok)
         except OSError as e:
             print(f"\n[error talking to {url}: {e}]")
-            history.pop()
+            rows.pop()
             continue
         print("\n")
-        history.append({"role": "assistant", "content": "".join(reply)})
-        _save(save, history, char, user)
+        rows.append(chatlog.row(char, False, "".join(reply), datetime.now().isoformat()))
+        chatlog.save(save, meta, rows)
     print(f"Chat saved to {save}")
     return 0
 
 
-def _save(path: Path, history: list[dict], char: str, user: str) -> None:
-    lines = [{"user_name": user, "character_name": char}]
-    lines += [{"name": user if m["role"] == "user" else char, "is_user": m["role"] == "user",
-               "mes": m["content"]} for m in history]
-    path.write_text("\n".join(json.dumps(l, ensure_ascii=False) for l in lines) + "\n", "utf-8")
+def cmd_ui(a: argparse.Namespace) -> int:
+    from .webui.server import serve
+    return serve(port=a.port, open_browser=not a.no_browser,
+                 library=Path(a.library) if a.library else default_library())
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if not argv:
+        argv = ["ui"]
     p = argparse.ArgumentParser(prog="localcai", description="Bring your characters home.")
     p.add_argument("--version", action="version", version=f"localCAI {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
+    pu = sub.add_parser("ui", help="open the app in your browser")
+    pu.add_argument("--port", type=int, default=8765)
+    pu.add_argument("--no-browser", action="store_true")
+    pu.add_argument("--library", help="library folder (default: ~/.localcai/library)")
+    pu.set_defaults(fn=cmd_ui)
+
     pi = sub.add_parser("import", help="convert exported chats/characters")
     pi.add_argument("path")
-    pi.add_argument("-o", "--output", default="localcai_out")
+    pi.add_argument("-o", "--output", help="output folder (default: your library)")
     pi.add_argument("--swap-roles", action="store_true", help="fix chats where user/character are swapped")
     pi.add_argument("--user-name", help="your display name in the converted chats")
     pi.set_defaults(fn=cmd_import)
@@ -172,12 +155,12 @@ def main(argv: list[str] | None = None) -> int:
     pm.add_argument("--backend", default="ollama", help=backend_help)
     pm.set_defaults(fn=cmd_models)
 
-    pc = sub.add_parser("chat", help="chat with a card on a local model")
+    pc = sub.add_parser("chat", help="chat in the terminal")
     pc.add_argument("card")
     pc.add_argument("--model", required=True)
     pc.add_argument("--backend", default="ollama", help=backend_help)
-    pc.add_argument("--user-name", default="User")
-    pc.add_argument("--persona", help="personas.json from `localcai import`, or a plain-text description of you")
+    pc.add_argument("--user-name")
+    pc.add_argument("--persona", help="personas.json from an import, or a plain-text description of you")
     pc.add_argument("--persona-name", help="which persona to use if the file has several")
     pc.add_argument("--resume", help="continue an existing .jsonl chat")
     pc.add_argument("--save-dir", default="localcai_chats")

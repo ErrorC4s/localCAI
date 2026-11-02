@@ -1,99 +1,113 @@
 # localCAI
 
-**把你的角色和回憶帶回家。** / **Bring your characters home.**
+**Bring your characters home.**
 
-localCAI turns your Character.AI exports (your chats, pinned messages and the characters you created) into open, portable files, then lets you keep chatting with them on **a local model you choose**. No cloud, no filters you didn't pick, and no platform that can take them away.
+localCAI moves your Character.AI chats, pinned messages, memories, personas and the characters you created into open, portable files, then lets you keep chatting with them on **a local model you choose**. No cloud, no filters you didn't pick, and no platform that can take them away.
 
-> ⚠️ localCAI is an independent, community project. It is **not affiliated with, endorsed by, or sponsored by Character Technologies, Inc.** ("Character.AI").
+> ⚠️ localCAI is an independent community project. It is **not affiliated with, endorsed by, or sponsored by Character Technologies, Inc.** ("Character.AI").
 
----
+## How it works
 
-## 中文說明
+1. **Extract**: the localCAI Extractor browser extension saves your chats from character.ai as a `.lcai.json` file.
+2. **Import**: drag that file into the localCAI app.
+3. **Chat**: pick a local model from a dropdown and continue where you left off.
 
-### 它能做什麼
-- **匯入**：官方「Export Data」檔、CAI Tools 匯出的 Tavern / SillyTavern 格式、Wilds AI Exporter 的 JSON、Tavern 角色卡（JSON / PNG）
-- **萃取角色設定**：名字、標語、描述、開場白、定義（`END_OF_DIALOG` 會自動轉成 `<START>`）
-- **萃取對話紀錄**：保留重骰（swipes）的其他候選回覆
-- **釘選 → 長期記憶**：C.ai 的釘選訊息會轉成「常駐」lorebook 條目，每次對話都會帶進 prompt
-- **輸出**：Character Card V2（`.card.json` + `.card.png`），SillyTavern、RisuAI、KoboldCpp 等都能直接讀
-- **自選本地模型**：Ollama、LM Studio、llama.cpp、KoboldCpp，或任何 OpenAI 相容 API
+## Install
 
-### 快速開始
-1. 安裝瀏覽器擴充功能（見 [`extension/README.md`](extension/README.md)），打開你的 C.ai 聊天 → 匯出 `.lcai.json`
-2. 轉換並開聊：
+You need **Python 3.10+** and a local model runner such as [Ollama](https://ollama.com), LM Studio, llama.cpp or KoboldCpp.
+
 ```bash
-pip install git+https://github.com/<you>/localCAI
-localcai import localcai-xxxx.lcai.json -o 我的角色
-ollama pull qwen3:4b
-localcai chat "我的角色/characters/Luna.card.png" --model qwen3:4b --user-name 你的名字
+pip install git+https://github.com/ErrorC4s/localCAI
+ollama pull qwen3:4b        # or any model you like
+localcai                    # opens the app in your browser
 ```
 
-### 原則
-- **只處理你自己的資料**：你的聊天、你的釘選、你建立的角色。localCAI 不會、也不打算去抓別人設成私密的角色定義。
-- **不呼叫 Character.AI 的非官方 API**：只讀你已經匯出的檔案，降低帳號被封的風險。
-- **完全本地**：沒有遙測、不會上傳任何東西。
-- **聊天功能限 18 歲以上**。若訊息看起來像是危機狀況，畫面上會顯示求助專線，不會中斷對話，也不會回報任何資料。
+### The browser extension
 
----
+See [`extension/README.md`](extension/README.md). Short version: open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the `extension` folder. Then open a chat on character.ai, **refresh the page**, scroll up to load older messages, click the localCAI icon and choose **Export .lcai.json**.
 
-## English
+## The app
 
-### What it does
-| Step | Details |
+Run `localcai` and it opens at `http://127.0.0.1:8765`:
+
+- **Import files**: drop in `.lcai.json`, CAI Tools / SillyTavern chats, Tavern character cards (JSON/PNG) or a `.zip`
+- **Backend / Model**: choose your runner and model from dropdowns (custom URLs in ⚙ Settings)
+- **You are**: pick one of your C.ai personas so the character knows who you are
+- **Chats**: continue an imported chat or start a new one, stream replies, stop or regenerate
+- **⬇ Card**: download a Character Card V2 PNG for SillyTavern, RisuAI, etc.
+- ⚙ **Settings**: your name, creativity (temperature) and reply length
+
+Your library lives in `~/.localcai/library` (override with the `LOCALCAI_HOME` environment variable).
+
+## What gets carried over
+
+| From Character.AI | Becomes |
 |---|---|
-| Import | Official C.ai *Export Data* file, CAI Tools Tavern/SillyTavern exports, Wilds AI Exporter JSON, Tavern cards (JSON/PNG), `.zip` or whole folders |
-| Characters | name, tagline, description, greeting, definition (`END_OF_DIALOG` → `<START>`) |
-| Chats | full history, oldest-first, alternate candidates kept as swipes |
-| Pins → memory | pinned messages become **constant lorebook entries**, injected into every prompt |
-| Output | Character Card V2 (`.card.json` + `.card.png` with embedded `chara` chunk) and SillyTavern `.jsonl` chats |
-| Run | built-in chat against any OpenAI-compatible local server |
+| Character name, tagline, description, greeting | Character Card V2 fields |
+| Definition (only for **characters you created**) | Example dialogue (`END_OF_DIALOG` → `<START>`) |
+| Full chat history, oldest first | SillyTavern `.jsonl` chat |
+| Rerolled replies | Swipes |
+| 📌 Pinned messages | Always-on lorebook memories |
+| Chat memory ("conversation facts") | Always-on lorebook memories |
+| Your personas | Selectable "You are" profiles |
 
-### Quick start
+## Principles
+
+- **Your data only.** Your chats, your pins, characters you created. Other creators' private definitions are never exported (C.ai doesn't send them anyway).
+- **Passive extraction.** The extension reads what the C.ai web app already loads. It sends no requests of its own and never touches your login token.
+- **Minimal collection.** The extension only listens to an allowlist of chat/character endpoints. Billing, subscription, birthday and account details are never collected.
+- **Local-only.** No telemetry, nothing uploaded. The app only listens on `127.0.0.1`.
+- **Adults only for chat (18+)**, asked once. If a message looks like a crisis, help-line information is shown on screen. It never blocks the conversation or reports anything.
+
+## Command line
+
+Everything the app does is also available in a terminal:
+
 ```bash
-pip install git+https://github.com/<you>/localCAI
-localcai import my_export.zip -o my_characters
-localcai models --backend ollama          # see what you have
-localcai chat my_characters/characters/Luna.card.png --model qwen3:4b
+localcai import my_export.lcai.json            # into your library (or -o DIR)
+localcai models --backend ollama               # list models
+localcai chat ~/.localcai/library/characters/Luna.card.png --model qwen3:4b \
+    --persona ~/.localcai/library/personas/personas.json
 ```
-Backends: `ollama`, `lmstudio`, `llamacpp`, `koboldcpp`, or a full URL (`--backend http://host:port/v1`).
-Continue an old conversation with `--resume path/to/chat.jsonl`.
-Play as your C.ai persona with `--persona my_characters/personas/personas.json` (the model then knows who *you* are, just like on C.ai).
 
-### How to get your data out of Character.AI
-1. **localCAI Extractor (recommended)**: our own browser extension in [`extension/`](extension/). Open your chat, click *Export .lcai.json*. It's instant, and the format is our own ([spec](docs/lcai-format.md)), so nothing is guessed on import. Passive and read-only: it never sends requests of its own.
-2. **Official export** (fallback, works for phone-only users): Profile → Settings → Account → *Manage Account & Data* → *Export Data*. It arrives by email (can take weeks; the link expires).
-3. **Other extensions**: CAI Tools (SillyTavern format) or Wilds AI Exporter (JSON) also work.
-Feed any of those files, or a folder of them, to `localcai import`.
+Backends: `ollama`, `lmstudio`, `llamacpp`, `koboldcpp`, or a full URL (`--backend http://host:port/v1`). Continue a chat with `--resume path/to/chat.jsonl`.
 
-### Scope & ethics
-- **Your data only.** Your chats, your pins, characters you created. localCAI will not extract other creators' private definitions.
-- **No unofficial API scraping.** localCAI reads files you already exported.
-- **Local-only.** No telemetry, nothing uploaded.
-- **Adults only for chat (18+)**, asked once. If a message looks like a crisis, help-line info is shown on screen. It never blocks or reports anything.
+## Other ways to get your data
 
-### Known limitations (v0.1)
-- C.ai export formats aren't documented. The `cai_json` importer recognises characters and chat turns by shape. **If your file parses badly, please open an issue with a redacted sample of its structure.** That's the most useful contribution right now.
+- **Official export** (useful for phone-only users): Profile → Settings → Account → *Manage Account & Data* → *Export Data*. It arrives by email and can take weeks; the link expires after a few days.
+- **Other extensions**: CAI Tools (SillyTavern format) and Wilds AI Exporter (JSON) also import.
+
+## Known limitations
+
+- The official C.ai data export hasn't been tested against a real file yet. The importer recognises it by shape. If yours parses badly, please open an issue with a **redacted** sample of its structure.
+- C.ai lets you choose a different persona per chat, but that link isn't in the captured data yet, so you pick the persona in the app.
+- Live messages over WebSocket haven't been verified against the real site yet. History export is confirmed.
 - CAI Tools Tavern-format chats can have user/character swapped. localCAI warns when it notices; fix with `--swap-roles`.
-- Token budgeting is character-count based for now.
 
-### Roadmap
-- [x] Confirm the extractor's rules against a real (redacted) C.ai debug dump
+## Roadmap
+
+- [x] Confirm the extractor against real C.ai data (chats, swipes, pins, characters, personas, memory)
+- [x] Desktop-friendly app with buttons and dropdowns
+- [ ] Verify live-message capture over WebSocket
 - [ ] Extractor: "export all my chats" (opt-in, slow, one at a time)
-- [ ] Publish extractor on Chrome Web Store & Firefox Add-ons
-- [ ] Real-world fixtures for the official export & Wilds JSON
-- [ ] Desktop GUI (PySide6): drag in an export, pick a model, chat
-- [x] Persona import (your C.ai persona is exported and used in local chat)
-- [ ] Persona → SillyTavern persona
+- [ ] Publish the extension on the Chrome Web Store & Firefox Add-ons
+- [ ] Map personas to the chats they were used in
+- [ ] Persona → SillyTavern persona export
 - [ ] Group chats / rooms
 - [ ] Summarised long-term memory for very long chats
-- [ ] One-click installer that also sets up Ollama + a recommended small model
+- [ ] One-click installer that also sets up Ollama and a recommended small model
 
-### Development
+## Development
+
 ```bash
 pip install -e .[dev]
-pytest
+pytest                                            # unit tests
+python tests/e2e_ui/test_ui.py                    # web app, driven in headless Chromium
+NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs   # extension against a mocked character.ai
 ```
-Pure standard library, no runtime dependencies, so it stays easy to install for non-developers.
+
+Pure Python standard library at runtime, no dependencies, so it stays easy to install for non-developers. The `.lcai.json` format is documented in [`docs/lcai-format.md`](docs/lcai-format.md).
 
 ## License
+
 MIT
