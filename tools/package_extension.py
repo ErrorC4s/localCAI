@@ -32,6 +32,13 @@ def build(target: str) -> Path:
 
 
 if __name__ == "__main__":
+    import shutil
+    import sys
     for t in ("chrome", "firefox"):
         p = build(t)
         print(f"{p.relative_to(ROOT)}  ({p.stat().st_size / 1024:.0f} KB)")
+        if "--publish" in sys.argv:  # also refresh the copies linked from the README
+            (ROOT / "downloads").mkdir(exist_ok=True)
+            for old in (ROOT / "downloads").glob(f"localcai-extractor-*-{t}.zip"):
+                old.unlink()
+            shutil.copy(p, ROOT / "downloads" / p.name)
