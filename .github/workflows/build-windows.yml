@@ -1,12 +1,27 @@
-name: Build Windows app
+name: Build & release
 
+# Every push to main that touches the app or the extension builds localCAI.exe and the
+# extension zips, and publishes them as the GitHub Release for the current version
+# (localcai/__init__.py → v<version>). Same version again = the release's files are updated.
 on:
   workflow_dispatch:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths:
+      - "localcai/**"
+      - "extension/**"
+      - "assets/**"
+      - "packaging/**"
+      - "tools/package_extension.py"
+      - "store/release-notes.md"
+      - ".github/workflows/build-windows.yml"
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: true
 
 jobs:
   windows:
@@ -16,6 +31,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Read version
+        shell: bash
+        run: echo "VERSION=$(python -c 'import localcai;print(localcai.__version__)')" >> "$GITHUB_ENV"
       - name: Build localCAI.exe
         shell: cmd
         run: |
@@ -26,20 +44,25 @@ jobs:
             --add-data "localcai\webui\static;localcai\webui\static" ^
             --collect-all webview ^
             packaging\exe_entry.py
+      - name: Smoke test the exe's bundle
+        shell: bash
+        run: test -s dist/localCAI.exe && ls -la dist/localCAI.exe
       - name: Package extension
         run: python tools/package_extension.py
       - uses: actions/upload-artifact@v4
         with:
-          name: localCAI-windows
+          name: localCAI-${{ env.VERSION }}-windows
           path: |
             dist/localCAI.exe
             dist/localcai-extractor-*.zip
-      - name: Attach to release (tag builds)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish release v${{ env.VERSION }}
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.VERSION }}
+          name: localCAI v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          body_path: store/release-notes.md
+          prerelease: true
           files: |
             dist/localCAI.exe
             dist/localcai-extractor-*.zip
-          body_path: store/release-notes.md
-          prerelease: true
