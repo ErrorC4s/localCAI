@@ -94,7 +94,7 @@ def test_cli_import_end_to_end(tmp_path, capsys):
 
 
 def test_lcai_from_extension_is_exact():
-    # produced by tests/extension/e2e.mjs against a mocked character.ai
+    # produced by tests/e2e_extension/e2e.mjs against a mocked character.ai
     b = import_path(FX / "extension_export.lcai.json")
     names = sorted(c.name for c in b.characters)
     assert names == ["Luna", "Rex"]
