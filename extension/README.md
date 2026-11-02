@@ -16,13 +16,13 @@ Saves **your own** Character.AI chats, pins, memories, personas, avatars, backgr
 
 1. Open character.ai and go to the chat you want to keep.
 2. **Refresh the page** (F5). The extension must be running before the page loads.
-3. **Scroll up to the oldest message.** The extension can only see what the page actually loads.
-4. Click the localCAI icon → **Export .lcai.json**. With *Include avatars & backgrounds* ticked (default), the pictures are downloaded from C.ai's image server and embedded in the file.
+3. Click the localCAI icon → **⏫ Load full history**. The extension scrolls the chat up for you, page by page, until C.ai says there's nothing older (you can stop it any time). It only scrolls: the page loads the messages itself, exactly as if you scrolled by hand.
+4. Click **Export .lcai.json**. With *Include avatars & backgrounds* ticked (default), the pictures are downloaded from C.ai's image server and embedded in the file.
 5. Drag the file into the localCAI app (or run `localcai import <file>`).
 
 ## How it works
 
-- **Passive**: it reads the responses the C.ai web app already receives. It never sends requests of its own.
+- **Passive**: it reads the responses the C.ai web app already receives. It never sends requests of its own; *Load full history* just scrolls the page, waiting for each page of messages and pausing briefly before the next.
 - **Allowlisted**: only chat, character, persona and memory endpoints are collected. Billing, subscription, birthday and account details are ignored.
 - **No credentials**: request headers and cookies are never read; query strings are stripped from URLs.
 - **Memory only**: captured data lives in that tab until you close it. Nothing is written to disk or sent anywhere.

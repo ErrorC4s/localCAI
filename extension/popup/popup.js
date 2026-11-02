@@ -25,6 +25,10 @@ async function refresh() {
     const s = await ask("stats");
     for (const k of ["characters", "chats", "turns", "pinned"]) $("s-" + k).textContent = s[k];
     $("export").disabled = !s.turns && !s.characters;
+    const job = s.job || {};
+    $("load-all").textContent = job.running ? "■ Stop loading" : "⏫ Load full history";
+    $("load-msg").hidden = !job.message;
+    $("load-msg").textContent = job.message || "";
     $("main").hidden = false;
   } catch {
     $("not-cai").hidden = false;
@@ -47,6 +51,11 @@ $("export").onclick = async () => {
   } finally { btn.disabled = false; }
 };
 $("raw").onclick = async () => download((await ask("raw")).doc, `localcai-raw-${stamp()}.json`);
+$("load-all").onclick = async () => {
+  const s = await ask("stats");
+  await ask(s.job && s.job.running ? "stopLoad" : "loadAll");
+  refresh();
+};
 $("clear").onclick = async () => { await ask("clear"); refresh(); };
 
 refresh();

@@ -36,7 +36,7 @@ Already use Ollama, LM Studio, llama.cpp or KoboldCpp? Just pick it in **Backend
 
 ### The browser extension
 
-See [`extension/README.md`](extension/README.md). Short version: open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the `extension` folder. Then open a chat on character.ai, **refresh the page**, scroll up to load older messages, click the localCAI icon and choose **Export .lcai.json**.
+See [`extension/README.md`](extension/README.md). Short version: open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the `extension` folder. Then open a chat on character.ai, **refresh the page**, click the localCAI icon, press **⏫ Load full history** (it scrolls the whole chat for you) and choose **Export .lcai.json**.
 
 ## The app
 
@@ -105,7 +105,8 @@ Backends: `ollama`, `lmstudio`, `llamacpp`, `koboldcpp`, or a full URL (`--backe
 - [x] Confirm the extractor against real C.ai data (chats, swipes, pins, characters, personas, memory)
 - [x] Desktop-friendly app with buttons and dropdowns
 - [ ] Verify live-message capture over WebSocket
-- [ ] Extractor: "export all my chats" (opt-in, slow, one at a time)
+- [x] Extractor: load a chat's full history automatically
+- [ ] Extractor: export all chats in one go
 - [ ] Publish the extension on the Chrome Web Store & Firefox Add-ons
 - [ ] Map personas to the chats they were used in
 - [ ] Persona → SillyTavern persona export
@@ -121,7 +122,8 @@ pip install -e .[dev]
 pytest                                            # unit tests
 python tests/e2e_ui/test_ui.py                    # web app, driven in headless Chromium
 python tests/e2e_ui/test_engine.py                # built-in engine with fake GitHub / Hugging Face / llama-server
-NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs   # extension against a mocked character.ai
+NODE_PATH=$(npm root -g) node tests/e2e_extension/e2e.mjs        # extension against a mocked character.ai
+NODE_PATH=$(npm root -g) node tests/e2e_extension/load_all.mjs   # "Load full history" auto-scroll
 ```
 
 Pure Python standard library at runtime, no dependencies, so it stays easy to install for non-developers. The `.lcai.json` format is documented in [`docs/lcai-format.md`](docs/lcai-format.md).
