@@ -611,3 +611,11 @@ def test_world_rule_rules_and_card_length():
     assert "[Rules for Mira, set by Sam: always follow these]\n- Never writes code." in sys
     assert reply_words_for("auto", [], {"data": d}) == 15
     assert reply_words_for("auto", [], None) == 120
+
+
+
+def test_rewrite_that_copies_the_original_is_dropped():
+    from localcai.runtime.guard import same_reply
+    a = '*Mira nods slowly.* "Okay, I think I can help with that."'
+    assert same_reply(a, a) and same_reply(a, a.replace("slowly", "slowly,"))
+    assert not same_reply(a, '*tilts head* "A what? ...Ask Tess."')

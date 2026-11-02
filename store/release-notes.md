@@ -1,4 +1,8 @@
-## localCAI v0.8.21 · Extractor 0.5.0
+## localCAI v0.8.22 · Extractor 0.5.0
+
+- OOC guard: if the rewrite comes out (nearly) the same as the first try, it's dropped: no duplicate reply and no misleading "auto-fixed" badge.
+
+### Earlier in v0.8.21
 
 **Staying in character, for every character**
 - **World boundary:** every character is told it only knows what someone in its own world would know. Things from outside (other games, AI, tech the setting doesn't have) get an in-character reaction, and the character never turns into an assistant or admits to being an AI.

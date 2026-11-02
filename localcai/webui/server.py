@@ -28,7 +28,7 @@ from .. import analyze
 from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
-from ..runtime.guard import check_reply
+from ..runtime.guard import check_reply, same_reply
 from ..runtime.client import other_speakers, strip_markers, strip_name_prefix, trim_to_sentence
 from ..runtime.prompt import PRONOUN_CHOICES, reply_words_for
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
@@ -602,6 +602,8 @@ def make_handler(app: App, port: int):
                         fixed = strip_markers(out).strip()
                         if info2.get("finish_reason") == "length":
                             fixed = trim_to_sentence(fixed)
+                        if same_reply(fixed, text_out):
+                            fixed = ""  # nothing really changed: keep one version, no "auto-fixed" badge
                     except OSError:
                         fixed = ""
             target = swipe_row

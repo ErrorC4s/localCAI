@@ -45,6 +45,14 @@ def length_issue(reply: str, target_words: int) -> str:
     return ""
 
 
+def same_reply(a: str, b: str, threshold: float = 0.9) -> bool:
+    """A "rewrite" that barely changed anything (the model just copied the first try)."""
+    import difflib
+    norm = lambda t: re.sub(r"\W+", " ", (t or "").lower()).strip()
+    x, y = norm(a), norm(b)
+    return x == y or difflib.SequenceMatcher(None, x, y).ratio() >= threshold
+
+
 def summarize_card(d: dict, limit: int = 700) -> str:
     parts = [d.get("creator_notes") or "", d.get("description") or "", d.get("personality") or ""]
     text = re.sub(r"\s+", " ", " ".join(p for p in parts if p)).strip()
