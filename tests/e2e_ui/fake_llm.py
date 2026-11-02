@@ -25,7 +25,7 @@ class H(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
-        for t in ["*sips tea* ", "Oolong ", "from **Alishan**~"]:
+        for t in ["*sips tea* ", "Oolong ", "from **Darjeeling**~"]:
             self.wfile.write(f"data: {json.dumps({'choices': [{'delta': {'content': t}}]})}\n\n".encode())
             self.wfile.flush()
         self.wfile.write(b"data: [DONE]\n\n")

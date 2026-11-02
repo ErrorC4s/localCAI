@@ -1,10 +1,10 @@
 {
   "format": "localcai",
   "version": 1,
-  "exported_at": "2026-11-02T02:29:41.735Z",
+  "exported_at": "2026-11-02T04:37:50.001Z",
   "exporter": {
     "name": "localCAI extension",
-    "version": "0.3.0",
+    "version": "0.5.0",
     "source": "character.ai"
   },
   "characters": [
@@ -83,7 +83,7 @@
           },
           "pinned": true,
           "candidates": [
-            "Remember: I love Alishan oolong."
+            "Remember: I love Darjeeling oolong."
           ],
           "primary": 0
         },

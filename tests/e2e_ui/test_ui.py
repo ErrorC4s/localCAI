@@ -94,11 +94,11 @@ def main(shot=None):
             page.keyboard.press("Enter")
             expect(page.locator("#age-dialog")).to_be_visible()
             page.click("#age-yes")
-            expect(page.locator(".msg").last.locator("strong")).to_have_text("Alishan")  # streamed + markdown
+            expect(page.locator(".msg").last.locator("strong")).to_have_text("Darjeeling")  # streamed + markdown
             expect(page.locator(".msg")).to_have_count(n_before + 2)
             sent = json.load(open(last, encoding="utf-8"))
             assert sent["model"] == "fake-model"
-            assert "Alishan" in sent["messages"][0]["content"], "pinned memory in prompt"
+            assert "Darjeeling" in sent["messages"][0]["content"], "pinned memory in prompt"
             assert sent["messages"][-1]["content"] == "What tea do I like?"
 
             # persona
@@ -179,7 +179,7 @@ def main(shot=None):
             page.click("#learn-style")   # confirm() accepted by the dialog handler
             expect(page.locator(".toast", has_text="Learned her style")).to_have_count(1, timeout=20000)
             card = json.loads((Path(home) / "library" / "characters" / "Luna.card.json").read_text("utf-8"))
-            assert "Alishan" in card["data"]["personality"], "style notes saved"
+            assert "Darjeeling" in card["data"]["personality"], "style notes saved"
             assert "Hello~" in card["data"]["mes_example"], "a creator's own example dialogue is never overwritten"
 
             # 📖 chat memory: generate the story so far, then it's used in the prompt

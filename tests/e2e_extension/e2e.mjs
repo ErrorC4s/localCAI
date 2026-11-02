@@ -58,7 +58,7 @@ const turn = (id, t, name, human, cands, primary, pinned = false) => {
 };
 const HISTORY = { turns: [ // newest first, like the real paginated endpoint
   turn("t3", "2026-10-01T10:03:00Z", "Luna", false, ["Fine, chamomile.", "Earl Grey, obviously."], 1),
-  turn("t2", "2026-10-01T10:02:00Z", "Alex", true, ["Remember: I love Alishan oolong."], 0, true),
+  turn("t2", "2026-10-01T10:02:00Z", "Alex", true, ["Remember: I love Darjeeling oolong."], 0, true),
   turn("t1", "2026-10-01T10:01:00Z", "Luna", false, ["*yawns* Oh, Alex..."], 0),
 ], meta: { next_token: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop" } };
 const WS_NEW = { command: "add_turn", turn: turn("t4", "2026-10-01T10:04:00Z", "Luna", false, ["Sweet dreams~"], 0) };

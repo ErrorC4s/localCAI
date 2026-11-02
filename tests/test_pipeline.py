@@ -36,7 +36,7 @@ def test_pins_become_constant_lore():
     book = pins_to_lorebook(b.chats, "Luna")
     assert len(book["entries"]) == 1
     e = book["entries"][0]
-    assert e["constant"] and "Alishan" in e["content"]
+    assert e["constant"] and "Darjeeling" in e["content"]
 
 
 def test_card_png_roundtrip(tmp_path):
@@ -65,7 +65,7 @@ def test_prompt_includes_pins_and_fills_macros():
     card = to_card_v2(b.characters[0], pins_to_lorebook(b.chats, "Luna"))
     msgs = build_messages(card, [{"role": "user", "content": "hi"}], user_name="Alex")
     system = msgs[0]["content"]
-    assert "Alishan" in system
+    assert "Darjeeling" in system
     assert "{{user}}" not in system and "Alex" in system
     assert msgs[-1] == {"role": "user", "content": "hi"}
 
@@ -106,7 +106,7 @@ def test_lcai_from_extension_is_exact():
     assert chat.messages[2].alternatives == ["Fine, chamomile."]
     assert len(chat.pins) == 1 and chat.pins[0].is_user
     book = pins_to_lorebook(b.chats, "Luna")
-    assert "Alishan" in book["entries"][0]["content"]
+    assert "Darjeeling" in book["entries"][0]["content"]
 
 
 def test_lcai_memories_and_personas():
@@ -203,7 +203,7 @@ def test_reimport_merges_instead_of_duplicating(tmp_path):
     files = list((tmp_path / "lib" / "chats").glob("Luna.*.jsonl"))
     assert len(files) == 1, "same C.ai chat must stay one file"
     _, rows = chatlog.load(files[0])
-    assert [r["mes"] for r in rows][:2] == ["*yawns* Oh, Alex...", "Remember: I love Alishan oolong."]
+    assert [r["mes"] for r in rows][:2] == ["*yawns* Oh, Alex...", "Remember: I love Darjeeling oolong."]
     assert len(rows) == 5 and rows[-1]["mes"] == "local message"  # 4 imported + 1 local, nothing lost
     # importing the partial one again must not drop the older history
     import_into(tmp_path / "a.lcai.json", tmp_path / "lib")

@@ -25,7 +25,7 @@
       {
         "create_time": "2026-10-01T10:02:00Z",
         "author": {"name": "Alex", "is_human": true},
-        "candidates": [{"candidate_id": "u2", "raw_content": "My favourite tea is oolong from Alishan, remember that."}],
+        "candidates": [{"candidate_id": "u2", "raw_content": "My favourite tea is oolong from Darjeeling, remember that."}],
         "primary_candidate_id": "u2",
         "is_pinned": true
       },
