@@ -257,3 +257,27 @@ def test_prompt_has_story_and_recall_sections():
     sys = msgs[0]["content"]
     assert "[The story so far between Mira and Alex]" in sys and "lighthouse" in sys
     assert "[Earlier moments that may be relevant now]" in sys and "Misty" in sys
+
+
+def test_orphan_engine_is_stopped_but_other_programs_are_not(tmp_path, monkeypatch):
+    import subprocess, sys, time, os
+    monkeypatch.setenv("LOCALCAI_HOME", str(tmp_path))
+    from localcai import engine
+    (tmp_path / "engine").mkdir()
+    fake = tmp_path / "llama-server"
+    fake.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(60)\n")
+    fake.chmod(0o755)
+    orphan = subprocess.Popen([str(fake)])
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        time.sleep(0.3)
+        (tmp_path / "engine" / "engine.pid").write_text(str(other.pid))
+        engine.kill_orphan()
+        assert other.poll() is None, "never kill a process that isn't llama-server"
+        (tmp_path / "engine" / "engine.pid").write_text(str(orphan.pid))
+        engine.kill_orphan()
+        orphan.wait(5)
+        assert orphan.poll() is not None and not (tmp_path / "engine" / "engine.pid").exists()
+    finally:
+        for pr in (orphan, other):
+            pr.kill()

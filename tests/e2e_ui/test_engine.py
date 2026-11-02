@@ -104,6 +104,8 @@ def main():
             expect(page.locator("#eng-status")).to_contain_text("Not installed")
             page.click("#eng-install")
             expect(page.locator("#eng-status")).to_contain_text("llama-b9999-bin-ubuntu-vulkan-x64.tar.gz", timeout=20000)
+            page.click("#eng-install")   # same version again: skipped, not re-downloaded
+            expect(page.locator("#eng-msg")).to_contain_text("Already up to date", timeout=20000)
             page.click("#eng-download")
             expect(page.locator("#eng-models li", has_text=MODEL)).to_have_count(1, timeout=20000)
             page.click("#eng-close")
@@ -125,6 +127,8 @@ def main():
 
             st = json.load(urllib.request.urlopen(f"http://127.0.0.1:{UI_PORT}/api/engine"))
             assert st["state"] == "ready" and st["model"] == MODEL
+            pid_file = Path(home, "engine", "engine.pid")
+            assert pid_file.exists(), "engine PID recorded"
             page.click("#open-engine"); page.click("#eng-stop"); page.click("#eng-close")
             expect(page.locator("#engine-chip")).to_have_text("● engine off")
         server = Path(home, "engine", "b9999", "llama-b9999", "llama-server")

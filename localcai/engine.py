@@ -150,6 +150,56 @@ def list_slot_models() -> list[dict]:
     return out
 
 
+def cleanup_old_versions() -> None:
+    """Remove engine folders other than the installed one (skips anything still in use)."""
+    try:
+        keep = Path(json.loads((engine_dir() / "engine.json").read_text("utf-8"))["server"]).resolve()
+    except (OSError, ValueError, KeyError):
+        return
+    for d in engine_dir().iterdir():
+        if d.is_dir() and d not in keep.parents:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def _pid_file() -> Path:
+    return engine_dir() / "engine.pid"
+
+
+def _is_our_engine(pid: int) -> bool:
+    """True only if that PID is a llama-server, so we never touch unrelated programs."""
+    try:
+        if sys.platform == "win32":
+            out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"], capture_output=True,
+                                 text=True, timeout=5, creationflags=0x08000000).stdout
+            return "llama-server" in out.lower()
+        cmd = Path(f"/proc/{pid}/cmdline")
+        if cmd.exists():
+            return "llama-server" in cmd.read_bytes().decode("utf-8", "replace")
+        out = subprocess.run(["ps", "-p", str(pid), "-o", "comm="], capture_output=True, text=True, timeout=5).stdout
+        return "llama-server" in out
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def kill_orphan() -> None:
+    """Stop an engine a previous localCAI run left behind (crash, closed console, old version)."""
+    try:
+        pid = int(_pid_file().read_text().strip())
+    except (OSError, ValueError):
+        return
+    if pid != os.getpid() and _is_our_engine(pid):
+        try:
+            if sys.platform == "win32":
+                subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=10,
+                               creationflags=0x08000000)
+            else:
+                os.kill(pid, 15)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        time.sleep(0.5)
+    _pid_file().unlink(missing_ok=True)
+
+
 # ── the engine ─────────────────────────────────────────────────────────────
 class Engine:
     def __init__(self):
@@ -203,7 +253,8 @@ class Engine:
         def run():
             try:
                 fn()
-                self.job.update(progress=1.0, done=True, message="Done")
+                self.job.update(progress=1.0, done=True,
+                                message=self.job.get("final") or "Done")
             except Exception as e:  # report any failure to the UI
                 self.job.update(done=True, error=str(e) or e.__class__.__name__, message="Failed")
         threading.Thread(target=run, daemon=True).start()
@@ -235,10 +286,17 @@ class Engine:
         if not asset:
             raise RuntimeError(f"Couldn't find a llama.cpp build for {system}-{arch} in the {len(releases)} newest "
                                "releases. Try again later, or use Ollama / LM Studio as the backend.")
+        current = self.installed()
+        if current and current.get("asset") == asset["name"]:
+            self.job and self.job.update(final=f"Already up to date ({rel.get('tag_name')}).")
+            return current
         self.stop()
+        kill_orphan()
         target = engine_dir() / rel.get("tag_name", "latest")
         if target.exists():
-            shutil.rmtree(target)
+            shutil.rmtree(target, ignore_errors=True)
+        if target.exists():  # files still locked (e.g. an engine started by another program): use a new folder
+            target = engine_dir() / f"{rel.get('tag_name', 'latest')}-{int(time.time())}"
         target.mkdir(parents=True)
         archive = target / asset["name"]
         _download(asset["browser_download_url"], archive, self._progress(f"Downloading {asset['name']}"))
@@ -256,9 +314,7 @@ class Engine:
                     f.chmod(f.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         info = {"tag": rel.get("tag_name"), "asset": asset["name"], "server": str(server), "variant": variant}
         (engine_dir() / "engine.json").write_text(json.dumps(info, indent=2), "utf-8")
-        for old in engine_dir().iterdir():  # keep only the current version
-            if old.is_dir() and old != target:
-                shutil.rmtree(old, ignore_errors=True)
+        cleanup_old_versions()
         return info
 
     def download_model_async(self, key: str) -> bool:
@@ -305,8 +361,10 @@ class Engine:
             cmd = [str(server), "-m", str(path), "--host", "127.0.0.1", "--port", str(self.port),
                    "-c", str(int(ctx)), "-ngl", str(int(gpu_layers)), "--jinja"]
             flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
+            kill_orphan()
             self.proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=server.parent,
                                          env=env, creationflags=flags)
+            _pid_file().write_text(str(self.proc.pid))
             self.model, self.state, self.error = model, "starting", ""
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -350,6 +408,7 @@ class Engine:
                 except subprocess.TimeoutExpired:
                     self.proc.kill()
             self.proc, self.state = None, "off"
+            _pid_file().unlink(missing_ok=True)
 
 
 ENGINE = Engine()

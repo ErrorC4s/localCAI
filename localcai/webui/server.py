@@ -523,6 +523,8 @@ def create_server(port: int = 8765, library: Path | None = None) -> ThreadingHTT
         (lib / sub).mkdir(parents=True, exist_ok=True)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(App(lib), port))
     httpd.library = lib
+    from ..engine import kill_orphan
+    kill_orphan()  # free the GPU from an engine a previous run left behind
     atexit.register(ENGINE.stop)  # never leave a model running in the background
     return httpd
 

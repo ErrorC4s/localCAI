@@ -117,7 +117,8 @@ async function refreshEngine() {
   if (busy) engineTimer = setTimeout(refreshEngine, 1000);
   if (st.job && st.job.done && S.handledJob !== st.job.id) {  // a download finished (handle each job once)
     if (S.handledJob !== undefined) {
-      if (st.job.error) toast(st.job.error, "error"); else toast(st.job.kind === "install" ? "Engine installed." : "Model downloaded.");
+      if (st.job.error) toast(st.job.error, "error");
+      else toast(st.job.message && st.job.message !== "Done" ? st.job.message : st.job.kind === "install" ? "Engine installed." : "Model downloaded.");
     }
     S.handledJob = st.job.id;
     loadModels();
