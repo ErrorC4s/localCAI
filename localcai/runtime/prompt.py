@@ -62,7 +62,7 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         parts.append(f"[The story so far between {char} and {user_name}]\n{story}")
     if d.get("mes_example"):
         parts.append("[Example dialogue — style reference only]\n" + d["mes_example"])
-    char_pr = guess_pronouns(" ".join(str(d.get(k) or "") for k in ("description", "personality", "scenario")))
+    char_pr = character_pronouns(d)
     user_pr = user_pronouns or guess_pronouns(persona)
     parts.append(perspective_block(char, user_name, char_pr, user_pr))
     if pacing:
@@ -126,6 +126,24 @@ def guess_pronouns(text: str) -> str:
     if he >= 2 and he >= 2 * she:
         return "he/him"
     return ""
+
+
+PRONOUN_CHOICES = ("she/her", "he/him", "they/them", "group")
+
+
+def character_pronouns(d: dict) -> str:
+    """The character's pronouns: set by the user in Edit, else guessed from the card.
+    "group" (a bot that plays several characters) means: don't state any."""
+    set_ = ((d.get("extensions") or {}).get("localcai") or {}).get("pronouns", "")
+    if set_ in PRONOUN_CHOICES:
+        return "" if set_ == "group" else set_
+    return guess_card_pronouns(d)
+
+
+def guess_card_pronouns(d: dict) -> str:
+    # greetings and descriptions usually talk about the character in third person ("*She smiles*")
+    return guess_pronouns(" ".join(str(d.get(k) or "") for k in
+                                   ("description", "personality", "scenario", "first_mes", "creator_notes")))
 
 
 def perspective_block(char: str, user: str, char_pr: str = "", user_pr: str = "") -> str:

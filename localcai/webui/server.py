@@ -29,17 +29,18 @@ from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
 from ..runtime.client import other_speakers, strip_name_prefix, trim_to_sentence
-from ..runtime.prompt import reply_words_for
+from ..runtime.prompt import PRONOUN_CHOICES, reply_words_for
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
-                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns"}
+                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns", "persona_pronouns"}
 DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
             "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True,
-            "gpu_device": "auto", "reply_length": "auto", "pacing": True, "user_pronouns": ""}
+            "gpu_device": "auto", "reply_length": "auto", "pacing": True, "user_pronouns": "",
+            "persona_pronouns": {}}
 
 # Background jobs (history analysis). One at a time; the UI polls /api/job.
 JOB: dict = {}
@@ -370,6 +371,11 @@ def make_handler(app: App, port: int):
                 for k, v in (body.get("data") or {}).items():
                     if k in editable and isinstance(v, str):
                         d[k] = v
+                if "pronouns" in body:
+                    pr = str(body["pronouns"] or "")
+                    if pr and pr not in PRONOUN_CHOICES:
+                        raise ValueError("unknown pronouns")
+                    d.setdefault("extensions", {}).setdefault("localcai", {})["pronouns"] = pr
                 jp.write_text(json.dumps(card, ensure_ascii=False, indent=2), "utf-8")
                 from ..exporters import embed_card_in_png
                 pp.write_bytes(embed_card_in_png(pp.read_bytes(), card))  # keep the PNG card in sync
@@ -494,7 +500,8 @@ def make_handler(app: App, port: int):
                                   story=story, recalled=recalled,
                                   reply_words=reply_words_for(str(s.get("reply_length", "auto")), history),
                                   pacing=s.get("pacing", True) is not False,
-                                  user_pronouns=str(s.get("user_pronouns") or ""))
+                                  user_pronouns=str((s.get("persona_pronouns") or {}).get(s.get("persona") or "", "")
+                                                    or s.get("user_pronouns") or ""))
             info: dict = {}
             # Built-in engine: sampler settings that keep small models from rambling and looping.
             extra = ({"top_p": 0.9, "top_k": 40, "min_p": 0.05, "repeat_penalty": 1.08}

@@ -459,3 +459,16 @@ def test_perspective_and_pronouns():
 
     msgs2 = build_messages(card, [{"role": "user", "content": "*I smile*"}], "Sam", user_pronouns="he/him")
     assert "talking with Sam (he/him)" in msgs2[0]["content"]
+
+
+def test_character_pronouns_setting_and_guess():
+    from localcai.runtime.prompt import build_messages, character_pronouns
+    assert character_pronouns({"first_mes": "*She tilts her head and smiles.*"}) == "she/her"
+    group = {"description": "Bram, Tess and Jo. He is old. She is loud. He is quiet. She bites.", }
+    assert character_pronouns(group) == ""  # mixed cast: don't guess
+    d = {"description": "A ghost.", "extensions": {"localcai": {"pronouns": "he/him"}}}
+    assert character_pronouns(d) == "he/him"
+    d2 = {"name": "Bram", "description": "She she she", "extensions": {"localcai": {"pronouns": "group"}}}
+    assert character_pronouns(d2) == ""
+    msgs = build_messages({"data": d2}, [{"role": "user", "content": "hi"}], "Sam")
+    assert "You play Bram. You are talking with Sam." in msgs[0]["content"]

@@ -118,6 +118,7 @@ def _find(folder: Path, stem: str) -> str | None:
 
 
 def list_library(lib: Path) -> dict:
+    from .runtime.prompt import guess_card_pronouns, guess_pronouns
     chars = []
     for jp in sorted((lib / "characters").glob("*.card.json")):
         try:
@@ -141,9 +142,13 @@ def list_library(lib: Path) -> dict:
                       "has_avatar": bool(local.get("has_avatar")),
                       "background": _find(lib / "characters", f"{stem}.background"),
                       "tagline": d.get("creator_notes", ""), "creator": d.get("creator", ""),
-                      "memories": len(book.get("entries", [])), "chats": chats})
+                      "memories": len(book.get("entries", [])), "chats": chats,
+                      "pronouns": local.get("pronouns", ""), "pronouns_guess": guess_card_pronouns(d)})
     pfile = lib / "personas" / "personas.json"
     personas = json.loads(pfile.read_text("utf-8")) if pfile.exists() else []
+    for p in personas if isinstance(personas, list) else []:
+        if isinstance(p, dict):
+            p["pronouns_guess"] = guess_pronouns(str(p.get("description") or p.get("persona") or ""))
     return {"characters": chars, "personas": personas}
 
 

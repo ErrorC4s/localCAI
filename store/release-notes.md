@@ -1,4 +1,11 @@
-## localCAI v0.8.12 · Extractor 0.5.0
+## localCAI v0.8.13 · Extractor 0.5.0
+
+**Pronouns you can see and fix, for every character and persona**
+- Each character's pronouns are guessed from its description and greeting, shown in the chat header (e.g. "she/her (guessed)"), and can be set in ✎ Edit: she/her, he/him, they/them, or "Several characters" for group / narrator bots (then no pronouns are assumed).
+- Your pronouns are saved per persona in ⚙ Settings, so different personas can differ.
+- If nothing can be guessed, the header says so instead of the model quietly assuming.
+
+### Earlier in v0.8.12
 
 **Fewer role mix-ups**
 - C.ai chats are written in first person on both sides, which confuses small models ("I" in your message is you, "I" in the reply is the character). The prompt now spells out who is who, and each turn reminds the model that "I" in your message means you.

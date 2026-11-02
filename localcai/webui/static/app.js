@@ -182,6 +182,19 @@ function renderCharacters() {
   $("welcome").hidden = !!S.character;
 }
 
+const PRONOUN_NAMES = { "she/her": "she/her", "he/him": "he/him", "they/them": "they/them", group: "several characters" };
+function pronounLabel(c) {
+  if (c.pronouns) return PRONOUN_NAMES[c.pronouns] || c.pronouns;
+  return c.pronouns_guess ? `${c.pronouns_guess} (guessed)` : "pronouns unknown — set them in Edit";
+}
+function pronounSelect(current, guess, guessText, extra = true) {
+  const sel = document.createElement("select");
+  sel.add(new Option(guess ? `Auto (${guessText}: ${guess})` : `Auto (couldn't tell — please pick one)`, ""));
+  for (const v of ["she/her", "he/him", "they/them"]) sel.add(new Option(v, v));
+  if (extra) sel.add(new Option("Several characters (a group / narrator bot)", "group"));
+  sel.value = current || "";
+  return sel;
+}
 function charInfo(file) { return S.state.library.characters.find((c) => c.file === file); }
 
 async function openCharacter(file, chatFile) {
@@ -192,7 +205,7 @@ async function openCharacter(file, chatFile) {
   $("chat-view").hidden = false;
   $("head-name").textContent = c.name;
   avatar($("head-avatar"), c.name, charAvatar(c));
-  $("head-sub").textContent = [c.tagline, c.creator && `by ${c.creator}`, `${c.memories} memories`].filter(Boolean).join(" · ");
+  $("head-sub").textContent = [c.tagline, c.creator && `by ${c.creator}`, `${c.memories} memories`, pronounLabel(c)].filter(Boolean).join(" · ");
   $("download-card").href = `/api/card/${encodeURIComponent(file)}.png`;
   const pick = $("chat-picker");
   pick.innerHTML = "";
@@ -417,6 +430,11 @@ const CHAR_FIELDS = [["description", "Description"], ["personality", "Personalit
 $("edit-char").onclick = async () => {
   if (!S.card) { const r = await api(`/api/chat?character=${enc(S.character)}&chat=${enc(S.chat || "")}`).catch(() => null); if (r) S.card = r.card; }
   const box = $("char-fields"); box.innerHTML = "";
+  const ci = charInfo(S.character);
+  const pl = document.createElement("label"); pl.className = "field";
+  pl.textContent = "Pronouns (so the model keeps who's who straight)";
+  const ps = pronounSelect(ci.pronouns, ci.pronouns_guess, "guessed from the description"); ps.id = "char-pronouns";
+  pl.appendChild(ps); box.appendChild(pl);
   for (const [k, label] of CHAR_FIELDS) {
     const l = document.createElement("label"); l.className = "field"; l.textContent = label;
     const ta = document.createElement("textarea"); ta.dataset.key = k; ta.rows = k === "creator_notes" ? 1 : 4;
@@ -430,7 +448,7 @@ $("char-save").onclick = async () => {
   const data = {};
   for (const ta of $("char-fields").querySelectorAll("textarea")) data[ta.dataset.key] = ta.value;
   try {
-    const r = await api("/api/character/save", { json: { character: S.character, data } });
+    const r = await api("/api/character/save", { json: { character: S.character, data, pronouns: $("char-pronouns").value } });
     S.card = r.card; $("char-dialog").close(); await loadState(); openCharacter(S.character, S.chat); toast("Character saved.");
   } catch (e) { toast(e.message, "error"); }
 };
@@ -478,7 +496,14 @@ $("open-settings").onclick = () => {
   $("set-reply-length").value = s.reply_length || "auto";
   $("set-recall").checked = s.recall !== false;
   $("set-pacing").checked = s.pacing !== false;
-  $("set-pronouns").value = s.user_pronouns || "";
+  {
+    const who = $("persona").value, p = personaInfo();
+    const map = s.persona_pronouns || {};
+    const sel = pronounSelect(who in map ? map[who] : (who ? "" : s.user_pronouns), p && p.pronouns_guess,
+      "guessed from your persona", false);
+    sel.id = "set-pronouns"; $("set-pronouns").replaceWith(sel);
+    $("pronouns-who").textContent = who ? `as "${who}"` : "(no persona)";
+  }
   $("set-engine-variant").value = s.engine_variant; $("set-ctx").value = s.ctx_size; $("set-ngl").value = s.gpu_layers;
   api("/api/engine/devices").then((r) => {
     const sel = $("set-gpu"); sel.length = 2;
@@ -497,7 +522,7 @@ $("settings-save").onclick = async () => {
     engine_variant: $("set-engine-variant").value,
     recall: $("set-recall").checked,
     pacing: $("set-pacing").checked,
-    user_pronouns: $("set-pronouns").value,
+    persona_pronouns: { ...(S.state.settings.persona_pronouns || {}), [$("persona").value]: $("set-pronouns").value },
     ctx_size: parseInt($("set-ctx").value, 10) || 8192,
     gpu_layers: Math.max(0, parseInt($("set-ngl").value, 10) || 0),
     gpu_device: $("set-gpu").value };

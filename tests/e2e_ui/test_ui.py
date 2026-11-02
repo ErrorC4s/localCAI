@@ -177,8 +177,10 @@ def main(shot=None):
             # edit the character
             page.click("#edit-char")
             page.fill("#char-fields textarea[data-key='description']", "Lives on the moon. Loves riddles.")
+            page.select_option("#char-pronouns", "she/her")
             page.click("#char-save")
             expect(page.locator(".toast", has_text="Character saved")).to_have_count(1)
+            expect(page.locator("#head-sub")).to_contain_text("she/her")
             page.fill("#input", "riddle me")
             page.click("#send")
             page.wait_for_timeout(800)
