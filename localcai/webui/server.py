@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .. import __version__, chatlog
-from ..library import import_into, list_library
+from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
@@ -174,6 +174,10 @@ def make_handler(app: App, port: int):
                     return self.send_json(settings())
                 if path == "/api/import":
                     return self.do_import()
+                if path == "/api/character/delete":
+                    with app.lock:
+                        n = delete_character(app.lib, self.body_json()["character"])
+                    return self.send_json({"moved": n})
                 if path in ("/api/chat/new", "/api/chat/send", "/api/chat/regenerate"):
                     if not settings()["age_confirmed"]:
                         return self.send_json({"error": "Please confirm you are 18 or older first."}, 403)

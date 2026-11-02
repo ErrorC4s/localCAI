@@ -133,6 +133,15 @@ async function openCharacter(file, chatFile) {
   if (chatFile || c.chats.length) await openChat(chatFile || c.chats[0].file);
   else { S.chat = null; S.rows = []; applyBackground(); renderMessages(); }
 }
+$("delete-char").onclick = async () => {
+  const c = charInfo(S.character);
+  if (!c || !confirm(`Delete "${c.name}" and its ${c.chats.length} chat(s)?\n\nThey're moved to the library's trash folder, so you can still recover them.`)) return;
+  await api("/api/character/delete", { json: { character: S.character } });
+  S.character = null; S.chat = null;
+  $("chat-view").hidden = true;
+  await loadState();
+  toast(`Deleted ${c.name}.`);
+};
 $("chat-picker").onchange = () => openChat($("chat-picker").value);
 
 function applyBackground() {

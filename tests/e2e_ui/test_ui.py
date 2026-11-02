@@ -145,6 +145,15 @@ def main(shot=None):
             assert page.evaluate("typeof render") == "function"
             assert "<img" not in page.evaluate("render('<img src=x onerror=alert(1)>')")
 
+            # delete Rex (moved to trash, not destroyed)
+            page.click(".char-item:has-text('Rex')")
+            page.once("dialog", lambda d: d.accept())
+            page.click("#delete-char")
+            expect(page.locator(".char-item")).to_have_count(1)
+            assert list(Path(home, "library", "trash").rglob("Rex.card.json")), "Rex should be in trash"
+            assert http("POST", "/api/character/delete", {"X-LocalCAI": "1", "Content-Type": "application/json"},
+                        b'{"character": "../personas/personas"}') == 400, "delete path traversal"
+
             if shot:
                 page.click(".char-item:has-text('Luna')")
                 page.select_option("#chat-picker", index=1)

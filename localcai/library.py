@@ -145,3 +145,24 @@ def list_library(lib: Path) -> dict:
     pfile = lib / "personas" / "personas.json"
     personas = json.loads(pfile.read_text("utf-8")) if pfile.exists() else []
     return {"characters": chars, "personas": personas}
+
+
+def delete_character(lib: Path, file_stem: str) -> int:
+    """Move a character's card, background and chats to library/trash/<timestamp>/ (recoverable)."""
+    from datetime import datetime
+    if not file_stem or "/" in file_stem or "\\" in file_stem or file_stem.startswith("."):
+        raise ValueError("bad name")
+    card = lib / "characters" / f"{file_stem}.card.json"
+    if not card.exists():
+        raise FileNotFoundError(file_stem)
+    trash = lib / "trash" / datetime.now().strftime("%Y%m%d-%H%M%S")
+    moved = 0
+    targets = list((lib / "characters").glob(f"{file_stem}.card.*")) + \
+        list((lib / "characters").glob(f"{file_stem}.background.*")) + \
+        list((lib / "chats").glob(f"{file_stem}.*"))
+    for f in targets:
+        dest = trash / f.parent.name / f.name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        f.replace(dest)
+        moved += 1
+    return moved
