@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1>localCAI</h1>
+  <p class="sub">把你的角色帶回家 · Bring your characters home</p>
+
+  <div id="not-cai" class="note" hidden>請先打開 character.ai 的聊天頁面。<br>Open a chat on character.ai first.</div>
+
+  <div id="main" hidden>
+    <dl class="stats">
+      <div><dt>角色 Characters</dt><dd id="s-characters">0</dd></div>
+      <div><dt>聊天 Chats</dt><dd id="s-chats">0</dd></div>
+      <div><dt>訊息 Messages</dt><dd id="s-turns">0</dd></div>
+      <div><dt>釘選 Pinned</dt><dd id="s-pinned">0</dd></div>
+    </dl>
+    <p class="hint">只會收集你在這個分頁打開過的聊天。往上滑可以載入更早的訊息。<br>
+      Only chats you open in this tab are captured. Scroll up to load older messages.</p>
+    <button id="export" class="primary">匯出 .lcai.json</button>
+    <button id="raw">除錯：原始資料（已遮蔽 token）</button>
+    <button id="clear" class="ghost">清除 Clear</button>
+  </div>
+
+  <p class="foot">Not affiliated with Character.AI · 只處理你自己的資料</p>
+  <script src="popup.js"></script>
+</body>
+</html>

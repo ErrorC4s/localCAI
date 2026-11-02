@@ -9,6 +9,7 @@ from pathlib import Path
 from ..schema import Bundle
 from .sillytavern import import_card, import_chat_jsonl
 from .cai_json import import_cai_json
+from .lcai import import_lcai, is_lcai
 
 
 def import_path(path: str | Path) -> Bundle:
@@ -39,6 +40,8 @@ def import_path(path: str | Path) -> Bundle:
             return Bundle(warnings=[str(e)])
     if suffix == ".json":
         data = json.loads(p.read_text("utf-8"))
+        if is_lcai(data):
+            return import_lcai(p, data)
         if isinstance(data, dict) and (data.get("spec", "").startswith("chara_card")
                                        or {"first_mes", "mes_example"} & data.keys()):
             return import_card(p)

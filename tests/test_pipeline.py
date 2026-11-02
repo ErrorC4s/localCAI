@@ -87,7 +87,23 @@ def test_cli_import_end_to_end(tmp_path, capsys):
     rc = main(["import", str(FX), "-o", str(tmp_path)])
     assert rc == 0
     cards = sorted(p.name for p in (tmp_path / "characters").glob("*.card.json"))
-    assert cards == ["Kai.card.json", "Luna.card.json"]  # Kai reconstructed from chat
+    assert cards == ["Kai.card.json", "Luna.card.json", "Rex.card.json"]  # Kai reconstructed from chat
     kai = json.loads((tmp_path / "characters" / "Kai.card.json").read_text("utf-8"))
     assert kai["data"]["first_mes"] == "Yo. Back from the gym?"
-    assert len(list((tmp_path / "chats").glob("*.jsonl"))) == 2
+    assert len(list((tmp_path / "chats").glob("*.jsonl"))) == 3
+
+
+def test_lcai_from_extension_is_exact():
+    # produced by tests/extension/e2e.mjs against a mocked character.ai
+    b = import_path(FX / "extension_export.lcai.json")
+    names = sorted(c.name for c in b.characters)
+    assert names == ["Luna", "Rex"]
+    rex = next(c for c in b.characters if c.name == "Rex")
+    assert rex.example_dialogue == ""  # other creator's private definition never leaks
+    assert any("Rex" in w and "private" in w for w in b.warnings)
+    chat = b.chats[0]
+    assert [m.text for m in chat.messages][-2:] == ["Earl Grey, obviously.", "Sweet dreams~"]
+    assert chat.messages[2].alternatives == ["Fine, chamomile."]
+    assert len(chat.pins) == 1 and chat.pins[0].is_user
+    book = pins_to_lorebook(b.chats, "Luna")
+    assert "Alishan" in book["entries"][0]["content"]

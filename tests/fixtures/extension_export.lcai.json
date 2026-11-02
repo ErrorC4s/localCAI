@@ -1,0 +1,102 @@
+{
+  "format": "localcai",
+  "version": 1,
+  "exported_at": "2026-11-02T01:45:00.684Z",
+  "exporter": {
+    "name": "localCAI extension",
+    "version": "0.1.0",
+    "source": "character.ai"
+  },
+  "characters": [
+    {
+      "id": "abc123",
+      "name": "Luna",
+      "tagline": "A sleepy moon witch",
+      "description": "Lives on the moon.",
+      "greeting": "*yawns* Oh, {{user}}...",
+      "definition": "{{user}}: Hi\n{{char}}: Hello~",
+      "definition_withheld": false,
+      "avatar_url": "https://characterai.io/i/400/static/avatars/u/luna.webp",
+      "creator": "alex",
+      "is_own": true
+    },
+    {
+      "id": "zzz",
+      "name": "Rex",
+      "tagline": "Someone else's bot",
+      "description": "",
+      "greeting": "Rawr.",
+      "definition": "",
+      "definition_withheld": true,
+      "avatar_url": null,
+      "creator": "someone_else",
+      "is_own": false
+    }
+  ],
+  "chats": [
+    {
+      "id": "chat-1",
+      "character_id": null,
+      "character_name": "Luna",
+      "title": "",
+      "created": "2026-10-01T10:01:00Z",
+      "user_name": "Alex",
+      "turns": [
+        {
+          "id": "t1",
+          "created": "2026-10-01T10:01:00Z",
+          "author": {
+            "name": "Luna",
+            "is_user": false
+          },
+          "pinned": false,
+          "candidates": [
+            "*yawns* Oh, Alex..."
+          ],
+          "primary": 0
+        },
+        {
+          "id": "t2",
+          "created": "2026-10-01T10:02:00Z",
+          "author": {
+            "name": "Alex",
+            "is_user": true
+          },
+          "pinned": true,
+          "candidates": [
+            "Remember: I love Alishan oolong."
+          ],
+          "primary": 0
+        },
+        {
+          "id": "t3",
+          "created": "2026-10-01T10:03:00Z",
+          "author": {
+            "name": "Luna",
+            "is_user": false
+          },
+          "pinned": false,
+          "candidates": [
+            "Fine, chamomile.",
+            "Earl Grey, obviously."
+          ],
+          "primary": 1
+        },
+        {
+          "id": "t4",
+          "created": "2026-10-01T10:04:00Z",
+          "author": {
+            "name": "Luna",
+            "is_user": false
+          },
+          "pinned": false,
+          "candidates": [
+            "Sweet dreams~"
+          ],
+          "primary": 0
+        }
+      ]
+    }
+  ],
+  "personas": []
+}

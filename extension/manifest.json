@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "localCAI Extractor",
+  "version": "0.1.0",
+  "description": "Save your own Character.AI chats, pins and characters to an open file you can run on a local model. Not affiliated with Character.AI.",
+  "host_permissions": ["https://character.ai/*", "https://*.character.ai/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://character.ai/*", "https://*.character.ai/*"],
+      "js": ["src/inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://character.ai/*", "https://*.character.ai/*"],
+      "js": ["src/normalize.js", "src/bridge.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "localCAI"
+  },
+  "browser_specific_settings": {
+    "gecko": { "id": "extractor@localcai", "strict_min_version": "128.0" }
+  }
+}

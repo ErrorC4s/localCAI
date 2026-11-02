@@ -1,0 +1,15 @@
+body { width: 300px; margin: 0; padding: 14px 16px; font: 13px/1.45 system-ui, sans-serif; color: #e8e8ef; background: #1c1d26; }
+h1 { margin: 0; font-size: 18px; letter-spacing: .3px; }
+.sub { margin: 2px 0 12px; color: #9a9bb0; font-size: 12px; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 10px; }
+.stats div { background: #262836; border-radius: 8px; padding: 8px 10px; }
+dt { color: #9a9bb0; font-size: 11px; }
+dd { margin: 0; font-size: 20px; font-weight: 600; }
+.hint, .note { color: #b6b7c8; font-size: 12px; margin: 0 0 10px; }
+.note { background: #2c2e3d; padding: 10px; border-radius: 8px; }
+button { display: block; width: 100%; margin: 6px 0 0; padding: 9px; border: 0; border-radius: 8px; background: #33364a; color: inherit; font: inherit; cursor: pointer; }
+button:hover { filter: brightness(1.15); }
+button:disabled { opacity: .45; cursor: default; }
+.primary { background: #6d5dfc; font-weight: 600; }
+.ghost { background: transparent; color: #9a9bb0; }
+.foot { margin: 12px 0 0; color: #6f7088; font-size: 11px; text-align: center; }

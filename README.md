@@ -19,9 +19,11 @@ localCAI turns your Character.AI exports (your chats, pinned messages and the ch
 - **自選本地模型**：Ollama、LM Studio、llama.cpp、KoboldCpp，或任何 OpenAI 相容 API
 
 ### 快速開始
+1. 安裝瀏覽器擴充功能（見 [`extension/README.md`](extension/README.md)），打開你的 C.ai 聊天 → 匯出 `.lcai.json`
+2. 轉換並開聊：
 ```bash
 pip install git+https://github.com/<you>/localCAI
-localcai import 我的匯出檔.zip -o 我的角色
+localcai import localcai-xxxx.lcai.json -o 我的角色
 ollama pull qwen3:4b
 localcai chat "我的角色/characters/Luna.card.png" --model qwen3:4b --user-name 你的名字
 ```
@@ -57,8 +59,9 @@ Backends: `ollama`, `lmstudio`, `llamacpp`, `koboldcpp`, or a full URL (`--backe
 Continue an old conversation with `--resume path/to/chat.jsonl`.
 
 ### How to get your data out of Character.AI
-1. **Official export**: Profile → Settings → Account → *Manage Account & Data* → *Export Data*. It arrives by email (can take weeks; the link expires).
-2. **Browser extensions** for single chats right now: CAI Tools (save as SillyTavern format) or Wilds AI Exporter (JSON).
+1. **localCAI Extractor (recommended)**: our own browser extension in [`extension/`](extension/). Open your chat, click *Export .lcai.json*. It's instant, and the format is our own ([spec](docs/lcai-format.md)), so nothing is guessed on import. Passive and read-only: it never sends requests of its own.
+2. **Official export** (fallback, works for phone-only users): Profile → Settings → Account → *Manage Account & Data* → *Export Data*. It arrives by email (can take weeks; the link expires).
+3. **Other extensions**: CAI Tools (SillyTavern format) or Wilds AI Exporter (JSON) also work.
 Feed any of those files, or a folder of them, to `localcai import`.
 
 ### Scope & ethics
@@ -73,6 +76,9 @@ Feed any of those files, or a folder of them, to `localcai import`.
 - Token budgeting is character-count based for now.
 
 ### Roadmap
+- [ ] Confirm the extractor's rules against a real (redacted) C.ai debug dump
+- [ ] Extractor: "export all my chats" (opt-in, slow, one at a time) + capture personas
+- [ ] Publish extractor on Chrome Web Store & Firefox Add-ons
 - [ ] Real-world fixtures for the official export & Wilds JSON
 - [ ] Desktop GUI (PySide6): drag in an export, pick a model, chat
 - [ ] Persona import (your C.ai persona → SillyTavern persona)
