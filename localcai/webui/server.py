@@ -532,7 +532,8 @@ def make_handler(app: App, port: int):
                     user_pronouns=str((s.get("persona_pronouns") or {}).get(s.get("persona") or "", "")
                                       or s.get("user_pronouns") or ""),
                     initiative=str(s.get("initiative") or "auto"),
-                    instruction=instruction, rewrite_of=rewrite_of)
+                    instruction=instruction, rewrite_of=rewrite_of,
+                    avoid=(swipe_row.get("swipes") or [swipe_row.get("mes", "")]) if swipe_row and not instruction else None)
 
             msgs = make_msgs(instruction, (swipe_row or {}).get("mes", "") if instruction else "")
             info: dict = {}
@@ -542,7 +543,10 @@ def make_handler(app: App, port: int):
             extra = dict(sampler)
             # never let the model write the user's turn in chat-log style ("Sam: …")
             extra = {**extra, "stop": [f"\n{user}:", f"\n**{user}:**", f"\n{user}：", "<|im_end|>", "<|im_start|>"]}
-            gen = strip_name_prefix(stream_chat(url, s["model"], msgs, temperature=float(s["temperature"]),
+            temp = float(s["temperature"])
+            if swipe_row is not None and not instruction:
+                temp = min(1.3, temp + 0.15)  # another version: a little more variety
+            gen = strip_name_prefix(stream_chat(url, s["model"], msgs, temperature=temp,
                                                 max_tokens=int(s["max_tokens"]), info=info, extra=extra), char, info)
             try:
                 first = next(gen, "")

@@ -637,3 +637,14 @@ def test_guard_reviews_only_spoken_words():
     assert check_reply(ask, card, "Sam", "hi", "*nods quietly*", 15) == "" and "p" not in seen
     assert "writes Sam's actions" not in str(seen)
     assert spoken_part("*sips tea* Oolong from **Darjeeling**~") == "Oolong from Darjeeling~"
+
+
+
+def test_regenerate_asks_for_a_different_take():
+    from localcai.runtime.prompt import build_messages
+    hist = [{"role": "assistant", "content": "Hi."}, {"role": "user", "content": "*I hug you*"}]
+    last = build_messages({"data": {"name": "Mira"}}, hist, "Sam",
+                          avoid=["*hugs back* Mmm... hold me tight.", "*hugs back* Mmm... hold me close."])[-1]["content"]
+    assert "Fresh take:" in last and "- *hugs back* Mmm... hold me close.…" in last and last.endswith("*I hug you*")
+    assert "Fresh take" not in build_messages({"data": {"name": "Mira"}}, hist, "Sam", avoid=["x"],
+                                              instruction="Shorter.")[-1]["content"]

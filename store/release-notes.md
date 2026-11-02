@@ -1,4 +1,8 @@
-## localCAI v0.8.23 · Extractor 0.5.0
+## localCAI v0.8.24 · Extractor 0.5.0
+
+- Regenerating (↻ / ▶) now gives genuinely different versions: the model sees the start of the earlier versions and is asked for a clearly different take (actions, wording, direction), with a little more randomness. Long chats used to produce near-copies.
+
+### Earlier in v0.8.23
 
 - OOC guard now only reviews what the character *says*: *actions* and narration are left out of the check (and out of the length check), and a reply that is only action isn't checked at all.
 

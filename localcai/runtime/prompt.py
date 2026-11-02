@@ -30,7 +30,8 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
                    max_chars: int = 24000, persona: str = "", memories: list[str] | None = None,
                    story: str = "", recalled: list[str] | None = None,
                    reply_words: int = 0, pacing: bool = True, user_pronouns: str = "",
-                   initiative: str = "auto", instruction: str = "", rewrite_of: str = "") -> list[dict]:
+                   initiative: str = "auto", instruction: str = "", rewrite_of: str = "",
+                   avoid: list[str] | None = None) -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
     Built to be prompt-cache friendly: everything that stays the same from turn to turn
@@ -104,6 +105,13 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         hint = moment_hint(history[-1]["content"])
         if hint:
             extra.append(hint.format(char=char))
+    if avoid and not instruction:
+        # regenerating: earlier versions of this reply exist, so make this one clearly different
+        shown = [re.sub(r"\s+", " ", a).strip()[:180] for a in avoid[-3:] if a and a.strip()]
+        if shown:
+            extra.append(f"Fresh take: {user_name} asked for another version of {char}'s reply. Write one that is clearly "
+                         f"different from the earlier versions below (different actions, wording and direction), "
+                         f"still in character and at the same moment:\n" + "\n".join(f"- {x}…" for x in shown))
     if instruction:
         # the user's own direction for this one reply (✨ on a message): it wins over the defaults above
         d_note = (f"Director's note for this reply only, from {user_name} — follow it closely, it overrides "
