@@ -170,3 +170,4 @@ details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted);
 .tool { font-size: 14px; padding: 2px 7px; }
 .edit-box { min-height: 120px; }
 .field.grow select { min-width: 260px; } .field.grow { min-width: 300px; }
+.msg .speaker { color: var(--accent2); font-weight: 600; }

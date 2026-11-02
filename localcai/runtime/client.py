@@ -36,11 +36,12 @@ def name_patterns(char: str) -> list[str]:
     return sorted((n for n in names if n), key=len, reverse=True)
 
 
-def strip_name_prefix(tokens: Iterator[str], char: str) -> Iterator[str]:
-    """Remove a leading "Mira Vale:" (or "**Mira:**", "Mira Vale：") at the start of any line.
+def strip_name_prefix(tokens: Iterator[str], char: str, info: dict | None = None) -> Iterator[str]:
+    """Remove a chat-log label like "Mira Vale:" (or "**Mira:**") at the very start of a reply.
 
-    Roleplay-tuned models often write chat-log style "Name: text"; the bubble already shows the name.
-    Works while streaming: only the first few characters of each line are held back.
+    Roleplay-tuned models often open with "Name:"; the bubble already shows the name. Only the
+    first line is touched, so group scenes ("Bram: … / Tess: …") keep their labels; the removed
+    label is reported in info["name_prefix"] so it can be put back if other speakers turn up.
     """
     names = name_patterns(char)
     if not names:
@@ -49,31 +50,39 @@ def strip_name_prefix(tokens: Iterator[str], char: str) -> Iterator[str]:
     alt = "|".join(re.escape(n) for n in names)
     rx = re.compile(rf"^[ \t]*(?:(\*\*?)(?:{alt})\1[ \t]*[:：]|(\*\*?)(?:{alt})[ \t]*[:：]\2|(?:{alt})[ \t]*[:：])[ \t]*", re.I)
     hold = max(len(n) for n in names) + 8
-    buf, at_start = "", True
+    buf, decided = "", False
     for tok in tokens:
+        if decided:
+            yield tok
+            continue
         buf += tok
-        out = ""
-        while buf:
-            if at_start:
-                nl = buf.find("\n")
-                head = buf if nl < 0 else buf[:nl]
-                if nl < 0 and len(head) < hold:
-                    break  # not enough of this line yet to decide
-                m = rx.match(head)
-                if m:
-                    buf = buf[m.end():]
-                at_start = False
-                continue
-            nl = buf.find("\n")
-            if nl < 0:
-                out += buf; buf = ""
-            else:
-                out += buf[:nl + 1]; buf = buf[nl + 1:]; at_start = True
-        if out:
-            yield out
-    if buf:
-        m = rx.match(buf) if at_start else None
+        nl = buf.find("\n")
+        head = buf if nl < 0 else buf[:nl]
+        if nl < 0 and len(head) < hold:
+            continue  # not enough of the first line yet to decide
+        m = rx.match(head)
+        if m:
+            if info is not None:
+                info["name_prefix"] = buf[:m.end()]
+            buf = buf[m.end():]
+        decided = True
+        if buf:
+            yield buf
+    if not decided and buf:
+        m = rx.match(buf)
+        if m and info is not None:
+            info["name_prefix"] = buf[:m.end()]
         yield buf[m.end():] if m else buf
+
+
+_SPEAKER = re.compile(r"^[ \t]*\**([A-Z\u4e00-\u9fff][\w'’ .-]{0,30}?)\**[ \t]*[:：]\**[ \t]", re.M)
+
+
+def other_speakers(text: str, char: str) -> set[str]:
+    """Names other than the character that label lines in a reply (a group scene)."""
+    own = {n.lower() for n in name_patterns(char)}
+    return {m.group(1).strip() for m in _SPEAKER.finditer(text)
+            if m.group(1).strip().lower() not in own and len(m.group(1).split()) <= 3}
 
 
 def strip_thinking(tokens: Iterator[str]) -> Iterator[str]:

@@ -1,4 +1,11 @@
-## localCAI v0.8.10 · Extractor 0.5.0
+## localCAI v0.8.11 · Extractor 0.5.0
+
+**Group scenes keep their speaker names**
+- Only the label at the very start of a reply ("Mira Vale: …") is removed. If the reply turns out to be a group scene with other characters talking ("Bram: … / Tess: …"), the opening label is put back so every line says who's speaking.
+- Speaker names at the start of a line are now highlighted in the bubble.
+- Works for every character (and for your own name: the model stops instead of writing your lines).
+
+### Earlier in v0.8.10
 
 **No more "Name:" at the start of replies**
 - Roleplay-tuned models (e.g. Stheno) like to begin with "Mira Vale:" in chat-log style. localCAI now removes that label at the start of any line — even while the reply is streaming — since the bubble already shows who is talking.

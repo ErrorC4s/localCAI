@@ -425,14 +425,20 @@ def test_big_model_lets_llama_cpp_fit_layers(tmp_path, monkeypatch):
 
 
 def test_strip_name_prefix_while_streaming():
-    from localcai.runtime.client import strip_name_prefix
+    from localcai.runtime.client import other_speakers, strip_name_prefix
     def run(text, char="Mira Vale", step=3):
-        return "".join(strip_name_prefix(iter([text[i:i + step] for i in range(0, len(text), step)]), char))
-    assert run("Mira Vale: *giggles* Hi.") == "*giggles* Hi."
-    assert run("**Mira Vale:** Hi.\nHex: again") == "Hi.\nagain"
-    assert run("Mira Vale：嗨") == "嗨"
-    assert run("Hexagons are neat: yes") == "Hexagons are neat: yes"
-    assert run("*hex maniac: smiles*") == "*hex maniac: smiles*"
-    assert run("*Mira Vale:* hi") == "hi"
-    assert run("Hi") == "Hi"
-    assert run("Mmm... not now.\n\nShe smiles: ok") == "Mmm... not now.\n\nShe smiles: ok"
+        info = {}
+        out = "".join(strip_name_prefix(iter([text[i:i + step] for i in range(0, len(text), step)]), char, info))
+        return out, info.get("name_prefix", "")
+    assert run("Mira Vale: *giggles* Hi.")[0] == "*giggles* Hi."
+    assert run("**Mira Vale:** Hi.")[0] == "Hi."
+    assert run("*Mira Vale:* hi")[0] == "hi"
+    assert run("Mira Vale：嗨")[0] == "嗨"
+    assert run("Hexagons are neat: yes")[0] == "Hexagons are neat: yes"
+    assert run("*hex maniac: smiles*")[0] == "*hex maniac: smiles*"
+    assert run("Hi")[0] == "Hi"
+    # group scene: only the first label is removed while streaming, and it is reported
+    out, pre = run("Bram: Hm.\nTess: Jo, where are we?\nBram: Hold on.", "Bram the Smith")
+    assert out == "Hm.\nTess: Jo, where are we?\nBram: Hold on." and pre.startswith("Bram:")
+    assert other_speakers(out, "Bram the Smith") == {"Tess"}
+    assert other_speakers("Mmm... not now.\n\n*smiles* fine", "Mira Vale") == set()

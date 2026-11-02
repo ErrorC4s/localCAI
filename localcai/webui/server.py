@@ -28,7 +28,7 @@ from .. import analyze
 from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
-from ..runtime.client import strip_name_prefix, trim_to_sentence
+from ..runtime.client import other_speakers, strip_name_prefix, trim_to_sentence
 from ..runtime.prompt import reply_words_for
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
@@ -501,7 +501,7 @@ def make_handler(app: App, port: int):
             # never let the model write the user's turn in chat-log style ("Sam: …")
             extra = {**(extra or {}), "stop": [f"\n{user}:", f"\n**{user}:**", f"\n{user}："]}
             gen = strip_name_prefix(stream_chat(url, s["model"], msgs, temperature=float(s["temperature"]),
-                                                max_tokens=int(s["max_tokens"]), info=info, extra=extra), char)
+                                                max_tokens=int(s["max_tokens"]), info=info, extra=extra), char, info)
             try:
                 first = next(gen, "")
             except OSError as e:
@@ -530,6 +530,9 @@ def make_handler(app: App, port: int):
             text_out = "".join(reply).strip()
             if info.get("finish_reason") == "length":
                 text_out = trim_to_sentence(text_out)  # hit max_tokens: don't save half a sentence
+            if info.get("name_prefix") and other_speakers(text_out, char):
+                # a group scene: keep the opening "Bram:" so every line says who is talking
+                text_out = info["name_prefix"].strip() + " " + text_out
             if swipe_row is not None:
                 if text_out:
                     chatlog.add_swipe(swipe_row, text_out)

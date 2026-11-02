@@ -49,7 +49,10 @@ function render(text) {
     .replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   return esc.split(/\n{2,}/).map((para) => {
     let h = para.replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>").replace(/\*([^*\n]+?)\*/g, "<em>$1</em>")
-      .replace(/(&quot;|“)([^\n]*?)(&quot;|”)/g, '<span class="say">$1$2$3</span>');
+      .replace(/(&quot;|“)([^\n]*?)(&quot;|”)/g, '<span class="say">$1$2$3</span>')
+      // group scenes: "Tess: …" at the start of a line → speaker label
+      .replace(/^([ \t]*)([A-Z\u4e00-\u9fff][\w'’ .-]{0,30}?)([:：])(?=[ \t])/gm,
+        (m, sp, name, colon) => name.trim().split(/\s+/).length <= 3 ? `${sp}<b class="speaker">${name}${colon}</b>` : m);
     const scene = /^\(([\s\S]*)\)$/.test(para.trim());
     return `<p${scene ? ' class="scene"' : ""}>${h}</p>`;
   }).join("");
