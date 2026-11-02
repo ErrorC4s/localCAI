@@ -1,4 +1,4 @@
-## localCAI v0.8.2 · Extractor 0.5.0
+## localCAI v0.8.3 · Extractor 0.5.0
 
 **Bring your Character.AI characters home** and keep chatting with them on a local AI.
 
