@@ -16,6 +16,10 @@ localCAI moves your Character.AI chats, pinned messages, memories, personas and 
 
 You need **Python 3.10+** and a local model runner such as [Ollama](https://ollama.com), LM Studio, llama.cpp or KoboldCpp.
 
+**Easiest (no terminal):** download the repo (Code → Download ZIP), unzip it and double-click **`start-localcai.bat`** (Windows) or **`start-localcai.sh`** (macOS/Linux). The app opens in your browser.
+
+**With pip:**
+
 ```bash
 pip install git+https://github.com/ErrorC4s/localCAI
 ollama pull qwen3:4b        # or any model you like
