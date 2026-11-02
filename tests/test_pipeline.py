@@ -172,7 +172,7 @@ def test_engine_picks_the_right_build():
              "cudart-llama-bin-win-cuda-12.4-x64.zip", "llama-b9000-bin-macos-arm64.tar.gz",
              "llama-b9000-bin-ubuntu-x64.tar.gz", "llama-b9000-bin-ubuntu-vulkan-x64.tar.gz", "llama-b9000-xcframework.zip"]
     assets = [{"name": n} for n in names]
-    pick = lambda *a: (pick_asset(assets, *a) or {}).get("name")
+    pick = lambda *a: (pick_asset(assets, *a, nvidia=False) or {}).get("name")
     assert pick("win", "x64", "auto") == "llama-b9000-bin-win-vulkan-x64.zip"
     assert pick("win", "x64", "cpu") == "llama-b9000-bin-win-cpu-x64.zip"
     assert pick("macos", "arm64", "auto") == "llama-b9000-bin-macos-arm64.tar.gz"
@@ -256,7 +256,8 @@ def test_prompt_has_story_and_recall_sections():
                           story="- They met at the lighthouse.", recalled=["Alex: remember Misty the cat"])
     sys = msgs[0]["content"]
     assert "[The story so far between Mira and Alex]" in sys and "lighthouse" in sys
-    assert "[Earlier moments that may be relevant now]" in sys and "Misty" in sys
+    assert "Misty" not in sys, "recall changes every turn, so it must not be in the cached system prompt"
+    assert "[Earlier moments that may be relevant now]" in msgs[-1]["content"] and "Misty" in msgs[-1]["content"]
 
 
 def test_orphan_engine_is_stopped_but_other_programs_are_not(tmp_path, monkeypatch):
@@ -304,3 +305,30 @@ def test_stream_errors_are_raised(monkeypatch):
     import pytest
     with pytest.raises(OSError, match="Context size"):
         list(client.stream_chat("http://x/v1", "m", [{"role": "user", "content": "hi"}]))
+
+
+def test_prompt_prefix_stays_stable_across_turns():
+    card = {"data": {"name": "Mira", "description": "Moon witch"}}
+    hist = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"message number {i} " * 20} for i in range(300)]
+    prefixes = set()
+    for turn in range(10):  # 10 more turns, each adding a user + assistant message
+        h = hist + [{"role": "user" if i % 2 == 0 else "assistant", "content": f"new {i} " * 20} for i in range(turn * 2)]
+        msgs = build_messages(card, h, "Alex", max_chars=12000, recalled=[f"something {turn}"])
+        prefixes.add((msgs[0]["content"], msgs[1]["content"]))
+        assert sum(len(m["content"]) for m in msgs) <= 12000 + 400
+    assert len(prefixes) <= 2, "the start of the prompt should only move when a whole block is dropped"
+
+
+def test_cuda_build_on_nvidia():
+    from localcai.engine import pick_asset, companion_assets
+    names = ["llama-b12032-bin-win-cpu-x64.zip", "llama-b12032-bin-win-vulkan-x64.zip",
+             "llama-b12032-bin-win-cuda-12.4-x64.zip", "llama-b12032-bin-win-cuda-13.4-x64.zip",
+             "llama-b12032-bin-win-cuda-13.4-arm64.zip", "cudart-llama-bin-win-cuda-12.4-x64.zip",
+             "cudart-llama-bin-win-cuda-13.4-x64.zip", "cudart-llama-bin-win-cuda-13.4-arm64.zip"]
+    assets = [{"name": n} for n in names]
+    main = pick_asset(assets, "win", "x64", "auto", nvidia=True)
+    assert main["name"] == "llama-b12032-bin-win-cuda-13.4-x64.zip"   # newest CUDA (RTX 50 needs 12.8+)
+    assert [a["name"] for a in companion_assets(assets, main)] == ["cudart-llama-bin-win-cuda-13.4-x64.zip"]
+    assert pick_asset(assets, "win", "x64", "auto", nvidia=False)["name"].endswith("vulkan-x64.zip")
+    assert pick_asset(assets, "win", "x64", "vulkan", nvidia=True)["name"].endswith("vulkan-x64.zip")
+    assert companion_assets(assets, {"name": "llama-b1-bin-win-vulkan-x64.zip"}) == []

@@ -65,22 +65,46 @@ def platform_key() -> tuple[str, str]:
     return system, arch
 
 
-def asset_patterns(system: str, arch: str, variant: str) -> list[re.Pattern]:
+def nvidia_present() -> bool:
+    """An NVIDIA driver is installed (nvidia-smi ships with it on Windows and Linux)."""
+    if shutil.which("nvidia-smi"):
+        return True
+    return sys.platform == "win32" and Path(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "nvidia-smi.exe").exists()
+
+
+def asset_patterns(system: str, arch: str, variant: str, nvidia: bool | None = None) -> list[re.Pattern]:
+    """Builds to try, best first. variant: auto | cuda | vulkan | cpu."""
     ext = r"\.zip$" if system == "win" else r"\.(zip|tar\.gz)$"
-    gpu = {("win", "x64"): ["vulkan-x64"], ("win", "arm64"): ["vulkan-arm64"],
-           ("ubuntu", "x64"): ["vulkan-x64"], ("ubuntu", "arm64"): ["vulkan-arm64"]}
-    cpu = {("win", "x64"): ["cpu-x64"], ("win", "arm64"): ["cpu-arm64"], ("ubuntu", "x64"): ["x64"],
-           ("ubuntu", "arm64"): ["arm64"], ("macos", "arm64"): ["arm64"], ("macos", "x64"): ["x64"]}
-    names = ([] if variant == "cpu" else gpu.get((system, arch), [])) + cpu.get((system, arch), [])
-    return [re.compile(rf"-bin-{system}-{re.escape(n)}{ext}", re.I) for n in names]
+    if nvidia is None:
+        nvidia = nvidia_present()
+    cuda = [rf"cuda-1[3-9][\d.]*-{arch}", rf"cuda-12\.(?:[89]|\d\d)[\d.]*-{arch}", rf"cuda-12[\d.]*-{arch}"] \
+        if system in ("win", "ubuntu") else []
+    vulkan = {("win", "x64"): [r"vulkan-x64"], ("win", "arm64"): [r"vulkan-arm64"],
+              ("ubuntu", "x64"): [r"vulkan-x64"], ("ubuntu", "arm64"): [r"vulkan-arm64"]}.get((system, arch), [])
+    cpu = {("win", "x64"): [r"cpu-x64"], ("win", "arm64"): [r"cpu-arm64"], ("ubuntu", "x64"): [r"x64"],
+           ("ubuntu", "arm64"): [r"arm64"], ("macos", "arm64"): [r"arm64"], ("macos", "x64"): [r"x64"]}.get((system, arch), [])
+    order = {"cpu": cpu, "vulkan": vulkan + cpu, "cuda": cuda + vulkan + cpu,
+             "auto": (cuda if nvidia else []) + vulkan + cpu}.get(variant, vulkan + cpu)
+    return [re.compile(rf"^llama-[^-]+-bin-{system}-{n}{ext}", re.I) for n in order]
 
 
-def pick_asset(assets: list[dict], system: str, arch: str, variant: str = "auto") -> dict | None:
-    for pat in asset_patterns(system, arch, variant):
+def pick_asset(assets: list[dict], system: str, arch: str, variant: str = "auto",
+               nvidia: bool | None = None) -> dict | None:
+    for pat in asset_patterns(system, arch, variant, nvidia):
         for a in assets:
             if pat.search(a.get("name", "")):
                 return a
     return None
+
+
+def companion_assets(assets: list[dict], main: dict) -> list[dict]:
+    """CUDA builds need the matching CUDA runtime zip (cudart-…) unpacked next to them."""
+    m = re.search(r"-bin-(\w+)-cuda-([\d.]+)-(\w+)\.", main["name"])
+    if not m:
+        return []
+    system, ver, arch = m.groups()
+    return [a for a in assets if a.get("name", "").startswith("cudart-")
+            and re.search(rf"-bin-{system}-cuda-{re.escape(ver)}-{arch}\.", a["name"])]
 
 
 # ── small helpers ──────────────────────────────────────────────────────────
@@ -264,7 +288,10 @@ class Engine:
             inst = self.installed()
             return {"installed": bool(inst), "build": inst and inst.get("asset"), "version": inst and inst.get("tag"),
                     "state": self.state, "model": self.model, "error": self.error, "job": self.job,
-                    "device": self.device,
+                    "device": self.device, "build_kind": inst and inst.get("build"),
+                    "nvidia": nvidia_present(),
+                    "cuda_upgrade": bool(inst) and nvidia_present() and inst.get("variant", "auto") == "auto"
+                                    and "-cuda-" not in (inst.get("asset") or ""),
                     "models_dir": str(models_dir()), "models": list_slot_models(),
                     "starters": {k: v["label"] for k, v in STARTER_MODELS.items()}}
 
@@ -344,10 +371,20 @@ class Engine:
             target = engine_dir() / f"{rel.get('tag_name', 'latest')}-{int(time.time())}"
         target.mkdir(parents=True)
         archive = target / asset["name"]
-        _download(asset["browser_download_url"], archive, self._progress(f"Downloading {asset['name']}"))
-        self.job and self.job.update(message="Unpacking…")
-        _safe_extract(archive, target)
-        archive.unlink()
+        for a in [asset] + companion_assets(rel.get("assets", []), asset):
+            archive = target / a["name"]
+            _download(a["browser_download_url"], archive, self._progress(f"Downloading {a['name']}"))
+            self.job and self.job.update(message="Unpacking…")
+            _safe_extract(archive, target)
+            archive.unlink()
+        # cudart zips unpack flat; make sure the DLLs sit next to llama-server
+        exe_name = "llama-server.exe" if system == "win" else "llama-server"
+        servers_found = sorted(target.rglob(exe_name), key=lambda p: len(p.parts))
+        if servers_found:
+            for dll in target.glob("*.dll"):
+                dest = servers_found[0].parent / dll.name
+                if dll.parent != dest.parent and not dest.exists():
+                    shutil.move(str(dll), dest)
         exe = "llama-server.exe" if system == "win" else "llama-server"
         servers = sorted(target.rglob(exe), key=lambda p: len(p.parts))
         if not servers:
@@ -357,7 +394,10 @@ class Engine:
             for f in server.parent.iterdir():
                 if f.is_file() and (f.name.startswith("llama-") or f.suffix in (".so", ".dylib")):
                     f.chmod(f.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        info = {"tag": rel.get("tag_name"), "asset": asset["name"], "server": str(server), "variant": variant}
+        build = "cuda" if "-cuda-" in asset["name"] else "vulkan" if "vulkan" in asset["name"] else \
+            "metal" if "macos-arm64" in asset["name"] else "cpu"
+        info = {"tag": rel.get("tag_name"), "asset": asset["name"], "server": str(server), "variant": variant,
+                "build": build}
         (engine_dir() / "engine.json").write_text(json.dumps(info, indent=2), "utf-8")
         cleanup_old_versions()
         return info
@@ -421,6 +461,12 @@ class Engine:
                 self.device = None
             flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
             kill_orphan()
+            devs = self._devices[1] if self._devices else []
+            log.write(f"[localCAI] build: {inst.get('asset')}\n[localCAI] GPUs seen: "
+                      + (", ".join(f"{d['id']}={d['name']} ({d['mib']} MiB)" for d in devs) or "none")
+                      + f"\n[localCAI] using: {self.device['name'] if self.device else 'CPU'}"
+                      + f"\n[localCAI] command: {' '.join(cmd)}\n")
+            log.flush()
             self.proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=server.parent,
                                          env=env, creationflags=flags)
             _pid_file().write_text(str(self.proc.pid))

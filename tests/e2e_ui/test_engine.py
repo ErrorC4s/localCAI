@@ -36,6 +36,18 @@ def make_tarball() -> bytes:
 
 
 TARBALL = make_tarball()
+
+
+def make_cudart() -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as t:
+        data = b"\0" * 128
+        ti = tarfile.TarInfo("libcudart.so.13"); ti.size = len(data)
+        t.addfile(ti, io.BytesIO(data))
+    return buf.getvalue()
+
+
+CUDART = make_cudart()
 GGUF = b"GGUF" + b"\0" * 300_000
 
 
@@ -51,11 +63,14 @@ class CDN(BaseHTTPRequestHandler):
         if self.path == "/release":
             assets = [{"name": n, "browser_download_url": f"{base}/dl/{n}"} for n in (
                 "llama-b9999-bin-win-vulkan-x64.zip", "llama-b9999-bin-ubuntu-x64.tar.gz",
-                "llama-b9999-bin-ubuntu-vulkan-x64.tar.gz", "llama-b9999-bin-macos-arm64.tar.gz")]
+                "llama-b9999-bin-ubuntu-vulkan-x64.tar.gz", "llama-b9999-bin-macos-arm64.tar.gz",
+                "llama-b9999-bin-ubuntu-cuda-13.4-x64.tar.gz", "cudart-llama-b9999-bin-ubuntu-cuda-13.4-x64.tar.gz")]
             # like the real API: the newest "release" can be a tag with no binaries at all
             releases = [{"tag_name": "v0.8.0", "assets": [{"name": "nightly-tag.txt", "browser_download_url": base + "/x"}]},
                         {"tag_name": "b9999", "assets": assets, "prerelease": True}]
             return self.send(json.dumps(releases).encode(), "application/json")
+        if self.path.startswith("/dl/cudart-"):
+            return self.send(CUDART)
         if self.path.startswith("/dl/"):
             return self.send(TARBALL)
         if self.path == f"/hf/api/models/{REPO}":
@@ -70,9 +85,12 @@ def main():
     cdn = ThreadingHTTPServer(("127.0.0.1", CDN_PORT), CDN)
     threading.Thread(target=cdn.serve_forever, daemon=True).start()
     home = tempfile.mkdtemp(prefix="lcai-engine-")
+    fakebin = Path(home, "bin"); fakebin.mkdir()
+    (fakebin / "nvidia-smi").write_text("#!/bin/sh\necho NVIDIA GeForce RTX 4060 Laptop GPU\n"); (fakebin / "nvidia-smi").chmod(0o755)
     env = {**os.environ, "LOCALCAI_HOME": home, "PYTHONPATH": str(ROOT),
            "LOCALCAI_LLAMA_RELEASE_API": f"http://127.0.0.1:{CDN_PORT}/release",
-           "LOCALCAI_HF_BASE": f"http://127.0.0.1:{CDN_PORT}/hf"}
+           "LOCALCAI_HF_BASE": f"http://127.0.0.1:{CDN_PORT}/hf",
+           "PATH": f"{fakebin}:{os.environ.get('PATH', '')}"}
     ui = subprocess.Popen([sys.executable, "-m", "localcai", "ui", "--no-browser", "--port", str(UI_PORT)], env=env, cwd=home)
     try:
         for _ in range(50):
@@ -103,7 +121,8 @@ def main():
             page.click("#open-engine")
             expect(page.locator("#eng-status")).to_contain_text("Not installed")
             page.click("#eng-install")
-            expect(page.locator("#eng-status")).to_contain_text("llama-b9999-bin-ubuntu-vulkan-x64.tar.gz", timeout=20000)
+            expect(page.locator("#eng-status")).to_contain_text("llama-b9999-bin-ubuntu-cuda-13.4-x64.tar.gz", timeout=20000)
+            expect(page.locator("#eng-upgrade")).to_be_hidden()
             page.click("#eng-install")   # same version again: skipped, not re-downloaded
             expect(page.locator("#eng-msg")).to_contain_text("Already up to date", timeout=20000)
             page.click("#eng-download")
@@ -130,10 +149,12 @@ def main():
             assert st["device"]["name"].startswith("NVIDIA"), "dedicated GPU picked over integrated"
             log = Path(home, "engine", "engine.log").read_text()
             assert "--device Vulkan1" in log and "-np 1" in log, log
+            assert "[localCAI] using: NVIDIA" in log and "[localCAI] GPUs seen:" in log, log
             pid_file = Path(home, "engine", "engine.pid")
             assert pid_file.exists(), "engine PID recorded"
             page.click("#open-engine"); page.click("#eng-stop"); page.click("#eng-close")
             expect(page.locator("#engine-chip")).to_have_text("● engine off")
+        assert list(Path(home, "engine", "b9999").rglob("libcudart.so.13")), "CUDA runtime unpacked"
         server = Path(home, "engine", "b9999", "llama-b9999", "llama-server")
         assert os.access(server, os.X_OK), "llama-server must be made executable"
         assert (Path(home) / "models" / MODEL).read_bytes()[:4] == b"GGUF"

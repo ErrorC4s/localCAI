@@ -106,7 +106,7 @@
   <details>
     <summary class="small">Built-in engine</summary>
     <label class="field">Engine build
-      <select id="set-engine-variant"><option value="auto">GPU (Vulkan / Metal) if possible</option><option value="cpu">CPU only</option></select></label>
+      <select id="set-engine-variant"><option value="auto">Automatic (CUDA on NVIDIA, otherwise Vulkan / Metal)</option><option value="cuda">NVIDIA CUDA</option><option value="vulkan">Vulkan (any GPU)</option><option value="cpu">CPU only</option></select></label>
     <label class="field">Context size (how much of the chat the model remembers)
       <input id="set-ctx" type="number" min="1024" max="131072" step="1024"></label>
     <label class="field">Graphics card
@@ -127,6 +127,7 @@
   <div class="step">
     <b>1. Engine</b>
     <div id="eng-status" class="small"></div>
+    <div id="eng-upgrade" class="note-box small" hidden>⚡ Your computer has an NVIDIA graphics card. Click <b>Reinstall / update</b> to get the NVIDIA (CUDA) engine: replies get many times faster. (Download ~300–600 MB, once.)</div>
     <button class="btn" id="eng-install">Install engine</button>
   </div>
   <div class="step">

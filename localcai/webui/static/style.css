@@ -138,3 +138,6 @@ details { margin-bottom: 10px; } summary { cursor: pointer; color: var(--muted);
 #memory-dialog { width: min(640px, 94vw); }
 #story-text { width: 100%; resize: vertical; }
 .check-row { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+
+.note-box { background: #2b2752; border: 1px solid #5b50c8; border-radius: 8px; padding: 8px 10px; }
+.chip.slow { color: #f0c46c; border-color: #8a6d2c; }

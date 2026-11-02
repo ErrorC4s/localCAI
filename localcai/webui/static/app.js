@@ -107,8 +107,10 @@ async function refreshEngine() {
   if (!st) return;
   S.engine = st;
   chip.hidden = false;
-  chip.className = "chip " + st.state;
+  const cpu = st.state === "ready" && !st.device;
+  chip.className = "chip " + st.state + (cpu ? " slow" : "");
   chip.textContent = !st.installed ? "● engine not installed — click 🧠"
+    : cpu ? "● ready · CPU (slow)"
     : { off: "● engine off", starting: "● loading model…", ready: "● ready", error: "● engine error" }[st.state];
   chip.title = st.error || (st.device ? "Running on " + st.device.name : "");
   renderEngineDialog(st);
@@ -129,6 +131,7 @@ function renderEngineDialog(st) {
   $("eng-status").textContent = (st.installed ? `Installed: ${st.build} (${st.version})` : "Not installed yet (about 30–80 MB download).")
     + (st.state === "ready" ? (st.device ? ` · running on ${st.device.name}` : " · running on the CPU") : "");
   $("eng-install").textContent = st.installed ? "Reinstall / update" : "Install engine";
+  $("eng-upgrade").hidden = !st.cuda_upgrade;
   $("eng-folder").textContent = st.models_dir;
   const ul = $("eng-models"); ul.innerHTML = "";
   for (const m of st.models) { const li = document.createElement("li"); li.textContent = `${m.name} · ${m.size_gb} GB`; ul.appendChild(li); }
