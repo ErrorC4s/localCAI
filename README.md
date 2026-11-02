@@ -57,6 +57,7 @@ localcai chat my_characters/characters/Luna.card.png --model qwen3:4b
 ```
 Backends: `ollama`, `lmstudio`, `llamacpp`, `koboldcpp`, or a full URL (`--backend http://host:port/v1`).
 Continue an old conversation with `--resume path/to/chat.jsonl`.
+Play as your C.ai persona with `--persona my_characters/personas/personas.json` (the model then knows who *you* are, just like on C.ai).
 
 ### How to get your data out of Character.AI
 1. **localCAI Extractor (recommended)**: our own browser extension in [`extension/`](extension/). Open your chat, click *Export .lcai.json*. It's instant, and the format is our own ([spec](docs/lcai-format.md)), so nothing is guessed on import. Passive and read-only: it never sends requests of its own.
@@ -81,7 +82,8 @@ Feed any of those files, or a folder of them, to `localcai import`.
 - [ ] Publish extractor on Chrome Web Store & Firefox Add-ons
 - [ ] Real-world fixtures for the official export & Wilds JSON
 - [ ] Desktop GUI (PySide6): drag in an export, pick a model, chat
-- [ ] Persona import (your C.ai persona → SillyTavern persona)
+- [x] Persona import (your C.ai persona is exported and used in local chat)
+- [ ] Persona → SillyTavern persona
 - [ ] Group chats / rooms
 - [ ] Summarised long-term memory for very long chats
 - [ ] One-click installer that also sets up Ollama + a recommended small model

@@ -117,3 +117,10 @@ def test_lcai_memories_and_personas():
     book = pins_to_lorebook(b.chats, "Luna")
     contents = [e["content"] for e in book["entries"]]
     assert len(contents) == 3 and any("Lisbon" in c for c in contents)
+
+
+def test_persona_goes_into_prompt():
+    card = {"data": {"name": "Luna", "description": "Moon witch"}}
+    msgs = build_messages(card, [{"role": "user", "content": "hi"}], user_name="Sam",
+                          persona="A tired night-shift baker who loves tea.")
+    assert "[About Sam]" in msgs[0]["content"] and "night-shift baker" in msgs[0]["content"]

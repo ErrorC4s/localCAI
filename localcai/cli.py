@@ -88,7 +88,19 @@ def cmd_chat(a: argparse.Namespace) -> int:
     d = card.get("data", card)
     char, user = d.get("name", "Character"), a.user_name
     url = resolve_base_url(a.backend)
-
+    persona = ""
+    if a.persona:
+        persona_path = Path(a.persona)
+        if persona_path.exists():
+            items = json.loads(persona_path.read_text("utf-8"))
+            items = items if isinstance(items, list) else [items]
+            pick_ = next((p for p in items if p.get("name") == a.persona_name), items[0] if items else None)
+            if pick_:
+                persona = pick_.get("description", "")
+                if a.user_name == "User" and pick_.get("name"):
+                    user = pick_["name"]
+        else:
+            persona = a.persona  # plain text description
     history: list[dict] = []
     if a.resume:
         for m in import_chat_jsonl(Path(a.resume)).chats[0].messages:
@@ -96,6 +108,8 @@ def cmd_chat(a: argparse.Namespace) -> int:
     elif d.get("first_mes"):
         history.append({"role": "assistant",
                         "content": d["first_mes"].replace("{{char}}", char).replace("{{user}}", user)})
+    if persona:
+        print(f"(playing as {user}: persona loaded)")
 
     save = Path(a.resume) if a.resume else Path(a.save_dir) / f"{char}.{datetime.now():%Y%m%d-%H%M%S}.jsonl"
     save.parent.mkdir(parents=True, exist_ok=True)
@@ -119,7 +133,7 @@ def cmd_chat(a: argparse.Namespace) -> int:
         print(f"\n{char}: ", end="", flush=True)
         reply = []
         try:
-            for tok in stream_chat(url, a.model, build_messages(card, history, user),
+            for tok in stream_chat(url, a.model, build_messages(card, history, user, persona=persona),
                                    temperature=a.temperature, max_tokens=a.max_tokens):
                 print(tok, end="", flush=True)
                 reply.append(tok)
@@ -163,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
     pc.add_argument("--model", required=True)
     pc.add_argument("--backend", default="ollama", help=backend_help)
     pc.add_argument("--user-name", default="User")
+    pc.add_argument("--persona", help="personas.json from `localcai import`, or a plain-text description of you")
+    pc.add_argument("--persona-name", help="which persona to use if the file has several")
     pc.add_argument("--resume", help="continue an existing .jsonl chat")
     pc.add_argument("--save-dir", default="localcai_chats")
     pc.add_argument("--temperature", type=float, default=0.8)

@@ -22,7 +22,7 @@ def active_lore(book: dict | None, recent_text: str) -> list[str]:
 
 
 def build_messages(card: dict, history: list[dict], user_name: str = "User",
-                   max_chars: int = 24000) -> list[dict]:
+                   max_chars: int = 24000, persona: str = "") -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]"""
     d = card.get("data", card)
     char = d.get("name", "Character")
@@ -33,6 +33,9 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
                        ("Scenario", "scenario")):
         if d.get(key):
             parts.append(f"[{label}]\n{d[key]}")
+    if persona:
+        # C.ai "persona": who the user says they are in this story
+        parts.append(f"[About {user_name}]\n{persona}")
     book = d.get("character_book")
     scan_depth = (book or {}).get("scan_depth", 4)
     recent = "\n".join(m["content"] for m in history[-scan_depth:])
