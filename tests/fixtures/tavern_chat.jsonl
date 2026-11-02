@@ -1,0 +1,4 @@
+{"user_name": "Alex", "character_name": "Kai", "create_date": "2026-10-02"}
+{"name": "Kai", "is_user": false, "send_date": "1", "mes": "Yo. Back from the gym?"}
+{"name": "Alex", "is_user": true, "send_date": "2", "mes": "Yeah, benched a new PR.", "extra": {"pinned": true}}
+{"name": "Kai", "is_user": false, "send_date": "3", "mes": "Let's go!", "swipes": ["Let's go!", "Nice."]}

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.venv/
+localcai_out/
+localcai_chats/
+# never commit real exports
+*.export.json
+exports/
