@@ -1,6 +1,8 @@
 """Build the message list sent to the local model from a Character Card V2."""
 from __future__ import annotations
 
+import re
+
 
 def _fill(text: str, char: str, user: str) -> str:
     return (text.replace("{{char}}", char).replace("{{user}}", user)
@@ -76,6 +78,10 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
     extra = []
     if triggered:
         extra.append("[Relevant memories]\n" + "\n".join(f"- {x}" for x in triggered))
+    if pacing and history and history[-1]["role"] == "user":
+        hint = moment_hint(history[-1]["content"])
+        if hint:
+            extra.append(hint.format(char=char))
     if recalled:
         extra.append("[Earlier moments that may be relevant now]\n" + "\n".join(f"- {x}" for x in recalled))
     note = _fill("\n\n".join(extra), char, user_name) if extra else ""
@@ -103,10 +109,36 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
 PACING = """[How to write {char}'s replies]
 Keep three things apart: actions and body language go in *asterisks*, spoken words go in "quotes", and the scene (place, light, sounds, weather) is described briefly and only when it changes or matters. If {char}'s earlier replies use a different format, follow theirs.
 Let the moment decide the balance between action and speech:
-- quiet, tender or sleepy moments: mostly slow, gentle actions and only a few soft words;
+- intimate, tender or sleepy moments (cuddling, kissing, holding each other, lying in bed): mostly slow, gentle actions and touch, with at most one or two short whispered lines — closeness is shown, not talked about;
 - talking, teasing, arguing or explaining: mostly dialogue, with small gestures;
 - fast or physical moments (fighting, running, a battle, cooking): short action beats and short lines.
 Don't attach a line of speech to every gesture, and don't alternate action, line, action, line. Several actions can flow together in one paragraph; {char} can act without speaking, or speak without a gesture. Write in normal paragraphs, not one-line poem stacks. Never write {user}'s actions or words."""
+
+
+_MOMENTS = (
+    ("intimate", re.compile(
+        r"cuddl|snuggl|kiss|hug|embrac|nuzzl|caress|hold(?:s|ing)? (?:you|her|him|hands?)|"
+        r"in (?:my|your) arms|lean(?:s|ing)? (?:on|against)|stroke|pat(?:s|ting)? (?:your|her|his) head|"
+        r"\bbed\b|sleep|\b(?:lie|lies|lying|lay|lays|laying)\b|"
+        r"抱|擁|親|吻|摸摸|蹭|依偎|靠在|牽手|睡|床", re.I),
+     "Moment: quiet and intimate. Reply mostly with slow, gentle actions and touch. "
+     "{char} says very little here: one or two short, soft lines at most, or none."),
+    ("action", re.compile(
+        r"\b(?:fight|attack|punch|kick|run(?:s|ning)?|chase|dodge|battle|shoot|grab|throw|escape)|"
+        r"打架|打鬥|攻擊|揍|踢|奔跑|追|閃開|戰鬥|逃", re.I),
+     "Moment: fast and physical. Use short action beats and short lines."),
+)
+
+
+def moment_hint(text: str) -> str:
+    """A per-turn nudge about pacing, picked from what the user just did."""
+    for _name, rx, hint in _MOMENTS:
+        if rx.search(text):
+            return hint
+    acts = "".join(re.findall(r"\*[^*]+\*", text))
+    if "?" in text or "？" in text or (text.strip() and len(acts) < len(text) * 0.2):
+        return "Moment: conversation. Reply mostly with dialogue and small gestures."
+    return ""
 
 
 LENGTH_PRESETS = {"short": 60, "medium": 120, "long": 220}

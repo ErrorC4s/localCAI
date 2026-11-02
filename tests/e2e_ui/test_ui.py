@@ -99,7 +99,8 @@ def main(shot=None):
             sent = json.load(open(last, encoding="utf-8"))
             assert sent["model"] == "fake-model"
             assert "Darjeeling" in sent["messages"][0]["content"], "pinned memory in prompt"
-            assert sent["messages"][-1]["content"] == "What tea do I like?"
+            assert sent["messages"][-1]["content"].endswith("What tea do I like?")
+            assert "Moment: conversation" in sent["messages"][-1]["content"]
 
             # persona
             page.select_option("#persona", "Alex")

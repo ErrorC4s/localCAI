@@ -63,7 +63,7 @@ def test_tavern_jsonl():
 def test_prompt_includes_pins_and_fills_macros():
     b = import_path(FX / "cai_dump.json")
     card = to_card_v2(b.characters[0], pins_to_lorebook(b.chats, "Luna"))
-    msgs = build_messages(card, [{"role": "user", "content": "hi"}], user_name="Alex")
+    msgs = build_messages(card, [{"role": "user", "content": "hi"}], user_name="Alex", pacing=False)
     system = msgs[0]["content"]
     assert "Darjeeling" in system
     assert "{{user}}" not in system and "Alex" in system
@@ -73,7 +73,7 @@ def test_prompt_includes_pins_and_fills_macros():
 def test_history_budget_keeps_most_recent():
     card = {"data": {"name": "X"}}
     hist = [{"role": "user", "content": "a" * 1000} for _ in range(50)] + [{"role": "user", "content": "last"}]
-    msgs = build_messages(card, hist, max_chars=5000)
+    msgs = build_messages(card, hist, max_chars=5000, pacing=False)
     assert msgs[-1]["content"] == "last" and len(msgs) < 10
 
 
@@ -379,3 +379,17 @@ def test_newer_version_asks_older_to_quit(tmp_path, monkeypatch):
     assert desktop._ask_to_quit(port, wait=5)
     assert desktop._running_version(port) is None
     httpd.server_close()
+
+
+def test_moment_hint_picks_pacing():
+    from localcai.runtime.prompt import moment_hint, build_messages
+    assert "intimate" in moment_hint("*I smiled and cuddle you tightly on the bed* I love you")
+    assert "intimate" in moment_hint("*我抱緊妳* 晚安")
+    assert "fast" in moment_hint("*dodges the attack*")
+    assert "conversation" in moment_hint("what did you eat today?")
+    assert "intimate" not in moment_hint("I really like playing this")
+    card = {"data": {"name": "Mira"}}
+    msgs = build_messages(card, [{"role": "user", "content": "*kisses your forehead*"}], "Sam")
+    assert msgs[-1]["content"].startswith("(Moment: quiet and intimate")
+    assert "Moment:" not in build_messages(card, [{"role": "user", "content": "*kisses*"}], "Sam",
+                                           pacing=False)[-1]["content"]
