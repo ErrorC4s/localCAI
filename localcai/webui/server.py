@@ -29,7 +29,7 @@ from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
 from ..runtime.guard import check_reply, same_reply, spoken_part
-from ..runtime.client import other_speakers, strip_markers, strip_name_prefix, trim_to_sentence
+from ..runtime.client import other_speakers, strip_markers, strip_meta, strip_name_prefix, trim_to_sentence
 from ..runtime.prompt import PRONOUN_CHOICES, reply_words_for
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
@@ -574,7 +574,7 @@ def make_handler(app: App, port: int):
                     self.wfile.write(f"\n\n[localCAI: the model stopped with an error: {e}]".encode("utf-8"))
                 except OSError:
                     pass
-            text_out = strip_markers("".join(reply)).strip()
+            text_out = strip_meta(strip_markers("".join(reply))).strip()
             if info.get("finish_reason") == "length":
                 text_out = trim_to_sentence(text_out)  # hit max_tokens: don't save half a sentence
             if info.get("name_prefix") and other_speakers(text_out, char):
@@ -603,7 +603,7 @@ def make_handler(app: App, port: int):
                         out = "".join(strip_name_prefix(stream_chat(
                             url, s["model"], make_msgs(fix_reason, text_out), temperature=float(s["temperature"]),
                             max_tokens=int(s["max_tokens"]), info=info2, extra=extra), char, info2))
-                        fixed = strip_markers(out).strip()
+                        fixed = strip_meta(strip_markers(out)).strip()
                         if info2.get("finish_reason") == "length":
                             fixed = trim_to_sentence(fixed)
                         if same_reply(fixed, text_out) or same_reply(spoken_part(fixed), spoken_part(text_out)):

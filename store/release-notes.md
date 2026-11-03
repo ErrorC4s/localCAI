@@ -1,4 +1,8 @@
-## localCAI v0.8.25 · Extractor 0.5.0
+## localCAI v0.8.26 · Extractor 0.5.0
+
+- Replies no longer end with the model reviewing itself ("[What the reply does:]", "Notes:", "(OOC: …)", "Analysis:" and the like): that part is cut off, and the hidden per-turn direction now tells the model to follow it silently instead of listing it back.
+
+### Earlier in v0.8.25
 
 - OOC guard: a rewrite that only moves the *actions* around while the character says the same words is dropped. Actions aren't reviewed, so it wasn't a real fix (no extra swipe, no "auto-fixed" badge).
 

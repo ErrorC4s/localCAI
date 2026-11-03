@@ -122,6 +122,9 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         extra.append(d_note)
     if recalled:
         extra.append("[Earlier moments that may be relevant now]\n" + "\n".join(f"- {x}" for x in recalled))
+    if extra:
+        extra.append(f"(Direction for you only: follow it silently. Write just {char}'s reply, never mention, "
+                     f"list or check off these notes, and add no notes or commentary after the reply.)")
     note = _fill("\n\n".join(extra), char, user_name) if extra else ""
 
     # Keep as much history as fits; drop the oldest in blocks so the kept part's start rarely moves.

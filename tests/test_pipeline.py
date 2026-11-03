@@ -655,3 +655,27 @@ def test_regenerate_asks_for_a_different_take():
     assert "Fresh take:" in last and "- *hugs back* Mmm... hold me close.…" in last and last.endswith("*I hug you*")
     assert "Fresh take" not in build_messages({"data": {"name": "Mira"}}, hist, "Sam", avoid=["x"],
                                               instruction="Shorter.")[-1]["content"]
+
+
+def test_self_review_after_the_reply_is_cut():
+    from localcai.runtime.client import strip_meta
+    reply = ('*Mira leans in, smiling.* "Tell me what you need..."\n\n'
+             "[What the reply does:]\n- Reacts to Sam's request.\n- Keeps the mood playful.\n\n"
+             "[What the reply doesn't do:]\n- Doesn't skip ahead.")
+    assert strip_meta(reply) == '*Mira leans in, smiling.* "Tell me what you need..."'
+    for tail in ("\n\n---\nNotes: kept it short.", "\n\n(OOC: I hope this works!)", "\n\n**Analysis:** the reply...",
+                 "\n\nAuthor's note: next time..."):
+        assert strip_meta('"Fine." *Bram shrugs.*' + tail) == '"Fine." *Bram shrugs.*'
+    # ordinary role-play is left alone
+    for keep in ('"Take note: the bridge is out."', '*She writes a note.* "Read it later."',
+                 '"What the reply? Speak up, boy."', "Analysis aside, *she grins*, you're wrong."):
+        assert strip_meta(keep) == keep
+    assert strip_meta("Notes: only this") == "Notes: only this"  # never empty a reply
+
+
+def test_turn_note_says_follow_silently():
+    from localcai.runtime.prompt import build_messages
+    card = {"data": {"name": "Mira", "description": "A baker."}}
+    msgs = build_messages(card, [{"role": "assistant", "content": "*waves*"}, {"role": "user", "content": "I sit down."}],
+                          user_name="Sam")
+    assert "never mention, list or check off these notes" in msgs[-1]["content"]

@@ -38,6 +38,28 @@ def strip_markers(text: str) -> str:
     return (text[:cut] if cut >= 0 else text).rstrip()
 
 
+# The model stepping outside the story to review its own reply ("[What the reply does:]", "Notes:",
+# "(OOC: ...)", "Analysis:") — usually it is echoing the hidden per-turn direction back as a checklist.
+_META = re.compile(
+    r"^[ \t>*_#-]*[\[(]?[ \t*_]*(?:"
+    r"what (?:the|this|my) (?:reply|response|message)\b"
+    r"|(?:reply|response|writing|scene) (?:notes?|analysis|summary|checklist|breakdown)\b"
+    r"|(?:author'?s |writer'?s |director'?s )?notes?[ \t*_]*[:\])]"
+    r"|ooc\b|\(\(|out of character\b"
+    r"|(?:self[- ]?check|checklist|analysis|explanation|breakdown|commentary)[ \t*_]*[:\])]"
+    r")", re.I | re.M)
+
+
+def strip_meta(text: str) -> str:
+    """Cut a reply where the model stops role-playing and starts commenting on the reply itself."""
+    m = _META.search(text or "")
+    if not m:
+        return text
+    head = text[:m.start()].rstrip()
+    head = re.sub(r"(?:\n[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*)+$", "", head).rstrip()  # a trailing --- divider
+    return head if re.search(r"\w", head) else text  # never throw away the whole reply
+
+
 def name_patterns(char: str) -> list[str]:
     """Ways a model may label the character's own lines: the full name and its first word."""
     names = {char.strip()}
