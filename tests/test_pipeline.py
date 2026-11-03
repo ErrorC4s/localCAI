@@ -718,10 +718,15 @@ def test_scene_state_round_trip_and_prompt(tmp_path):
     assert scene.clean_state("Where: hall\nMira: standing\nSam: sitting", "Mira", "Sam") == \
         "Where: hall; Mira: standing; Sam: sitting"
     assert scene.clean_state("I'm sorry, I can't help with that.", "Mira", "Sam") == ""
+    assert scene.clean_state("Where: couch;; Mira: lying back;; Sam: kneeling;; Mood: heated", "Mira", "Sam") == \
+        "Where: couch; Mira: lying back; Sam: kneeling; Mood: heated"
+    assert scene.clean_state("Where: couch;\nMira: lying;\nSam: kneeling;\nMood: calm", "Mira", "Sam") == \
+        "Where: couch; Mira: lying; Sam: kneeling; Mood: calm"
 
     from localcai.runtime.prompt import build_messages
     card = {"data": {"name": "Mira", "description": "A baker."}}
     msgs = build_messages(card, [{"role": "assistant", "content": "*waves*"}, {"role": "user", "content": "Hi."}],
                           user_name="Sam", scene="Where: bakery; Mira: behind the counter; Sam: at the door")
     assert "Scene right now: Where: bakery" in msgs[-1]["content"]
+    assert "never flip for no reason" in msgs[-1]["content"]        # mood follows the story
     assert msgs[0]["content"].count("Scene right now") == 0       # per-turn note, not the cached system prompt

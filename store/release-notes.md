@@ -1,4 +1,9 @@
-## localCAI v0.8.29 · Extractor 0.5.0
+## localCAI v0.8.30 · Extractor 0.5.0
+
+- Scene memory now also notes the character's mood and how intense the moment is. The next reply keeps that mood unless something that just happened gives a reason to change it: a real reason (a surprise, a hurtful word, a climax, danger) can change it at once, otherwise it shifts gradually instead of flipping out of nowhere.
+- Fixed doubled ";;" in scene notes.
+
+### Earlier in v0.8.29
 
 - Scene memory: after each reply, a one-line note of where everyone is and what's still going on (positions, ongoing actions, clothing) is made from the last 5 rounds plus the previous note, in the background. The next reply gets it, so actions that started a few replies ago aren't forgotten. Kept per reply, so regenerated or swiped replies never get a note that doesn't match. Settings → Scene memory (on by default).
 

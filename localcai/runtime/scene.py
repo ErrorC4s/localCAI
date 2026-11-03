@@ -30,11 +30,12 @@ The latest part of the role-play:
 {log}
 >>>
 
-Write ONE line (at most 45 words) saying what is true right now, at the very end of the text:
+Write ONE line (at most 55 words) saying what is true right now, at the very end of the text:
 where they are; {char}'s position and what {char} is doing; {user}'s position and what {user} is doing; \
-anything still going on (holding, sitting on, lying with...); clothing only if the text changed it.
+anything still going on (holding, sitting on, lying with...); clothing only if the text changed it; \
+{char}'s mood and how intense the moment is right now (e.g. calm, playful, nervous, angry, heated, near the edge).
 Keep actions that started earlier and haven't ended. Drop what has ended. Plain facts, present tense, no story.
-Format: Where: ...; {char}: ...; {user}: ...
+Format: Where: ...; {char}: ...; {user}: ...; Mood: ...
 """
 
 
@@ -90,15 +91,16 @@ def clean_state(text: str, char: str, user: str) -> str:
     if not lines:
         return ""
     # the format asks for "Where: …; char: …; user: …" on one line; models sometimes split it
-    if len(lines) > 1 and all(re.match(r"(?:where|%s|%s)\s*:" % (re.escape(char), re.escape(user)), l, re.I)
-                              for l in lines[:3]):
-        line = "; ".join(lines[:3])
+    field = re.compile(r"(?:where|mood|%s|%s)\s*:" % (re.escape(char), re.escape(user)), re.I)
+    if len(lines) > 1 and field.match(lines[0]):
+        line = "; ".join(l.rstrip(" ;") for l in lines[:4] if field.match(l))
     else:
         line = lines[0]
+    line = re.sub(r"\s*;(?:\s*;)+", ";", line)  # "a;; b" → "a; b"
     line = re.sub(r"^(?:scene(?: note| state)?|note|state)\s*:\s*", "", line, flags=re.I).strip()
     if len(line) < 12 or re.search(r"\b(?:I can(?:'|no)t|I'm sorry|as an AI)\b", line, re.I):
         return ""
-    return line[:400]
+    return line[:480]
 
 
 def build_state(ask: Callable[[str, str], str], history: list[dict], char: str, user: str, prev: str = "") -> str:

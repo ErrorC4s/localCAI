@@ -91,7 +91,10 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
     if scene and history and history[-1]["role"] == "user":
         # what is true right now (built from the last few rounds): ongoing actions an older reply started
         extra.append(f"Scene right now: {scene.strip()}\nKeep all of this true (positions, what each is doing, "
-                     f"clothing) unless this turn changes it; carry ongoing actions on, don't drop or restart them.")
+                     f"clothing) unless this turn changes it; carry ongoing actions on, don't drop or restart them. "
+                     f"Mood moves with the story: keep {char}'s current mood and intensity unless what just happened "
+                     f"gives a reason to change it; a real reason (a surprise, a hurtful word, a climax, a sudden "
+                     f"danger) can change it at once, otherwise let it shift gradually, never flip for no reason.")
     if pacing and history and history[-1]["role"] == "user":
         c = continuity_note(history, char, user_name, initiative)
         if c:
