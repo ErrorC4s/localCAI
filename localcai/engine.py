@@ -588,9 +588,10 @@ class Engine:
                     size_mib = path.stat().st_size / 2**20
                     fit = estimate_fit(size_mib / 1024, int(ctx), chosen.get("mib"))
                     # The KV cache (the chat the model has read) at 8-bit: about half the memory, practically
-                    # the same output. "auto" uses it only when the model doesn't fit on the GPU otherwise:
-                    # the room it frees goes to more model layers on the GPU, which is much faster.
-                    if kv == "q8" or (kv == "auto" and chosen.get("mib") and fit["kind"] != "gpu"):
+                    # the same output. Only on request: measured on a 7 GB model with an 8 GB laptop GPU it made
+                    # replies slower (6.5 → 4.2 tokens/s at ~7.6k context), because the layers left on the CPU
+                    # pay more for the 8-bit cache than the freed VRAM gains. "auto" therefore stays at f16.
+                    if kv == "q8":
                         q8 = self._kv_q8_flags(server)
                         if q8:
                             cmd += q8

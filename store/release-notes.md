@@ -1,4 +1,8 @@
-## localCAI v0.8.27 · Extractor 0.5.0
+## localCAI v0.8.28 · Extractor 0.5.0
+
+- Chat memory format: Automatic is back to 16-bit. 8-bit turned out slower when part of the model runs on the CPU (measured about 6.5 → 4.2 tokens/s on a 12B model with an 8 GB GPU). 8-bit is still in Settings for cards where it helps.
+
+### Earlier in v0.8.27
 
 - Faster replies when the model is a little too big for your graphics card: the chat memory (KV cache) is kept at 8-bit, about half the VRAM, so more of the model fits on the GPU. Replies read practically the same. Settings → Built-in engine → Chat memory format (Automatic / 8-bit / 16-bit); Automatic only uses 8-bit when the model doesn't fit otherwise.
 
