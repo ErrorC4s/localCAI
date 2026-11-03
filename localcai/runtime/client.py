@@ -50,8 +50,13 @@ _META = re.compile(
     r")", re.I | re.M)
 
 
+# "(Continues)" / "[continued]" labels some models put between paragraphs of one reply
+_CONT = re.compile(r"(?im)^([ \t>*_]*)[\[(](?:cont(?:inues|inued|\.)?|continuing)[\])][ \t]*")
+
+
 def strip_meta(text: str) -> str:
     """Cut a reply where the model stops role-playing and starts commenting on the reply itself."""
+    text = _CONT.sub(r"\1", text or "")
     m = _META.search(text or "")
     if not m:
         return text

@@ -1,6 +1,8 @@
-## localCAI v0.8.32 · Extractor 0.5.1
+## localCAI v0.8.33 · Extractor 0.5.1
 
-- Built-in engine: GPU layers are now sized by the graphics card's *free* memory (llama.cpp's --fit), not its total. With a browser, Discord and other apps holding some VRAM, forcing every layer onto the GPU made the driver spill into shared system memory and replies ran about 4x slower. The context size you set is kept. Older llama.cpp builds work as before.
+- Built-in engine: a model that fits on the graphics card goes fully on it again (much faster: 55-63 vs 10-11 tokens/s measured on an 8B model). Only a model that doesn't fit uses llama.cpp's --fit, which places layers by the card's free memory and keeps your context size.
+- "(Continues)" / "[continued]" labels some models put between paragraphs are removed.
+- If replies suddenly get much slower than usual, other apps may be holding graphics memory: restarting localCAI frees it.
 
 ### Earlier in v0.8.31
 

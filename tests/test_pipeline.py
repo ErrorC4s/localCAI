@@ -675,6 +675,9 @@ def test_self_review_after_the_reply_is_cut():
                  '"What the reply? Speak up, boy."', "Analysis aside, *she grins*, you're wrong."):
         assert strip_meta(keep) == keep
     assert strip_meta("Notes: only this") == "Notes: only this"  # never empty a reply
+    # "(Continues)" labels between paragraphs go, the paragraphs stay
+    assert strip_meta("*Smiles.* Hi.\n\n(Continues) *Shrugs.* Fine.") == "*Smiles.* Hi.\n\n*Shrugs.* Fine."
+    assert strip_meta("He (continues) walking.") == "He (continues) walking."
 
 
 def test_turn_note_says_follow_silently():
@@ -790,20 +793,19 @@ def test_importing_a_new_version_of_a_card_keeps_app_settings_and_memories(tmp_p
     assert merge_books_unique(None, {"entries": []}) == {"entries": []}
 
 
-def test_gpu_layers_sized_by_free_vram_when_the_build_can(tmp_path, monkeypatch):
+def test_fit_only_when_the_model_does_not_fit(tmp_path, monkeypatch):
     import localcai.engine as eng
     monkeypatch.setenv("LOCALCAI_HOME", str(tmp_path))
-    model = eng.models_dir() / "small-8b-Q4_K_M.gguf"
-    model.parent.mkdir(parents=True, exist_ok=True)
-    with open(model, "wb") as f:
-        f.truncate(int(4.9 * 2**30))           # fits an 8 GB card on paper
     server = tmp_path / "llama-server"; server.write_text("")
     seen = {}
-    for help_text, expect_fit in (("-fitt, --fit-target MiB", True), ("-ngl N", False)):
+    for gb, expect_fit in ((4.9, False), (7.5, True)):   # 8B fits an 8 GB card, 12B doesn't
+        model = eng.models_dir() / f"m{gb}-Q4_K_M.gguf"
+        with open(model, "wb") as f:
+            f.truncate(int(gb * 2**30))
         e = eng.Engine()
         monkeypatch.setattr(e, "installed", lambda: {"server": str(server)})
         monkeypatch.setattr(e, "devices", lambda s=None: [{"id": "CUDA0", "name": "RTX", "mib": 8123}])
-        e._help = (str(server), help_text)
+        e._help = (str(server), "-fitt, --fit-target MiB")
         monkeypatch.setattr(eng.subprocess, "Popen", lambda cmd, **kw: (seen.__setitem__("cmd", cmd), (_ for _ in ()).throw(OSError("stop")))[1])
         eng.engine_dir().mkdir(parents=True, exist_ok=True)
         try:
@@ -812,7 +814,7 @@ def test_gpu_layers_sized_by_free_vram_when_the_build_can(tmp_path, monkeypatch)
             pass
         cmd = seen["cmd"]
         if expect_fit:
-            assert "-ngl" not in cmd and cmd[cmd.index("--fit") + 1] == "on" and "--fit-target" in cmd, cmd
+            assert "-ngl" not in cmd and cmd[cmd.index("--fit") + 1] == "on", cmd
         else:
-            assert cmd[cmd.index("-ngl") + 1] == "999" and "--fit" not in cmd, cmd   # older build: as before
-        assert cmd[cmd.index("-c") + 1] == "8192"   # the context we asked for is kept
+            assert cmd[cmd.index("-ngl") + 1] == "999" and "--fit" not in cmd, cmd   # all on the GPU: fastest
+        assert cmd[cmd.index("-c") + 1] == "8192"
