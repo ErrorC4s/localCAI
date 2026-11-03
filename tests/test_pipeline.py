@@ -619,6 +619,13 @@ def test_rewrite_that_copies_the_original_is_dropped():
     a = '*Mira nods slowly.* "Okay, I think I can help with that."'
     assert same_reply(a, a) and same_reply(a, a.replace("slowly", "slowly,"))
     assert not same_reply(a, '*tilts head* "A what? ...Ask Tess."')
+    # only the *actions* moved: the spoken words are the same, so it's not a real fix
+    from localcai.runtime.guard import spoken_part
+    b = ('*Mira sighs.* The loop only runs once. *She takes the notebook.* Here, I\'ll show you. '
+         '*She glances up.* I work here.')
+    c = ('*Mira takes the notebook, frowning.* The loop only runs once. *She glances at him.* '
+         'Here, I\'ll show you. *She leans on the counter.* I work here.')
+    assert not same_reply(b, c) and same_reply(spoken_part(b), spoken_part(c))
 
 
 

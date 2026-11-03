@@ -1,4 +1,8 @@
-## localCAI v0.8.24 · Extractor 0.5.0
+## localCAI v0.8.25 · Extractor 0.5.0
+
+- OOC guard: a rewrite that only moves the *actions* around while the character says the same words is dropped. Actions aren't reviewed, so it wasn't a real fix (no extra swipe, no "auto-fixed" badge).
+
+### Earlier in v0.8.24
 
 - Regenerating (↻ / ▶) now gives genuinely different versions: the model sees the start of the earlier versions and is asked for a clearly different take (actions, wording, direction), with a little more randomness. Long chats used to produce near-copies.
 
