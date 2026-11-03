@@ -1,4 +1,8 @@
-## localCAI v0.8.31 · Extractor 0.5.1
+## localCAI v0.8.32 · Extractor 0.5.1
+
+- Built-in engine: GPU layers are now sized by the graphics card's *free* memory (llama.cpp's --fit), not its total. With a browser, Discord and other apps holding some VRAM, forcing every layer onto the GPU made the driver spill into shared system memory and replies ran about 4x slower. The context size you set is kept. Older llama.cpp builds work as before.
+
+### Earlier in v0.8.31
 
 - Importing a chat for a character that's already in your library no longer replaces its card with a bare one rebuilt from the chat: the description, personality, greeting, example dialogue, memories, rules and pronouns stay as they are, and the chat's pinned memories are added (without duplicates). Importing a new version of a card keeps the rules, pronouns and memories you set in the app, and the avatar if the new card has none.
 - Re-importing a chat file that has no message ids saves it as a new chat instead of over the existing one (which you may have continued in localCAI).

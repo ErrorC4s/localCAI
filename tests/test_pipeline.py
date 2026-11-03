@@ -788,3 +788,31 @@ def test_importing_a_new_version_of_a_card_keeps_app_settings_and_memories(tmp_p
     assert d["description"].endswith("with a cat.") and d["extensions"]["localcai"]["rules"] == "Never shout."
     assert [e["content"] for e in d["character_book"]["entries"]] == ["Loves oolong.", "Her cat is Pip."]
     assert merge_books_unique(None, {"entries": []}) == {"entries": []}
+
+
+def test_gpu_layers_sized_by_free_vram_when_the_build_can(tmp_path, monkeypatch):
+    import localcai.engine as eng
+    monkeypatch.setenv("LOCALCAI_HOME", str(tmp_path))
+    model = eng.models_dir() / "small-8b-Q4_K_M.gguf"
+    model.parent.mkdir(parents=True, exist_ok=True)
+    with open(model, "wb") as f:
+        f.truncate(int(4.9 * 2**30))           # fits an 8 GB card on paper
+    server = tmp_path / "llama-server"; server.write_text("")
+    seen = {}
+    for help_text, expect_fit in (("-fitt, --fit-target MiB", True), ("-ngl N", False)):
+        e = eng.Engine()
+        monkeypatch.setattr(e, "installed", lambda: {"server": str(server)})
+        monkeypatch.setattr(e, "devices", lambda s=None: [{"id": "CUDA0", "name": "RTX", "mib": 8123}])
+        e._help = (str(server), help_text)
+        monkeypatch.setattr(eng.subprocess, "Popen", lambda cmd, **kw: (seen.__setitem__("cmd", cmd), (_ for _ in ()).throw(OSError("stop")))[1])
+        eng.engine_dir().mkdir(parents=True, exist_ok=True)
+        try:
+            e.start(model.name, timeout=1)
+        except Exception:
+            pass
+        cmd = seen["cmd"]
+        if expect_fit:
+            assert "-ngl" not in cmd and cmd[cmd.index("--fit") + 1] == "on" and "--fit-target" in cmd, cmd
+        else:
+            assert cmd[cmd.index("-ngl") + 1] == "999" and "--fit" not in cmd, cmd   # older build: as before
+        assert cmd[cmd.index("-c") + 1] == "8192"   # the context we asked for is kept

@@ -350,6 +350,7 @@ def server_help(server: Path) -> str:
 
 
 KV_CHOICES = ("auto", "q8", "f16")
+FIT_MARGIN_MIB = 384  # VRAM llama.cpp's --fit leaves free for Windows and other apps
 KV_MB_DEFAULT = 0.15  # KV cache per token (MB) of a typical 4–14B model at f16
 
 
@@ -603,6 +604,16 @@ class Engine:
                         i = cmd.index("-ngl"); del cmd[i:i + 2]
                         fit_note = (f"\n[localCAI] model is {size_mib / 1024:.1f} GB, GPU has {chosen['mib'] / 1024:.1f} GB:"
                                     " letting llama.cpp fit as many layers as possible on the GPU")
+                    if int(gpu_layers) >= 999 and "--fit-target" in self.help_text(server):
+                        # Size by the GPU's *free* memory, not its total: browsers, Discord etc. hold some VRAM, and
+                        # forcing every layer on (-ngl 999) then makes the driver spill into shared system memory,
+                        # which was ~4x slower (Stheno 8B on an 8 GB laptop GPU: 28 → 7.5 tokens/s). With -ngl unset,
+                        # llama.cpp's --fit puts on the GPU what fits and keeps the context size we asked for.
+                        if "-ngl" in cmd:
+                            i = cmd.index("-ngl"); del cmd[i:i + 2]
+                        cmd += ["--fit", "on", "--fit-target", str(FIT_MARGIN_MIB)]
+                        fit_note += (f"\n[localCAI] GPU layers sized by free VRAM (llama.cpp --fit, "
+                                     f"{FIT_MARGIN_MIB} MiB spare)")
                 self.device = chosen
             else:
                 self.device = None

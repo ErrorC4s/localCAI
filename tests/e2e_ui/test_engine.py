@@ -152,6 +152,8 @@ def main():
             assert st["device"]["name"].startswith("NVIDIA"), "dedicated GPU picked over integrated"
             log = Path(home, "engine", "engine.log").read_text()
             assert "--device Vulkan1" in log and "-np 1" in log, log
+            # layers sized by free VRAM: no forced -ngl 999, llama.cpp's --fit with a small margin
+            assert "-ngl" not in log.split("command:")[1].splitlines()[0] and "--fit on --fit-target 384" in log, log
             assert "[localCAI] using: NVIDIA" in log and "[localCAI] GPUs seen:" in log, log
             assert "-ctk" not in log and st["kv"] == "f16", "model fits on the GPU: KV cache stays f16 on auto"
             # Settings → Chat memory format → 8-bit: the engine restarts with a q8_0 KV cache
