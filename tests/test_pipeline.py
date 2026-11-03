@@ -1,5 +1,8 @@
 import json
+import sys
 from pathlib import Path
+
+import pytest
 
 from localcai.cli import main
 from localcai.exporters import to_card_v2, write_card
@@ -260,6 +263,7 @@ def test_prompt_has_story_and_recall_sections():
     assert "[Earlier moments that may be relevant now]" in msgs[-1]["content"] and "Misty" in msgs[-1]["content"]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="starts a shell script as a stand-in engine")
 def test_orphan_engine_is_stopped_but_other_programs_are_not(tmp_path, monkeypatch):
     import subprocess, sys, time, os
     monkeypatch.setenv("LOCALCAI_HOME", str(tmp_path))
