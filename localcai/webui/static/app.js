@@ -616,6 +616,7 @@ $("open-settings").onclick = () => {
   $("set-reply-length").value = s.reply_length || "auto";
   $("set-recall").checked = s.recall !== false;
   $("set-pacing").checked = s.pacing !== false;
+  $("set-scene").checked = s.scene_state !== false;
   $("set-initiative").value = s.initiative || "auto";
   $("set-guard").checked = s.ooc_guard !== false;
   {
@@ -645,6 +646,7 @@ $("settings-save").onclick = async () => {
     engine_variant: $("set-engine-variant").value,
     recall: $("set-recall").checked,
     pacing: $("set-pacing").checked,
+    scene_state: $("set-scene").checked,
     initiative: $("set-initiative").value,
     ooc_guard: $("set-guard").checked,
     persona_pronouns: { ...(S.state.settings.persona_pronouns || {}), [$("persona").value]: $("set-pronouns").value },

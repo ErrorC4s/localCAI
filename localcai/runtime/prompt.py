@@ -31,7 +31,7 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
                    story: str = "", recalled: list[str] | None = None,
                    reply_words: int = 0, pacing: bool = True, user_pronouns: str = "",
                    initiative: str = "auto", instruction: str = "", rewrite_of: str = "",
-                   avoid: list[str] | None = None) -> list[dict]:
+                   avoid: list[str] | None = None, scene: str = "") -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
     Built to be prompt-cache friendly: everything that stays the same from turn to turn
@@ -88,6 +88,10 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
     extra = []
     if triggered:
         extra.append("[Relevant memories]\n" + "\n".join(f"- {x}" for x in triggered))
+    if scene and history and history[-1]["role"] == "user":
+        # what is true right now (built from the last few rounds): ongoing actions an older reply started
+        extra.append(f"Scene right now: {scene.strip()}\nKeep all of this true (positions, what each is doing, "
+                     f"clothing) unless this turn changes it; carry ongoing actions on, don't drop or restart them.")
     if pacing and history and history[-1]["role"] == "user":
         c = continuity_note(history, char, user_name, initiative)
         if c:

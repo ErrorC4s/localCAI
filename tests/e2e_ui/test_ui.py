@@ -99,16 +99,22 @@ def main(shot=None):
             sent = json.load(open(last, encoding="utf-8"))
             assert sent["model"] == "fake-model"
             assert "Darjeeling" in sent["messages"][0]["content"], "pinned memory in prompt"
+            assert "Scene right now" not in sent["messages"][-1]["content"], "no scene note before the first reply"
             assert sent["messages"][-1]["content"].endswith("What tea do I like?")
             assert "Moment: conversation" in sent["messages"][-1]["content"]
 
             # persona
             page.select_option("#persona", "Alex")
+            page.wait_for_timeout(1000)  # the scene note is written in the background after a reply
             page.fill("#input", "hello again")
             page.click("#send")
             expect(page.locator(".msg")).to_have_count(n_before + 4)
             sent = json.load(open(last, encoding="utf-8"))
             assert "[About Alex]" in sent["messages"][0]["content"], "persona in prompt"
+            # scene memory: the note made after the last reply rides along with the next turn
+            assert "Scene right now: Where: the tea room" in sent["messages"][-1]["content"], "scene note in prompt"
+            scene_req = json.load(open(last + ".scene", encoding="utf-8"))
+            assert "Darjeeling" in scene_req["messages"][-1]["content"], "scene note built from the recent chat"
             assert "[Reply length]" in sent["messages"][0]["content"], "reply length guidance"
             assert "top_k" not in sent, "sampler extras only go to the built-in engine"
 

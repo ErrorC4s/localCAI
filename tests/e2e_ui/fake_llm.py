@@ -22,8 +22,11 @@ class H(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         msgs = body["messages"]
         check = msgs[0]["role"] == "system" and msgs[0]["content"].startswith("You are a strict editor")
-        with open(LAST + (".check" if check else ""), "w", encoding="utf-8") as f:
+        scene = msgs[0]["role"] == "system" and msgs[0]["content"].startswith("You keep notes on a role-play scene")
+        with open(LAST + (".check" if check else ".scene" if scene else ""), "w", encoding="utf-8") as f:
             json.dump(body, f, ensure_ascii=False)
+        if scene:  # the scene-state note made after a reply
+            return self.sse(["Where: the tea room; Luna: sipping tea by the window; Alex: across the table"], "stop")
         if check:  # the OOC guard asking for a verdict
             verdict = "FIX: She has never heard of video games; react with confusion." \
                 if "ooc test" in msgs[-1]["content"].lower() else "OK"

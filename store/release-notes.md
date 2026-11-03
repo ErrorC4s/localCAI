@@ -1,4 +1,8 @@
-## localCAI v0.8.28 · Extractor 0.5.0
+## localCAI v0.8.29 · Extractor 0.5.0
+
+- Scene memory: after each reply, a one-line note of where everyone is and what's still going on (positions, ongoing actions, clothing) is made from the last 5 rounds plus the previous note, in the background. The next reply gets it, so actions that started a few replies ago aren't forgotten. Kept per reply, so regenerated or swiped replies never get a note that doesn't match. Settings → Scene memory (on by default).
+
+### Earlier in v0.8.28
 
 - Chat memory format: Automatic is back to 16-bit. 8-bit turned out slower when part of the model runs on the CPU (measured about 6.5 → 4.2 tokens/s on a 12B model with an 8 GB GPU). 8-bit is still in Settings for cards where it helps.
 

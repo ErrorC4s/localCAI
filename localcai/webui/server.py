@@ -29,6 +29,7 @@ from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
 from ..runtime.guard import check_reply, same_reply, spoken_part
+from ..runtime.scene import build_state, save_state, state_for
 from ..runtime.client import other_speakers, strip_markers, strip_meta, strip_name_prefix, trim_to_sentence
 from ..runtime.prompt import PRONOUN_CHOICES, reply_words_for
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
@@ -38,11 +39,11 @@ MAX_UPLOAD = 200 * 1024 * 1024
 GUARD_MARK = "\x1e"  # sent after the streamed reply while the OOC guard checks it
 
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
-                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns", "persona_pronouns", "initiative", "ooc_guard", "kv_cache"}
+                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns", "persona_pronouns", "initiative", "ooc_guard", "kv_cache", "scene_state"}
 DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
             "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True,
-            "gpu_device": "auto", "kv_cache": "auto", "reply_length": "auto", "pacing": True, "user_pronouns": "",
+            "gpu_device": "auto", "kv_cache": "auto", "scene_state": True, "reply_length": "auto", "pacing": True, "user_pronouns": "",
             "persona_pronouns": {}, "initiative": "auto", "ooc_guard": True}
 
 # Background jobs (history analysis). One at a time; the UI polls /api/job.
@@ -524,6 +525,11 @@ def make_handler(app: App, port: int):
             history = chatlog.to_history(rows)
             target_words = reply_words_for(str(s.get("reply_length", "auto")), history, card)
             instruction = str(body.get("instruction") or "")[:600]
+            use_scene = s.get("scene_state", True) is not False
+            scene_now = ""
+            if use_scene and history and history[-1]["role"] == "user":
+                prev_reply = next((m["content"] for m in reversed(history[:-1]) if m["role"] == "assistant"), "")
+                scene_now = state_for(path, prev_reply)
 
             def make_msgs(instruction: str = "", rewrite_of: str = "") -> list[dict]:
                 return build_messages(
@@ -535,7 +541,8 @@ def make_handler(app: App, port: int):
                                       or s.get("user_pronouns") or ""),
                     initiative=str(s.get("initiative") or "auto"),
                     instruction=instruction, rewrite_of=rewrite_of,
-                    avoid=(swipe_row.get("swipes") or [swipe_row.get("mes", "")]) if swipe_row and not instruction else None)
+                    avoid=(swipe_row.get("swipes") or [swipe_row.get("mes", "")]) if swipe_row and not instruction else None,
+                    scene=scene_now)
 
             msgs = make_msgs(instruction, (swipe_row or {}).get("mes", "") if instruction else "")
             info: dict = {}
@@ -627,6 +634,23 @@ def make_handler(app: App, port: int):
                 target.setdefault("extra", {})["ooc_fixed"] = fix_reason[:300]
             with app.lock:
                 chatlog.save(path, meta, rows)
+            final = fixed or text_out
+            if use_scene and final and not stopped and not crisis:
+                # Scene state for the next turn, made in the background so this reply isn't held up.
+                scene_history = history + [{"role": "assistant", "content": final}]
+
+                def note_scene() -> None:
+                    ask = lambda system, prompt: "".join(stream_chat(
+                        url, s["model"], [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+                        temperature=0.1, max_tokens=110, extra=sampler or None))
+                    state = build_state(ask, scene_history, char, user, prev=scene_now)
+                    if state:
+                        with app.lock:
+                            try:
+                                save_state(path, final, state)
+                            except OSError:
+                                pass
+                threading.Thread(target=note_scene, daemon=True).start()
 
     return H
 

@@ -692,3 +692,36 @@ def test_kv_q8_flags_follow_what_the_build_supports():
     assert e._kv_q8_flags(srv) == ["-ctk", "q8_0", "-ctv", "q8_0", "-fa"]    # older build: turn it on
     e._help = (str(srv), "-ngl N")
     assert e._kv_q8_flags(srv) == []                                         # can't: stay at f16
+
+
+def test_scene_state_round_trip_and_prompt(tmp_path):
+    from localcai.runtime import scene
+    chat = tmp_path / "Mira.20260101-000000.jsonl"
+    chat.write_text("")
+    reply = "*Mira settles into Sam's lap, arms around his neck.* Comfy?"
+    scene.save_state(chat, reply, "Where: sofa; Mira: in Sam's lap, arms around his neck; Sam: sitting")
+    assert scene.state_for(chat, reply + "  ").startswith("Where: sofa")     # whitespace doesn't matter
+    assert scene.state_for(chat, "a different swipe") == ""                     # never a mismatched state
+    assert scene.state_path(chat).name == "Mira.20260101-000000.scene.json"    # moves/deletes with the chat
+    for i in range(12):
+        scene.save_state(chat, f"r{i}", f"Where: room {i}; Mira: standing")
+    assert len(scene.load_states(chat)["states"]) == scene.KEEP
+
+    hist = [{"role": "assistant", "content": "x" * 900}, {"role": "user", "content": "I nod."}]
+    seen = {}
+    def ask(system, prompt):
+        seen["prompt"] = prompt
+        return "Scene note: Where: kitchen; Mira: kneading dough; Sam: leaning on the counter\nExtra story..."
+    st = scene.build_state(ask, hist, "Mira", "Sam", prev="Where: sofa")
+    assert st == "Where: kitchen; Mira: kneading dough; Sam: leaning on the counter"
+    assert "Previous scene note: Where: sofa" in seen["prompt"] and "…" in seen["prompt"]   # long message cut
+    assert scene.clean_state("Where: hall\nMira: standing\nSam: sitting", "Mira", "Sam") == \
+        "Where: hall; Mira: standing; Sam: sitting"
+    assert scene.clean_state("I'm sorry, I can't help with that.", "Mira", "Sam") == ""
+
+    from localcai.runtime.prompt import build_messages
+    card = {"data": {"name": "Mira", "description": "A baker."}}
+    msgs = build_messages(card, [{"role": "assistant", "content": "*waves*"}, {"role": "user", "content": "Hi."}],
+                          user_name="Sam", scene="Where: bakery; Mira: behind the counter; Sam: at the door")
+    assert "Scene right now: Where: bakery" in msgs[-1]["content"]
+    assert msgs[0]["content"].count("Scene right now") == 0       # per-turn note, not the cached system prompt
