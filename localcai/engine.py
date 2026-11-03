@@ -241,14 +241,53 @@ def kill_orphan() -> None:
     _pid_file().unlink(missing_ok=True)
 
 
-_DEV_LINE = re.compile(r"^\s*([A-Za-z]+\d+):\s*(.+?)\s*\((\d+)\s*MiB", re.M)
+_DEV_LINE = re.compile(r"^\s*([A-Za-z]+\d+):\s*(.+?)\s*\((\d+)\s*MiB(?:,\s*(\d+)\s*MiB free)?", re.M)
 _INTEGRATED = re.compile(r"intel.*(uhd|iris|hd graphics|arc\(tm\) graphics|graphics$)|radeon\(tm\) graphics|"
                          r"radeon graphics|vega \d+ graphics|apple|llvmpipe|swiftshader|microsoft basic", re.I)
 
 
 def parse_devices(text: str) -> list[dict]:
     """Parse `llama-server --list-devices` output → [{id, name, mib}]."""
-    return [{"id": m.group(1), "name": m.group(2).strip(), "mib": int(m.group(3))} for m in _DEV_LINE.finditer(text)]
+    return [{"id": m.group(1), "name": m.group(2).strip(), "mib": int(m.group(3)),
+             **({"free": int(m.group(4))} if m.group(4) else {})} for m in _DEV_LINE.finditer(text)]
+
+
+_INT_FMT = {0: "<B", 1: "<b", 2: "<H", 3: "<h", 4: "<I", 5: "<i", 10: "<Q", 11: "<q"}
+
+
+def kv_mib_per_token(path: Path) -> float | None:
+    """KV cache size per token of context (MiB, f16) from the model's own header, or None."""
+    try:
+        arch = gguf_metadata(path, ("general.architecture",)).get("general.architecture")
+        if not arch:
+            return None
+        keys = tuple(f"{arch}.{k}" for k in ("block_count", "attention.head_count_kv", "attention.head_count",
+                                             "embedding_length", "attention.key_length", "attention.value_length"))
+        m = gguf_metadata(path, keys)
+        get = lambda k: m.get(f"{arch}.{k}")
+        layers, heads = get("block_count"), get("attention.head_count")
+        kv_heads = get("attention.head_count_kv") or heads
+        if not (layers and heads and kv_heads):
+            return None
+        head = (get("embedding_length") or 0) // heads
+        k, v = get("attention.key_length") or head, get("attention.value_length") or head
+        return layers * kv_heads * (k + v) * 2 / 2**20 if k and v else None
+    except (OSError, ValueError, struct_error, ZeroDivisionError):
+        return None
+
+
+def fit_context(size_mib: float, kv_per_token: float, free_mib: int, ctx: int) -> int:
+    """The largest context (in 1024 steps, down to MIN_CTX) whose model + KV cache + compute buffers fit in
+    the GPU's free memory; ctx itself if it fits, 0 if not even MIN_CTX does."""
+    need = lambda c: size_mib + kv_per_token * c + COMPUTE_MIB + SPARE_MIB
+    if need(ctx) <= free_mib:
+        return ctx
+    c = (ctx - 1) // 1024 * 1024
+    while c >= MIN_CTX:
+        if need(c) <= free_mib:
+            return c
+        c -= 1024
+    return 0
 
 
 def gguf_metadata(path: Path, want: tuple[str, ...] = ("tokenizer.chat_template", "general.architecture",
@@ -287,6 +326,10 @@ def gguf_metadata(path: Path, want: tuple[str, ...] = ("tokenizer.chat_template"
             t, = struct.unpack("<I", f.read(4))
             if key in want and t == 8:
                 out[key] = read_str().decode("utf-8", "replace")
+                if len(out) == len(want):
+                    break
+            elif key in want and t in _INT_FMT:
+                out[key], = struct.unpack(_INT_FMT[t], f.read(sizes[t]))
                 if len(out) == len(want):
                     break
             else:
@@ -351,6 +394,9 @@ def server_help(server: Path) -> str:
 
 KV_CHOICES = ("auto", "q8", "f16")
 FIT_MARGIN_MIB = 384  # VRAM llama.cpp's --fit leaves free for Windows and other apps
+COMPUTE_MIB = 500     # llama.cpp's compute buffers on the GPU (typical for 4–14B models)
+SPARE_MIB = 300       # kept free so the driver never spills into shared system memory
+MIN_CTX = 2048
 KV_MB_DEFAULT = 0.15  # KV cache per token (MB) of a typical 4–14B model at f16
 
 
@@ -368,6 +414,8 @@ class Engine:
         self._devices: tuple[str, list[dict]] | None = None
         self._help: tuple[str, str] | None = None
         self.kv = "f16"               # the KV cache format the running engine uses
+        self.ctx = 0                  # context the running engine really has (can be less than asked)
+        self.ctx_wanted = 0
         self._job_seq = 0
 
     # info --------------------------------------------------------------
@@ -390,6 +438,7 @@ class Engine:
             return {"installed": bool(inst), "build": inst and inst.get("asset"), "version": inst and inst.get("tag"),
                     "state": self.state, "model": self.model, "error": self.error, "job": self.job,
                     "device": self.device, "build_kind": inst and inst.get("build"), "kv": self.kv,
+                    "ctx": self.ctx, "ctx_wanted": self.ctx_wanted,
                     "nvidia": nvidia_present(),
                     "cuda_upgrade": bool(inst) and nvidia_present() and inst.get("variant", "auto") == "auto"
                                     and "-cuda-" not in (inst.get("asset") or ""),
@@ -570,6 +619,7 @@ class Engine:
                    "-c", str(int(ctx)), "-ngl", str(int(gpu_layers)), "-np", "1", "--jinja"]
             fit_note = ""
             self.kv = "f16"
+            self.ctx = self.ctx_wanted = int(ctx)
             try:
                 has_template = bool(gguf_metadata(path).get("tokenizer.chat_template"))
             except (OSError, ValueError, struct_error):
@@ -604,6 +654,27 @@ class Engine:
                         i = cmd.index("-ngl"); del cmd[i:i + 2]
                         fit_note = (f"\n[localCAI] model is {size_mib / 1024:.1f} GB, GPU has {chosen['mib'] / 1024:.1f} GB:"
                                     " letting llama.cpp fit as many layers as possible on the GPU")
+                    if int(gpu_layers) >= 999 and "-ngl" in cmd:
+                        # Fits on paper, but other apps (browser, Discord…) hold VRAM too. If the model plus this
+                        # context doesn't fit in what's *free*, the driver spills into shared system memory and
+                        # replies get 5-7x slower (measured: 8B model on an 8 GB laptop GPU, 7.5 tokens/s at
+                        # 8192 context vs 51 at 6144). So use the largest context that fits in free memory.
+                        kill_orphan()  # an engine left behind would hold VRAM and skew the measurement
+                        now = next((d for d in list_devices(server) if d["id"] == chosen["id"]), None)
+                        free = (now or {}).get("free")
+                        if free:
+                            kvt = (kv_mib_per_token(path) or KV_MB_DEFAULT) * (0.53 if self.kv == "q8" else 1)
+                            best = fit_context(size_mib, kvt, free, int(ctx))
+                            fit_note += (f"\n[localCAI] VRAM free: {free} MiB; model {size_mib:.0f} MiB, "
+                                         f"KV {kvt * int(ctx):.0f} MiB at {int(ctx)} context")
+                            if best and best < int(ctx):
+                                cmd[cmd.index("-c") + 1] = str(best)
+                                self.ctx = best
+                                fit_note += (f"\n[localCAI] context {int(ctx)} doesn't fit in free VRAM: using {best} "
+                                             "so the whole model stays on the GPU")
+                            elif not best:
+                                i = cmd.index("-ngl"); del cmd[i:i + 2]
+                                fit_note += "\n[localCAI] not enough free VRAM for the whole model: letting llama.cpp fit it"
                     if int(gpu_layers) >= 999 and "-ngl" not in cmd and "--fit-target" in self.help_text(server):
                         # Doesn't fit on the GPU: llama.cpp's --fit places layers by the GPU's *free* memory with a
                         # small margin and keeps the context size we asked for. Only here: when the model fits, all

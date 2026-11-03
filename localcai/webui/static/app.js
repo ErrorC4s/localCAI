@@ -123,7 +123,12 @@ async function refreshEngine() {
   chip.textContent = !st.installed ? "● engine not installed — set it up"
     : cpu ? "● ready · CPU (slow)"
     : { off: "● engine off", starting: "● loading model…", ready: "● ready", error: "● engine error" }[st.state];
-  chip.title = st.error || (st.device ? "Running on " + st.device.name : "");
+  const shrunk = st.state === "ready" && st.ctx && st.ctx_wanted && st.ctx < st.ctx_wanted;
+  if (shrunk) chip.textContent += ` · ${Math.round(st.ctx / 1024)}K context`;
+  chip.title = st.error || ((st.device ? "Running on " + st.device.name : "")
+    + (shrunk ? `\nContext ${st.ctx} instead of ${st.ctx_wanted}: other apps are using graphics memory, `
+      + "and a bigger context would spill into system memory and run several times slower. "
+      + "Close some apps and reload the model to get it back." : ""));
   renderEngineDialog(st);
   const busy = st.state === "starting" || (st.job && !st.job.done);
   clearTimeout(engineTimer);

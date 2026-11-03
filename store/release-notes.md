@@ -1,8 +1,11 @@
-## localCAI v0.8.33 · Extractor 0.5.1
+## localCAI v0.8.34 · Extractor 0.5.1
+
+- Built-in engine: before loading a model, localCAI checks how much graphics memory is actually free (browsers, Discord and other apps use some too). If the model plus your context size wouldn't fit, the context is shrunk to the largest size that does, so the whole model stays on the GPU. Without this the driver quietly moved part of it into system memory and replies got 5-7x slower (measured on an 8B model with an 8 GB laptop GPU: 7.5 tokens/s at 8192 context, 51 at 6144). The engine chip shows when this happens (e.g. "ready · 6K context"); close some apps and reload the model to get the full context back. The engine log now records free VRAM at start.
+
+### Earlier in v0.8.33
 
 - Built-in engine: a model that fits on the graphics card goes fully on it again (much faster: 55-63 vs 10-11 tokens/s measured on an 8B model). Only a model that doesn't fit uses llama.cpp's --fit, which places layers by the card's free memory and keeps your context size.
 - "(Continues)" / "[continued]" labels some models put between paragraphs are removed.
-- If replies suddenly get much slower than usual, other apps may be holding graphics memory: restarting localCAI frees it.
 
 ### Earlier in v0.8.31
 

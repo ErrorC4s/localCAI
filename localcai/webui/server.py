@@ -521,7 +521,9 @@ def make_handler(app: App, port: int):
             if s.get("recall", True) and len(rows) > 45:
                 query = " ".join(r.get("mes", "") for r in rows[-2:])
                 recalled = recall(rows, query, exclude_last=40, cache_key=str(path))
-            budget = max(6000, int(int(s["ctx_size"]) * 3.2) - int(s["max_tokens"]) * 4)
+            # the engine may run with less context than asked (it shrinks it to fit free VRAM)
+            ctx = ENGINE.ctx if s["backend"] == "builtin" and ENGINE.ctx else int(s["ctx_size"])
+            budget = max(6000, int(ctx * 3.2) - int(s["max_tokens"]) * 4)
             history = chatlog.to_history(rows)
             target_words = reply_words_for(str(s.get("reply_length", "auto")), history, card)
             instruction = str(body.get("instruction") or "")[:600]

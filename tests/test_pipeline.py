@@ -818,3 +818,63 @@ def test_fit_only_when_the_model_does_not_fit(tmp_path, monkeypatch):
         else:
             assert cmd[cmd.index("-ngl") + 1] == "999" and "--fit" not in cmd, cmd   # all on the GPU: fastest
         assert cmd[cmd.index("-c") + 1] == "8192"
+
+
+def _write_gguf(path, kv):
+    import struct
+    def s(x):
+        b = x.encode(); return struct.pack("<Q", len(b)) + b
+    body = b"GGUF" + struct.pack("<I", 3) + struct.pack("<QQ", 0, len(kv))
+    for k, v in kv.items():
+        body += s(k) + (struct.pack("<I", 8) + s(v) if isinstance(v, str) else struct.pack("<I", 4) + struct.pack("<I", v))
+    path.write_bytes(body)
+
+
+def test_kv_cache_size_read_from_the_model(tmp_path):
+    from localcai.engine import kv_mib_per_token
+    p = tmp_path / "llama3-8b.gguf"   # Llama 3 8B: 32 layers, 8 KV heads of 128 → 0.125 MiB per token
+    _write_gguf(p, {"general.architecture": "llama", "llama.block_count": 32, "llama.attention.head_count": 32,
+                    "llama.attention.head_count_kv": 8, "llama.embedding_length": 4096})
+    assert abs(kv_mib_per_token(p) - 0.125) < 1e-9
+    q = tmp_path / "broken.gguf"; q.write_bytes(b"nope")
+    assert kv_mib_per_token(q) is None
+
+
+def test_context_shrinks_to_fit_free_vram():
+    from localcai.engine import fit_context, parse_devices, COMPUTE_MIB, SPARE_MIB
+    devs = parse_devices("Available devices:\n  CUDA0: NVIDIA GeForce RTX 4060 Laptop GPU (8123 MiB, 6450 MiB free)")
+    assert devs == [{"id": "CUDA0", "name": "NVIDIA GeForce RTX 4060 Laptop GPU", "mib": 8123, "free": 6450}]
+    assert parse_devices("  Vulkan0: Intel Arc (18432 MiB)")[0].get("free") is None   # older builds: no free value
+    size, kvt = 4692, 0.125                     # 8B Q4_K_M, as measured on an 8 GB laptop GPU
+    assert fit_context(size, kvt, 8000, 8192) == 8192          # plenty free: as asked
+    assert fit_context(size, kvt, 6300, 8192) == 6144          # browser & co. hold some: shrink
+    assert fit_context(size, kvt, size + COMPUTE_MIB + SPARE_MIB + 100, 8192) == 0   # not even 2048 fits
+    assert fit_context(size, kvt, 6300, 4096) == 4096
+
+
+def test_engine_start_uses_the_context_that_fits(tmp_path, monkeypatch):
+    import localcai.engine as eng
+    monkeypatch.setenv("LOCALCAI_HOME", str(tmp_path))
+    model = eng.models_dir() / "m-8b-Q4_K_M.gguf"
+    _write_gguf(model, {"general.architecture": "llama", "llama.block_count": 32, "llama.attention.head_count": 32,
+                        "llama.attention.head_count_kv": 8, "llama.embedding_length": 4096})
+    with open(model, "r+b") as f:
+        f.truncate(int(4692 * 2**20))
+    server = tmp_path / "llama-server"; server.write_text("")
+    seen = {}
+    for free, want_ctx in ((7800, "8192"), (6300, "6144")):
+        e = eng.Engine()
+        monkeypatch.setattr(e, "installed", lambda: {"server": str(server)})
+        monkeypatch.setattr(e, "devices", lambda s=None: [{"id": "CUDA0", "name": "RTX", "mib": 8123}])
+        monkeypatch.setattr(eng, "list_devices", lambda s, free=free: [{"id": "CUDA0", "name": "RTX", "mib": 8123, "free": free}])
+        e._help = (str(server), "")
+        monkeypatch.setattr(eng.subprocess, "Popen", lambda cmd, **kw: (seen.__setitem__("cmd", cmd), (_ for _ in ()).throw(OSError("stop")))[1])
+        eng.engine_dir().mkdir(parents=True, exist_ok=True)
+        try:
+            e.start(model.name, timeout=1)
+        except Exception:
+            pass
+        cmd = seen["cmd"]
+        assert cmd[cmd.index("-c") + 1] == want_ctx and cmd[cmd.index("-ngl") + 1] == "999", cmd
+        assert e.ctx == int(want_ctx) and e.ctx_wanted == 8192
+    assert "doesn't fit in free VRAM: using 6144" in (eng.engine_dir() / "engine.log").read_text()
