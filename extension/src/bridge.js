@@ -5,7 +5,7 @@
   const captures = [];
   // History paging: C.ai's turns endpoint returns meta.next_token while older messages exist.
   // chatId/nextToken: where the oldest page we've seen says older messages continue.
-  const paging = { lastPageAt: 0, reachedStart: false, chatId: null, nextToken: null };
+  const paging = { lastPageAt: 0, reachedStart: false, chatId: null, nextToken: null, cleared: false };
 
   const seenTurns = new Set();
   function record(kind, url, t, data) {
@@ -15,6 +15,7 @@
     if (m && Array.isArray(data?.turns)) {
       for (const tn of data.turns) seenTurns.add(tn?.turn_key?.turn_id || JSON.stringify(tn).slice(0, 120));
       paging.lastPageAt = Date.now();
+      if (data.turns.length) paging.cleared = false;
       if (paging.chatId !== m[1]) { paging.chatId = m[1]; paging.reachedStart = false; paging.nextToken = null; }
       if (!data.turns.length || !data.meta || !data.meta.next_token) paging.reachedStart = true;
       else paging.nextToken = data.meta.next_token; // pages arrive newest → oldest
@@ -70,6 +71,10 @@
       if (paging.reachedStart) { job.message = `Already at the first message. ${job.turns} messages loaded.`; return; }
       if (await fastLoad()) return;         // direct page-by-page history requests
       if (job.stopped) return;
+      if (paging.cleared) {                 // nothing left to scroll to: the page has to fetch it again
+        job.message = "Cleared. Reload this C.ai page, then press Load full history again.";
+        return;
+      }
       job.message = "Switching to scrolling…";  // fallback: scroll like a person
       const el = findScroller();
       if (!el) throw new Error("Couldn't find the chat on this page. Open a chat first.");
@@ -98,13 +103,15 @@
   // its own web app makes when you scroll up. The browser attaches your session cookie by itself;
   // the extension never reads or handles any login data. Returns false to fall back to scrolling.
   async function fastLoad() {
-    if (!paging.chatId || !paging.nextToken) return false;
+    // after Clear there is no next_token: start again from the newest page of the same chat
+    if (!paging.chatId || (!paging.nextToken && !paging.cleared)) return false;
     let retries = 0;
     while (!job.stopped && !paging.reachedStart) {
       const url = `https://neo.character.ai/turns/${encodeURIComponent(paging.chatId)}/`;
       let res;
       try {
-        res = await fetch(`${url}?next_token=${encodeURIComponent(paging.nextToken)}`, { credentials: "include" });
+        res = await fetch(paging.nextToken ? `${url}?next_token=${encodeURIComponent(paging.nextToken)}` : url,
+                          { credentials: "include" });
       } catch { return false; }
       if (res.status === 429 || res.status >= 500) {          // busy: back off, then fall back
         if (++retries > 3) return false;
@@ -145,6 +152,9 @@
     } else if (msg?.type === "clear") {
       captures.length = 0;
       seenTurns.clear();
+      // forget how far back we got too, or "Load full history" would think it's already done
+      Object.assign(paging, { reachedStart: false, nextToken: null, cleared: true, lastPageAt: 0 });
+      if (!job.running) Object.assign(job, { done: false, stopped: false, turns: 0, message: "" });
       reply({ ok: true });
     }
     return false;

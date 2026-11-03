@@ -52,6 +52,13 @@ def write_chat(chat: Chat, out_dir: Path, index: int = 0) -> Path:
         from ..chatlog import load
         old_meta, old_rows = load(p)
         rows = _merge(old_rows, rows)
+    elif p.exists():
+        # can't line the messages up without ids: keep the existing chat (it may have been continued
+        # in localCAI) and save this import next to it instead of over it
+        n = 2
+        while (alt := p.with_name(f"{p.stem}-{n}.jsonl")).exists():
+            n += 1
+        p = alt
     lines += rows
     p.write_text("\n".join(json.dumps(l, ensure_ascii=False) for l in lines) + "\n", "utf-8")
     return p

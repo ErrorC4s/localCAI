@@ -1,4 +1,12 @@
-## localCAI v0.8.30 · Extractor 0.5.0
+## localCAI v0.8.31 · Extractor 0.5.1
+
+- Importing a chat for a character that's already in your library no longer replaces its card with a bare one rebuilt from the chat: the description, personality, greeting, example dialogue, memories, rules and pronouns stay as they are, and the chat's pinned memories are added (without duplicates). Importing a new version of a card keeps the rules, pronouns and memories you set in the app, and the avatar if the new card has none.
+- Re-importing a chat file that has no message ids saves it as a new chat instead of over the existing one (which you may have continued in localCAI).
+- Scene memory notes are tied to the reply and the few messages before it, so the same short reply ("*nods* Okay.") at two points of a chat keeps two separate notes.
+- Extractor 0.5.1: after Clear, Load full history starts over instead of saying it's already at the first message (or asks you to reload the page when it can't fetch directly).
+- Releases are only published when the tests pass.
+
+### Earlier in v0.8.30
 
 - Scene memory now also notes the character's mood and how intense the moment is. The next reply keeps that mood unless something that just happened gives a reason to change it: a real reason (a surprise, a hurtful word, a climax, danger) can change it at once, otherwise it shifts gradually instead of flipping out of nowhere.
 - Fixed doubled ";;" in scene notes.

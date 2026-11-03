@@ -528,8 +528,8 @@ def make_handler(app: App, port: int):
             use_scene = s.get("scene_state", True) is not False
             scene_now = ""
             if use_scene and history and history[-1]["role"] == "user":
-                prev_reply = next((m["content"] for m in reversed(history[:-1]) if m["role"] == "assistant"), "")
-                scene_now = state_for(path, prev_reply)
+                last_bot = max((i for i, m in enumerate(history[:-1]) if m["role"] == "assistant"), default=-1)
+                scene_now = state_for(path, history[:last_bot + 1]) if last_bot >= 0 else ""
 
             def make_msgs(instruction: str = "", rewrite_of: str = "") -> list[dict]:
                 return build_messages(
@@ -647,7 +647,7 @@ def make_handler(app: App, port: int):
                     if state:
                         with app.lock:
                             try:
-                                save_state(path, final, state)
+                                save_state(path, scene_history, state)
                             except OSError:
                                 pass
                 threading.Thread(target=note_scene, daemon=True).start()

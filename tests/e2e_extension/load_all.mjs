@@ -52,13 +52,13 @@ async function run(cors) {
     const req = r.request();
     const tok = new URL(req.url()).searchParams.get("next_token");
     const fromExtension = !req.headers()["x-from-page"];
-    if (fromExtension && tok !== "p0") direct++;
+    if (fromExtension && tok && tok !== "p0") direct++;
     const headers = cors ? { "Access-Control-Allow-Origin": "https://character.ai", "Access-Control-Allow-Credentials": "true",
       "Access-Control-Allow-Headers": "x-from-page" } : {};
     if (req.method() === "OPTIONS") return r.fulfill({ status: 204, headers });
     // without CORS the extension's direct request fails, the page's own requests still work (header marks them)
     if (!cors && !req.headers()["x-from-page"]) return r.fulfill({ status: 403, body: "" });
-    r.fulfill({ status: 200, contentType: "application/json", headers, body: JSON.stringify(page(+tok.slice(1))) });
+    r.fulfill({ status: 200, contentType: "application/json", headers, body: JSON.stringify(page(tok ? +tok.slice(1) : 0)) });
   });
   const tab = await ctx.newPage();
   await tab.goto("https://character.ai/chat/x");
@@ -76,7 +76,19 @@ async function run(cors) {
   let s;
   for (let i = 0; i < 60; i++) { await tab.waitForTimeout(500); s = await ask("stats"); if (s.job.done) break; }
   const secs = ((Date.now() - t0) / 1000).toFixed(1);
+  // Clear, then Load full history again: it must start over, not say "already at the first message"
+  await ask("clear");
+  const c = await ask("stats");
+  if (c.turns !== 0) fail("clear should empty what was collected, got " + c.turns);
+  await ask("loadAll");
+  let again;
+  for (let i = 0; i < 60; i++) { await tab.waitForTimeout(500); again = await ask("stats"); if (again.job.done) break; }
   await ctx.close();
+  if (cors && (again.turns !== PAGES * PER || !/Reached the first message/.test(again.job.message)))
+    fail(`after Clear, loading again should fetch everything: ${again.turns} · ${again.job.message}`);
+  if (!cors && !/Reload this C.ai page/.test(again.job.message))
+    fail("after Clear without direct requests, it should say to reload the page: " + again.job.message);
+  console.log(`  after Clear: ${again.job.message}`);
   console.log(`${cors ? "fast path" : "fallback "}: ${s.job.message} (${secs}s, direct requests: ${direct})`);
   if (s.turns !== PAGES * PER) fail(`loaded ${s.turns}/${PAGES * PER}`);
   if (!/Reached the first message/.test(s.job.message)) fail("should stop because C.ai said there is nothing older");

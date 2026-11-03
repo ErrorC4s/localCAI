@@ -699,12 +699,21 @@ def test_scene_state_round_trip_and_prompt(tmp_path):
     chat = tmp_path / "Mira.20260101-000000.jsonl"
     chat.write_text("")
     reply = "*Mira settles into Sam's lap, arms around his neck.* Comfy?"
-    scene.save_state(chat, reply, "Where: sofa; Mira: in Sam's lap, arms around his neck; Sam: sitting")
-    assert scene.state_for(chat, reply + "  ").startswith("Where: sofa")     # whitespace doesn't matter
-    assert scene.state_for(chat, "a different swipe") == ""                     # never a mismatched state
+    h = [{"role": "user", "content": "I sit on the sofa."}, {"role": "assistant", "content": reply}]
+    scene.save_state(chat, h, "Where: sofa; Mira: in Sam's lap, arms around his neck; Sam: sitting")
+    h2 = [h[0], {"role": "assistant", "content": reply + "  "}]
+    assert scene.state_for(chat, h2).startswith("Where: sofa")                 # whitespace doesn't matter
+    assert scene.state_for(chat, [h[0], {"role": "assistant", "content": "another swipe"}]) == ""
     assert scene.state_path(chat).name == "Mira.20260101-000000.scene.json"    # moves/deletes with the chat
+    # the same short reply at two different points of the chat keeps two notes
+    okay = {"role": "assistant", "content": '*She nods.* "Okay."'}
+    lib_h = [{"role": "user", "content": "Quiet, we're in the library."}, okay]
+    beach_h = lib_h + [{"role": "user", "content": "Let's go to the beach."}, okay]
+    scene.save_state(chat, lib_h, "Where: library")
+    scene.save_state(chat, beach_h, "Where: beach")
+    assert scene.state_for(chat, lib_h) == "Where: library" and scene.state_for(chat, beach_h) == "Where: beach"
     for i in range(12):
-        scene.save_state(chat, f"r{i}", f"Where: room {i}; Mira: standing")
+        scene.save_state(chat, [{"role": "assistant", "content": f"r{i}"}], f"Where: room {i}; Mira: standing")
     assert len(scene.load_states(chat)["states"]) == scene.KEEP
 
     hist = [{"role": "assistant", "content": "x" * 900}, {"role": "user", "content": "I nod."}]
@@ -730,3 +739,48 @@ def test_scene_state_round_trip_and_prompt(tmp_path):
     assert "Scene right now: Where: bakery" in msgs[-1]["content"]
     assert "never flip for no reason" in msgs[-1]["content"]        # mood follows the story
     assert msgs[0]["content"].count("Scene right now") == 0       # per-turn note, not the cached system prompt
+
+
+def test_importing_a_chat_keeps_the_existing_card(tmp_path):
+    import json
+    from localcai.library import import_into
+    from localcai.exporters.card_v2 import embed_card_in_png, placeholder_png
+    lib = tmp_path / "lib"
+    (lib / "characters").mkdir(parents=True)
+    card = {"spec": "chara_card_v2", "spec_version": "2.0", "data": {
+        "name": "Luna", "description": "A sleepy moon witch.", "personality": "Dreamy", "first_mes": "*yawns* Hi.",
+        "mes_example": "{{char}}: Mm?", "extensions": {"localcai": {"rules": "Never shout.", "pronouns": "she/her"}},
+        "character_book": {"entries": [{"keys": ["tea"], "content": "Loves oolong.", "id": 0}]}}}
+    (lib / "characters" / "Luna.card.json").write_text(json.dumps(card))
+    (lib / "characters" / "Luna.card.png").write_bytes(embed_card_in_png(placeholder_png(10, 10, (1, 2, 3)), card))
+    chat = tmp_path / "Luna.chat.jsonl"   # a chat log only, no character definition
+    rows = [{"user_name": "Alex", "character_name": "Luna"},
+            {"name": "Luna", "is_user": False, "mes": "Morning already?", "send_date": ""},
+            {"name": "Alex", "is_user": True, "mes": "Yes.", "send_date": ""}]
+    chat.write_text("\n".join(json.dumps(r) for r in rows))
+    for _ in range(2):                    # importing twice changes nothing either
+        rep = import_into(chat, lib)
+    d = json.loads((lib / "characters" / "Luna.card.json").read_text())["data"]
+    assert d["description"] == "A sleepy moon witch." and d["mes_example"] == "{{char}}: Mm?"
+    assert d["first_mes"] == "*yawns* Hi." and d["personality"] == "Dreamy"
+    assert d["extensions"]["localcai"]["rules"] == "Never shout."
+    assert [e["content"] for e in d["character_book"]["entries"]] == ["Loves oolong."]
+    assert not any("minimal card" in w for w in rep.warnings)
+    assert len(list((lib / "chats").glob("Luna.*.jsonl"))) == 2   # the second import didn't overwrite the first
+
+
+def test_importing_a_new_version_of_a_card_keeps_app_settings_and_memories(tmp_path):
+    import json
+    from localcai.library import _merge_card, merge_books_unique
+    from localcai.schema import Character
+    jp = tmp_path / "Luna.card.json"
+    jp.write_text(json.dumps({"spec": "chara_card_v2", "data": {
+        "name": "Luna", "description": "old", "extensions": {"localcai": {"rules": "Never shout."}},
+        "character_book": {"entries": [{"keys": ["tea"], "content": "Loves oolong."}]}}}))
+    new = Character(name="Luna", description="A sleepy moon witch, now with a cat.")
+    _merge_card(jp, new, {"entries": [{"keys": ["tea"], "content": "Loves oolong."},
+                                       {"keys": ["cat"], "content": "Her cat is Pip."}]})
+    d = json.loads(jp.read_text())["data"]
+    assert d["description"].endswith("with a cat.") and d["extensions"]["localcai"]["rules"] == "Never shout."
+    assert [e["content"] for e in d["character_book"]["entries"]] == ["Loves oolong.", "Her cat is Pip."]
+    assert merge_books_unique(None, {"entries": []}) == {"entries": []}

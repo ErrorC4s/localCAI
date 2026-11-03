@@ -5,8 +5,8 @@ The model sees the whole recent chat, but small models lose track of an action t
 replies ago and is still going on ("she's sitting in his lap") once the newest reply talks about
 something else. This line hands it the result instead of making it dig through the history.
 
-It is stored next to the chat (chats/<chat>.scene.json), keyed by the reply it was made after, so a
-regenerated, edited or swiped reply never gets a state that doesn't match it.
+It is stored next to the chat (chats/<chat>.scene.json), keyed by the reply it was made after and the
+messages just before it, so a regenerated, edited or swiped reply never gets a note that doesn't match.
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from typing import Callable
 ROUNDS = 5           # how far back to look: the last 5 exchanges (10 messages)
 MSG_CHARS = 700      # each message is cut to its last part; the end is where the scene is now
 KEEP = 8             # states kept per chat (enough for going back a few replies / swipes)
+CONTEXT = 4          # a note belongs to its reply plus the 3 messages before it
 
 SCENE_SYSTEM = ("You keep notes on a role-play scene. You only report what the text shows; "
                 "you never continue the story and never add anything.")
@@ -39,8 +40,12 @@ Format: Where: ...; {char}: ...; {user}: ...; Mood: ...
 """
 
 
-def scene_key(reply: str) -> str:
-    norm = re.sub(r"\s+", " ", (reply or "")).strip()
+def scene_key(history: list[dict]) -> str:
+    """Identifies "the chat as it stands after this reply": the reply plus the few messages before it.
+    The same short reply ("*nods* Okay.") at two different points of a chat gets two different keys,
+    and editing, regenerating or swiping one of these messages gives a new key (no stale note)."""
+    tail = [m for m in history if m.get("content")][-CONTEXT:]
+    norm = "\x1f".join(m["role"][0] + re.sub(r"\s+", " ", m["content"]).strip() for m in tail)
     return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
 
 
@@ -56,18 +61,18 @@ def load_states(chat_path: Path) -> dict:
         return {"states": {}}
 
 
-def state_for(chat_path: Path, reply: str) -> str:
-    """The scene state made after this exact reply, or ""."""
-    if not reply:
+def state_for(chat_path: Path, history: list[dict]) -> str:
+    """The note made right after the last message of `history` (a reply), or ""."""
+    if not history:
         return ""
-    return str(load_states(chat_path)["states"].get(scene_key(reply), {}).get("state", ""))
+    return str(load_states(chat_path)["states"].get(scene_key(history), {}).get("state", ""))
 
 
-def save_state(chat_path: Path, reply: str, state: str) -> None:
+def save_state(chat_path: Path, history: list[dict], state: str) -> None:
     data = load_states(chat_path)
-    states = data["states"]
-    states.pop(scene_key(reply), None)
-    states[scene_key(reply)] = {"state": state}
+    states, key = data["states"], scene_key(history)
+    states.pop(key, None)
+    states[key] = {"state": state}
     while len(states) > KEEP:
         states.pop(next(iter(states)))
     state_path(chat_path).write_text(json.dumps(data, ensure_ascii=False, indent=1), "utf-8")

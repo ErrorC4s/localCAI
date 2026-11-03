@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .exporters import write_card, write_chat
-from .exporters.card_v2 import _safe
+from .exporters.card_v2 import _safe, embed_card_in_png, to_card_v2
 from .images import ext_for
 from .importers import import_path
 from .memory import merge_books, pins_to_lorebook
@@ -41,6 +41,56 @@ class ImportReport:
         return not self.characters and not self.chats and not self.personas
 
 
+def _entry_key(e: dict) -> tuple:
+    return (str(e.get("content", "")).strip(), tuple(sorted(str(k) for k in e.get("keys") or [])))
+
+
+def merge_books_unique(a: dict | None, b: dict | None) -> dict | None:
+    """Like merge_books, but an entry that's already there (same text and keys) isn't added twice,
+    so importing the same chat again doesn't duplicate its memories."""
+    if not a or not b:
+        return a or b
+    have = {_entry_key(e) for e in a.get("entries", [])}
+    new = [e for e in b.get("entries", []) if _entry_key(e) not in have]
+    return merge_books(a, {**b, "entries": new}) if new else a
+
+
+def _merge_card(jp: Path, c: Character, book: dict | None) -> tuple[Path, Path]:
+    """Update a card that's already in the library from an import without losing anything.
+
+    - a card rebuilt from a chat (no real definition) leaves the existing definition untouched;
+    - a real card in the import replaces the definition, but the localCAI settings made in the
+      app (rules, pronouns...) and the existing memories are kept;
+    - the avatar is kept unless the import brings one."""
+    old = json.loads(jp.read_text("utf-8"))
+    od = old.get("data", old)
+    if c.source == "reconstructed-from-chat":
+        card = old if "data" in old else {"spec": "chara_card_v2", "spec_version": "2.0", "data": od}
+        d = card["data"]
+    else:
+        card = to_card_v2(c, None)
+        d = card["data"]
+        mine = (od.get("extensions") or {}).get("localcai") or {}
+        d["extensions"]["localcai"] = {**mine, **d["extensions"]["localcai"]}  # keep rules, pronouns…
+        for k, v in (od.get("extensions") or {}).items():
+            d["extensions"].setdefault(k, v)
+    merged = merge_books_unique(od.get("character_book"), book)
+    if merged:
+        d["character_book"] = merged
+    jp.write_text(json.dumps(card, ensure_ascii=False, indent=2), "utf-8")
+    pp = jp.with_name(jp.name.removesuffix(".card.json") + ".card.png")
+    try:
+        image = c.avatar_png or (pp.read_bytes() if pp.exists() else None)
+        if image:
+            pp.write_bytes(embed_card_in_png(image, card))
+        else:
+            from .exporters.card_v2 import placeholder_png
+            pp.write_bytes(embed_card_in_png(placeholder_png(), card))
+    except (OSError, ValueError):
+        pass
+    return jp, pp
+
+
 def import_into(src: str | Path, out: str | Path, swap_roles: bool = False,
                 user_name: str | None = None) -> ImportReport:
     out = Path(out)
@@ -61,12 +111,19 @@ def import_into(src: str | Path, out: str | Path, swap_roles: bool = False,
             bundle.characters.append(Character(name=chat.character_name, greeting=first_bot,
                                                source="reconstructed-from-chat"))
             known.add(chat.character_name)
-            rep.warnings.append(f"'{chat.character_name}': no character definition found, so a minimal "
-                                "card was made from the chat. Edit it to add personality.")
+            if not (out / "characters" / f"{_safe(chat.character_name)}.card.json").exists():
+                rep.warnings.append(f"'{chat.character_name}': no character definition found, so a minimal "
+                                    "card was made from the chat. Edit it to add personality.")
 
     for c in bundle.characters:
         book = merge_books(c.extra.get("character_book"), pins_to_lorebook(bundle.chats, c.name))
-        jp, pp = write_card(c, out / "characters", book)
+        existing = out / "characters" / f"{_safe(c.name)}.card.json"
+        if existing.exists():
+            # Already in the library: never lose what's there (the user's edits, memories, rules,
+            # pronouns, avatar). A chat-only import just adds its pinned memories to the card.
+            jp, pp = _merge_card(existing, c, book)
+        else:
+            jp, pp = write_card(c, out / "characters", book)
         if c.background:
             _write_image(out / "characters", f"{_safe(c.name)}.background", c.background)
         rep.characters.append({"name": c.name, "memories": len(book["entries"]) if book else 0,
