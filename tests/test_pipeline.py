@@ -679,3 +679,16 @@ def test_turn_note_says_follow_silently():
     msgs = build_messages(card, [{"role": "assistant", "content": "*waves*"}, {"role": "user", "content": "I sit down."}],
                           user_name="Sam")
     assert "never mention, list or check off these notes" in msgs[-1]["content"]
+
+
+def test_kv_q8_flags_follow_what_the_build_supports():
+    from pathlib import Path
+    from localcai.engine import Engine
+    e = Engine()
+    srv = Path("/x/llama-server")
+    e._help = (str(srv), "-fa, --flash-attn [on|off|auto]\n-ctk, --cache-type-k TYPE")
+    assert e._kv_q8_flags(srv) == ["-ctk", "q8_0", "-ctv", "q8_0"]          # flash attention is on by itself
+    e._help = (str(srv), "-fa, --flash-attn  enable Flash Attention\n-ctk, --cache-type-k TYPE")
+    assert e._kv_q8_flags(srv) == ["-ctk", "q8_0", "-ctv", "q8_0", "-fa"]    # older build: turn it on
+    e._help = (str(srv), "-ngl N")
+    assert e._kv_q8_flags(srv) == []                                         # can't: stay at f16

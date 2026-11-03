@@ -38,11 +38,11 @@ MAX_UPLOAD = 200 * 1024 * 1024
 GUARD_MARK = "\x1e"  # sent after the streamed reply while the OOC guard checks it
 
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
-                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns", "persona_pronouns", "initiative", "ooc_guard"}
+                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns", "persona_pronouns", "initiative", "ooc_guard", "kv_cache"}
 DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
             "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True,
-            "gpu_device": "auto", "reply_length": "auto", "pacing": True, "user_pronouns": "",
+            "gpu_device": "auto", "kv_cache": "auto", "reply_length": "auto", "pacing": True, "user_pronouns": "",
             "persona_pronouns": {}, "initiative": "auto", "ooc_guard": True}
 
 # Background jobs (history analysis). One at a time; the UI polls /api/job.
@@ -56,7 +56,8 @@ def model_url() -> str:
     if not s["model"]:
         raise RuntimeError("Pick a model first (top bar).")
     if s["backend"] == "builtin":
-        ENGINE.start(s["model"], int(s["ctx_size"]), int(s["gpu_layers"]), device=s["gpu_device"])
+        ENGINE.start(s["model"], int(s["ctx_size"]), int(s["gpu_layers"]), device=s["gpu_device"],
+                     kv=s.get("kv_cache", "auto"))
         return ENGINE.base_url
     return resolve_base_url(s["backend"])
 IMPORT_EXT = {".json", ".jsonl", ".png", ".zip"}
@@ -303,7 +304,8 @@ def make_handler(app: App, port: int):
             elif action == "start":
                 if not body.get("model"):
                     raise ValueError("model required")
-                ENGINE.start_async(body["model"], int(s["ctx_size"]), int(s["gpu_layers"]), s["gpu_device"])
+                ENGINE.start_async(body["model"], int(s["ctx_size"]), int(s["gpu_layers"]), s["gpu_device"],
+                                   s.get("kv_cache", "auto"))
                 ok = True
             elif action == "stop":
                 ENGINE.stop()

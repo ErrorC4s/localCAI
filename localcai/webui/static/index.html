@@ -123,6 +123,10 @@
       <input id="set-ctx" type="number" min="1024" max="131072" step="1024"></label>
     <label class="field">Graphics card
       <select id="set-gpu"><option value="auto">Automatic (best dedicated GPU)</option><option value="cpu">None (CPU only)</option></select></label>
+    <label class="field">Chat memory format (KV cache)
+      <select id="set-kv"><option value="auto">Automatic (8-bit when the model doesn't fit on the GPU)</option>
+        <option value="q8">8-bit: half the VRAM, practically the same replies</option>
+        <option value="f16">16-bit: llama.cpp's default</option></select></label>
     <label class="field">GPU layers (999 = all; lower it if you run out of VRAM)
       <input id="set-ngl" type="number" min="0" max="999"></label>
   </details>

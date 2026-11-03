@@ -7,6 +7,10 @@ if "--list-devices" in args:  # like a laptop with integrated + dedicated graphi
     print("Available devices:\n  Vulkan0: Intel(R) Arc(TM) Graphics (18432 MiB, 17000 MiB free)\n"
           "  Vulkan1: NVIDIA GeForce RTX 4060 Laptop GPU (8151 MiB, 7600 MiB free)")
     sys.exit(0)
+if "--help" in args:
+    print("-fa,    --flash-attn [on|off|auto]   set Flash Attention use ('on', 'off', or 'auto', default: 'auto')\n"
+          "-ctk,   --cache-type-k TYPE          KV cache data type for K")
+    sys.exit(0)
 print("args:", " ".join(args), flush=True)
 model = os.path.basename(args[args.index("-m") + 1])
 port = int(args[args.index("--port") + 1])

@@ -1,4 +1,8 @@
-## localCAI v0.8.26 · Extractor 0.5.0
+## localCAI v0.8.27 · Extractor 0.5.0
+
+- Faster replies when the model is a little too big for your graphics card: the chat memory (KV cache) is kept at 8-bit, about half the VRAM, so more of the model fits on the GPU. Replies read practically the same. Settings → Built-in engine → Chat memory format (Automatic / 8-bit / 16-bit); Automatic only uses 8-bit when the model doesn't fit otherwise.
+
+### Earlier in v0.8.26
 
 - Replies no longer end with the model reviewing itself ("[What the reply does:]", "Notes:", "(OOC: …)", "Analysis:" and the like): that part is cut off, and the hidden per-turn direction now tells the model to follow it silently instead of listing it back.
 

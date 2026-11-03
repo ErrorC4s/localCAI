@@ -339,6 +339,20 @@ def list_devices(server: Path) -> list[dict]:
         return []
 
 
+def server_help(server: Path) -> str:
+    """llama-server's --help text, to see which flags this build understands."""
+    try:
+        out = subprocess.run([str(server), "--help"], capture_output=True, text=True, timeout=60,
+                             cwd=server.parent, creationflags=0x08000000 if sys.platform == "win32" else 0)
+        return out.stdout + "\n" + out.stderr
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+KV_CHOICES = ("auto", "q8", "f16")
+KV_MB_DEFAULT = 0.15  # KV cache per token (MB) of a typical 4–14B model at f16
+
+
 # ── the engine ─────────────────────────────────────────────────────────────
 class Engine:
     def __init__(self):
@@ -351,6 +365,8 @@ class Engine:
         self.job: dict | None = None  # background install / download progress
         self.device: dict | None = None
         self._devices: tuple[str, list[dict]] | None = None
+        self._help: tuple[str, str] | None = None
+        self.kv = "f16"               # the KV cache format the running engine uses
         self._job_seq = 0
 
     # info --------------------------------------------------------------
@@ -372,7 +388,7 @@ class Engine:
             inst = self.installed()
             return {"installed": bool(inst), "build": inst and inst.get("asset"), "version": inst and inst.get("tag"),
                     "state": self.state, "model": self.model, "error": self.error, "job": self.job,
-                    "device": self.device, "build_kind": inst and inst.get("build"),
+                    "device": self.device, "build_kind": inst and inst.get("build"), "kv": self.kv,
                     "nvidia": nvidia_present(),
                     "cuda_upgrade": bool(inst) and nvidia_present() and inst.get("variant", "auto") == "auto"
                                     and "-cuda-" not in (inst.get("asset") or ""),
@@ -401,6 +417,11 @@ class Engine:
         if not self._devices or self._devices[0] != str(server):
             self._devices = (str(server), list_devices(server))
         return self._devices[1]
+
+    def help_text(self, server: Path) -> str:
+        if not self._help or self._help[0] != str(server):
+            self._help = (str(server), server_help(server))
+        return self._help[1]
 
     def log_tail(self, n: int = 12) -> str:
         try:
@@ -518,10 +539,11 @@ class Engine:
 
     # process control ---------------------------------------------------------
     def start(self, model: str, ctx: int = 8192, gpu_layers: int = 999, timeout: float = 300,
-              device: str = "auto") -> None:
+              device: str = "auto", kv: str = "auto") -> None:
         """Start (or switch to) a model and wait until it's ready. Raises RuntimeError on failure."""
         with self.lock:
-            want = (model, int(ctx), int(gpu_layers), device)
+            kv = kv if kv in KV_CHOICES else "auto"
+            want = (model, int(ctx), int(gpu_layers), device, kv)
             if self.state == "ready" and getattr(self, "_running", None) == want and self.proc and self.proc.poll() is None:
                 return
             self._running = want
@@ -546,6 +568,7 @@ class Engine:
             cmd = [str(server), "-m", str(path), "--host", "127.0.0.1", "--port", str(self.port),
                    "-c", str(int(ctx)), "-ngl", str(int(gpu_layers)), "-np", "1", "--jinja"]
             fit_note = ""
+            self.kv = "f16"
             try:
                 has_template = bool(gguf_metadata(path).get("tokenizer.chat_template"))
             except (OSError, ValueError, struct_error):
@@ -564,6 +587,16 @@ class Engine:
                     cmd += ["--device", chosen["id"]]
                     size_mib = path.stat().st_size / 2**20
                     fit = estimate_fit(size_mib / 1024, int(ctx), chosen.get("mib"))
+                    # The KV cache (the chat the model has read) at 8-bit: about half the memory, practically
+                    # the same output. "auto" uses it only when the model doesn't fit on the GPU otherwise:
+                    # the room it frees goes to more model layers on the GPU, which is much faster.
+                    if kv == "q8" or (kv == "auto" and chosen.get("mib") and fit["kind"] != "gpu"):
+                        q8 = self._kv_q8_flags(server)
+                        if q8:
+                            cmd += q8
+                            self.kv = "q8"
+                            fit = estimate_fit(size_mib / 1024, int(ctx), chosen.get("mib"), KV_MB_DEFAULT * 0.53)
+                            fit_note += "\n[localCAI] KV cache at q8_0 (about half the memory of f16)"
                     if int(gpu_layers) >= 999 and chosen.get("mib") and fit["kind"] != "gpu":
                         # Too big to put all of it on the GPU: let llama.cpp work out how much fits.
                         i = cmd.index("-ngl"); del cmd[i:i + 2]
@@ -607,10 +640,21 @@ class Engine:
             self.state, self.error = "error", "The model took too long to load."
         raise RuntimeError(self.error)
 
-    def start_async(self, model: str, ctx: int, gpu_layers: int, device: str = "auto") -> None:
+    def _kv_q8_flags(self, server: Path) -> list[str]:
+        """Flags for an 8-bit KV cache, or [] if this llama.cpp build can't do it.
+        A quantized V cache needs flash attention: newer builds turn it on by themselves ("auto")."""
+        h = self.help_text(server)
+        if "--cache-type-k" not in h:
+            return []
+        fa = [] if "on|off|auto" in h or "'auto'" in h else (["-fa"] if "--flash-attn" in h else None)
+        if fa is None:
+            return []
+        return ["-ctk", "q8_0", "-ctv", "q8_0"] + fa
+
+    def start_async(self, model: str, ctx: int, gpu_layers: int, device: str = "auto", kv: str = "auto") -> None:
         def run():
             try:
-                self.start(model, ctx, gpu_layers, device=device)
+                self.start(model, ctx, gpu_layers, device=device, kv=kv)
             except RuntimeError:
                 pass  # state/error already recorded for the UI
         with self.lock:

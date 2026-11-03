@@ -153,6 +153,21 @@ def main():
             log = Path(home, "engine", "engine.log").read_text()
             assert "--device Vulkan1" in log and "-np 1" in log, log
             assert "[localCAI] using: NVIDIA" in log and "[localCAI] GPUs seen:" in log, log
+            assert "-ctk" not in log and st["kv"] == "f16", "model fits on the GPU: KV cache stays f16 on auto"
+            # Settings → Chat memory format → 8-bit: the engine restarts with a q8_0 KV cache
+            page.click("#open-settings"); page.click("#settings-dialog summary")
+            page.select_option("#set-kv", "q8"); page.click("#settings-save")
+            expect(page.locator("#settings-dialog")).to_be_hidden(timeout=10000)
+            page.fill("#input", "again"); page.keyboard.press("Enter")
+            expect(page.locator(".msg")).to_have_count(n + 4, timeout=20000)
+            for _ in range(60):  # the engine restarts with the new setting
+                st = json.load(urllib.request.urlopen(f"http://127.0.0.1:{UI_PORT}/api/engine"))
+                if st["state"] == "ready" and st["kv"] == "q8":
+                    break
+                time.sleep(0.5)
+            assert st["kv"] == "q8" and st["state"] == "ready", st
+            log = Path(home, "engine", "engine.log").read_text()
+            assert "-ctk q8_0 -ctv q8_0" in log and "KV cache at q8_0" in log, log
             pid_file = Path(home, "engine", "engine.pid")
             assert pid_file.exists(), "engine PID recorded"
             page.click("#open-engine"); page.click("#eng-stop"); page.click("#eng-close")

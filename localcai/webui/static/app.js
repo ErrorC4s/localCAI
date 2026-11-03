@@ -627,6 +627,7 @@ $("open-settings").onclick = () => {
     $("pronouns-who").textContent = who ? `as "${who}"` : "(no persona)";
   }
   $("set-engine-variant").value = s.engine_variant; $("set-ctx").value = s.ctx_size; $("set-ngl").value = s.gpu_layers;
+  $("set-kv").value = s.kv_cache || "auto";
   api("/api/engine/devices").then((r) => {
     const sel = $("set-gpu"); sel.length = 2;
     for (const d of r.devices) sel.add(new Option(`${d.name} (${Math.round(d.mib / 1024)} GB)`, d.id));
@@ -649,7 +650,8 @@ $("settings-save").onclick = async () => {
     persona_pronouns: { ...(S.state.settings.persona_pronouns || {}), [$("persona").value]: $("set-pronouns").value },
     ctx_size: parseInt($("set-ctx").value, 10) || 8192,
     gpu_layers: Math.max(0, parseInt($("set-ngl").value, 10) || 0),
-    gpu_device: $("set-gpu").value };
+    gpu_device: $("set-gpu").value,
+    kv_cache: $("set-kv").value };
   const custom = $("set-custom-url").value.trim();
   if (custom) patch.backend = custom;
   else if (!(S.state.settings.backend in S.state.backends)) patch.backend = "builtin";
