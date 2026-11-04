@@ -316,9 +316,15 @@ def main(shot=None):
             page.fill("#story-text", "- Luna and Alex share tea every night.")
             page.click("#story-save")
             # memory facts, like C.ai's Memory page: imported ones, then add / edit / delete
+            # one tab per person: the character first, you second; facts about you aren't under the character
+            expect(page.locator("#fact-tabs .tab").first).to_have_text("Luna · 1")
+            expect(page.locator("#fact-tabs .tab.active")).to_contain_text("Luna")
             expect(page.locator("#facts-list .fact", has_text="Earl Grey tea")).to_contain_text("C.ai")
+            expect(page.locator("#facts-list .fact", has_text="Lisbon")).to_have_count(0)
             expect(page.locator("#mem-used")).to_contain_text("% left")
-            page.fill("#fact-about", "Alex")
+            expect(page.locator("#fact-about")).to_be_hidden()
+            page.locator("#fact-tabs .tab", has_text="Alex (you)").click()
+            expect(page.locator("#facts-list .fact", has_text="Earl Grey tea")).to_have_count(0)
             page.fill("#fact-category", "pets")
             page.fill("#fact-value", "a cat named Pip")
             page.click("#fact-add")
@@ -330,10 +336,21 @@ def main(shot=None):
             lisbon.locator(".f-val").fill("Porto")
             lisbon.locator(".f-val").press("Enter")
             expect(page.locator("#facts-list .fact", has_text="Porto")).to_contain_text("edited")
+            # someone else: a new tab of their own
+            page.locator("#fact-tabs .tab", has_text="Someone else").click()
+            expect(page.locator("#fact-about")).to_be_visible()
+            page.fill("#fact-about", "Biscuit")
+            page.fill("#fact-category", "species")
+            page.fill("#fact-value", "a grey cat")
+            page.click("#fact-add")
+            expect(page.locator("#fact-tabs .tab.active")).to_have_text("Biscuit · 1")
+            expect(page.locator("#facts-list .fact", has_text="a grey cat")).to_have_count(1)
+            if os.environ.get("LCAI_SHOT"):
+                page.locator("#fact-tabs .tab", has_text="Alex (you)").click()
+                page.locator("#memory-dialog").screenshot(path=os.environ["LCAI_SHOT"])
+            page.locator("#fact-tabs .tab", has_text="Luna").click()
             page.locator("#facts-list .fact", has_text="Earl Grey tea").locator(".f-del").click()
             expect(page.locator("#facts-list .fact", has_text="Earl Grey tea")).to_have_count(0)
-            if os.environ.get("LCAI_SHOT"):
-                page.locator("#memory-dialog").screenshot(path=os.environ["LCAI_SHOT"])
             page.click("#memory-close")
             page.fill("#input", "tea time?")
             page.click("#send")
@@ -343,6 +360,7 @@ def main(shot=None):
             alex = next((l for l in sent["messages"][0]["content"].splitlines() if l.startswith("- Alex: ") and "hometown" in l), "")
             assert "hometown: Porto" in alex and "pets: a cat named Pip" in alex, ("facts in prompt", alex)
             assert "Earl Grey" not in sent["messages"][0]["content"], "a deleted fact isn't sent"
+            assert "- Biscuit: species: a grey cat" in sent["messages"][0]["content"]
             n_before = page.locator(".msg").count() - 4  # keep later count checks relative
 
             # crisis banner (shown, never blocking)

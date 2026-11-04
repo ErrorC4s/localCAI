@@ -706,8 +706,9 @@ async function openMemory() {
   const pinned = r.rows.filter((x) => (x.extra || {}).pinned).length;
   const book = ((r.card.character_book || {}).entries || []).filter((e) => !((e.extensions || {}).localcai || {}).from_memory);
   $("mem-counts").innerHTML = `${ic("pinned")} ${pinned} pinned in this chat · ${ic("memory")} ${book.length} always-on lorebook ${book.length === 1 ? "entry" : "entries"}`;
-  const names = [r.card.name, (r.meta || {}).user_name, $("persona").value, S.state.settings.user_name].filter(Boolean);
-  await loadFacts(names);
+  const you = $("persona").value || (r.meta || {}).user_name || S.state.settings.user_name || "";
+  FACT_TAB = null;  // start on the character's tab
+  await loadFacts([r.card.name, you]);
   $("story-text").value = ((r.meta || {}).chat_metadata || {}).localcai_story || "";
   $("story-hint").textContent = `This chat has ${r.rows.length.toLocaleString()} messages. Generating reads them in parts with your model; you can stop any time and keep what was read.`;
   $("memory-dialog").showModal();
@@ -732,9 +733,10 @@ $("story-generate").onclick = async () => {
 const FACT_CATEGORIES = ["age", "appearance", "body type", "clothing", "distinguishing features", "eyes", "family",
   "gender", "hair", "height", "hobbies", "languages", "likes", "dislikes", "occupation", "pets", "relationship",
   "species", "personality", "home"];
-let FACTS = { facts: [], used: 0, limit: 1 }, FACT_NAMES = [];
+let FACTS = { facts: [], used: 0, limit: 1 }, FACT_NAMES = [], FACT_TAB = null;
+const NEW_PERSON = "\u0000new";
 async function loadFacts(names) {
-  if (names) FACT_NAMES = names;
+  if (names) FACT_NAMES = names;   // [character, you]
   try {
     FACTS = await api(`/api/facts?character=${enc(S.character)}&chat=${enc(S.chat)}`);
   } catch (e) { return toast(e.message, "error"); }
@@ -747,69 +749,93 @@ async function factOp(json) {
     return true;
   } catch (e) { toast(e.message, "error"); return false; }
 }
+const sameName = (a, b) => (a || "").toLowerCase() === (b || "").toLowerCase();
+// One tab per person, like C.ai's Memory page: the character, you, then anyone else the facts are about.
+function factTabs() {
+  const [char, you] = FACT_NAMES;
+  const tabs = [];
+  const add = (name, label) => { if (name && !tabs.some((t) => sameName(t.name, name))) tabs.push({ name, label: label || name }); };
+  add(char);
+  add(you, `${you} (you)`);
+  const others = [...new Set(FACTS.facts.map((f) => f.about || "Story"))].sort((a, b) => a.localeCompare(b));
+  for (const n of others) add(n);
+  for (const t of tabs) t.count = FACTS.facts.filter((f) => sameName(f.about || "Story", t.name)).length;
+  return tabs;
+}
+function factRow(f) {
+  const tagFor = { cai: "C.ai", auto: "auto" };
+  const row = document.createElement("div");
+  row.className = "fact";
+  row.dataset.id = f.id;
+  row.innerHTML = `<div class="val"><span class="cat">${escHtml(f.category || "fact")}`
+    + (tagFor[f.source] ? `<span class="tag">${tagFor[f.source]}</span>` : "")
+    + (f.edited ? `<span class="tag">edited</span>` : "")
+    + `</span><span class="text">${escHtml(f.value)}</span>`
+    + (f.pending ? `<span class="pending">C.ai now says: <b>${escHtml(f.pending)}</b>`
+      + ` <button class="btn small f-take">Use C.ai's</button> <button class="btn small f-keep">Keep mine</button></span>` : "")
+    + `</div>`
+    + `<button title="Edit" class="f-edit">${ic("pencil")}</button><button title="Delete" class="f-del">${ic("trash")}</button>`;
+  row.querySelector(".f-del").onclick = () => factOp({ op: "delete", id: f.id });
+  if (f.pending) {
+    row.querySelector(".f-take").onclick = () => factOp({ op: "use-cai", id: f.id });
+    row.querySelector(".f-keep").onclick = () => factOp({ op: "keep-mine", id: f.id });
+  }
+  row.querySelector(".f-edit").onclick = () => {
+    const v = row.querySelector(".val");
+    v.innerHTML = `<input class="f-cat" maxlength="40"><input class="f-val" maxlength="200">`;
+    v.querySelector(".f-cat").value = f.category;
+    const inp = v.querySelector(".f-val");
+    inp.value = f.value;
+    inp.focus();
+    const save = () => factOp({ op: "edit", id: f.id, category: v.querySelector(".f-cat").value, value: inp.value });
+    inp.onkeydown = (e) => { if (e.key === "Enter") save(); if (e.key === "Escape") renderFacts(); };
+    row.querySelector(".f-edit").outerHTML = `<button title="Save" class="f-save">${ic("download")}</button>`;
+    row.querySelector(".f-save").onclick = save;
+  };
+  return row;
+}
 function renderFacts() {
   const pct = Math.min(100, Math.round((FACTS.used / FACTS.limit) * 100));
   $("mem-used").textContent = `${pct}% used · ${100 - pct}% left`;
   $("mem-bar").classList.toggle("full", pct >= 90);
   $("mem-bar").firstElementChild.style.width = pct + "%";
-  const groups = new Map();
-  for (const n of FACT_NAMES) groups.set(n, []);
-  for (const f of FACTS.facts) {
-    const k = f.about || "Story";
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(f);
+
+  const tabs = factTabs();
+  if (FACT_TAB !== NEW_PERSON && !tabs.some((t) => sameName(t.name, FACT_TAB))) FACT_TAB = tabs.length ? tabs[0].name : NEW_PERSON;
+  const bar = $("fact-tabs");
+  bar.innerHTML = "";
+  for (const t of [...tabs, { name: NEW_PERSON, label: "+ Someone else" }]) {
+    const b = document.createElement("button");
+    b.className = "tab" + ((t.name === NEW_PERSON ? FACT_TAB === NEW_PERSON : sameName(t.name, FACT_TAB)) ? " active" : "");
+    b.dataset.who = t.name === NEW_PERSON ? "" : t.name;
+    b.textContent = t.label + (t.count ? ` · ${t.count}` : "");
+    b.onclick = () => { FACT_TAB = t.name; renderFacts(); };
+    bar.appendChild(b);
   }
+
   const list = $("facts-list");
   list.innerHTML = "";
-  const tagFor = { cai: "C.ai", auto: "auto" };
-  for (const [who, facts] of groups) {
-    if (!facts.length) continue;
-    const g = document.createElement("div");
-    g.className = "fact-group";
-    g.innerHTML = `<h5>${escHtml(who)}</h5>`;
-    for (const f of facts) {
-      const row = document.createElement("div");
-      row.className = "fact";
-      row.dataset.id = f.id;
-      row.innerHTML = `<div class="val"><span class="cat">${escHtml(f.category || "fact")}`
-        + (tagFor[f.source] ? `<span class="tag">${tagFor[f.source]}</span>` : "")
-        + (f.edited ? `<span class="tag">edited</span>` : "")
-        + `</span><span class="text">${escHtml(f.value)}</span>`
-        + (f.pending ? `<span class="pending">C.ai now says: <b>${escHtml(f.pending)}</b>`
-          + ` <button class="btn small f-take">Use C.ai's</button> <button class="btn small f-keep">Keep mine</button></span>` : "")
-        + `</div>`
-        + `<button title="Edit" class="f-edit">${ic("pencil")}</button><button title="Delete" class="f-del">${ic("trash")}</button>`;
-      row.querySelector(".f-del").onclick = () => factOp({ op: "delete", id: f.id });
-      if (f.pending) {
-        row.querySelector(".f-take").onclick = () => factOp({ op: "use-cai", id: f.id });
-        row.querySelector(".f-keep").onclick = () => factOp({ op: "keep-mine", id: f.id });
-      }
-      row.querySelector(".f-edit").onclick = () => {
-        const v = row.querySelector(".val");
-        v.innerHTML = `<input class="f-cat" maxlength="40"><input class="f-val" maxlength="200">`;
-        v.querySelector(".f-cat").value = f.category;
-        const inp = v.querySelector(".f-val");
-        inp.value = f.value;
-        inp.focus();
-        const save = () => factOp({ op: "edit", id: f.id, category: v.querySelector(".f-cat").value, value: inp.value });
-        inp.onkeydown = (e) => { if (e.key === "Enter") save(); if (e.key === "Escape") renderFacts(); };
-        row.querySelector(".f-edit").outerHTML = `<button title="Save" class="f-save">${ic("download")}</button>`;
-        row.querySelector(".f-save").onclick = save;
-      };
-      g.appendChild(row);
-    }
-    list.appendChild(g);
+  const isNew = FACT_TAB === NEW_PERSON;
+  $("fact-about").hidden = !isNew;
+  if (isNew) {
+    list.innerHTML = `<div class="small muted">Facts about someone else in the story (a friend, a pet, a place…). Write their name, then the fact.</div>`;
+  } else {
+    const facts = FACTS.facts.filter((f) => sameName(f.about || "Story", FACT_TAB));
+    for (const f of facts) list.appendChild(factRow(f));
+    if (!facts.length) list.innerHTML = `<div class="small muted">Nothing about ${escHtml(FACT_TAB)} yet. Add a fact below, or keep chatting and they'll be picked up.</div>`;
   }
-  if (!FACTS.facts.length) list.innerHTML = `<div class="small muted">No facts yet. Add one below, or keep chatting and they'll be picked up.</div>`;
-  const abouts = [...new Set([...FACT_NAMES, ...FACTS.facts.map((f) => f.about).filter(Boolean)])];
-  $("fact-abouts").innerHTML = abouts.map((n) => `<option value="${escHtml(n)}">`).join("");
   const cats = [...new Set([...FACT_CATEGORIES, ...FACTS.facts.map((f) => f.category).filter(Boolean)])];
   $("fact-categories").innerHTML = cats.map((n) => `<option value="${escHtml(n)}">`).join("");
-  if (!$("fact-about").value && FACT_NAMES[0]) $("fact-about").value = FACT_NAMES[0];
 }
 $("fact-add").onclick = async () => {
-  const ok = await factOp({ op: "add", about: $("fact-about").value, category: $("fact-category").value, value: $("fact-value").value });
-  if (ok) { $("fact-value").value = ""; $("fact-category").value = ""; }
+  const isNew = FACT_TAB === NEW_PERSON;
+  const about = isNew ? $("fact-about").value.trim() : FACT_TAB;
+  if (isNew && !about) return toast("Write who this fact is about.", "warn");
+  const ok = await factOp({ op: "add", about, category: $("fact-category").value, value: $("fact-value").value });
+  if (ok) {
+    $("fact-value").value = ""; $("fact-category").value = "";
+    if (isNew) { FACT_TAB = about; $("fact-about").value = ""; renderFacts(); }  // show the new person's tab
+  }
 };
 $("fact-value").onkeydown = (e) => { if (e.key === "Enter") $("fact-add").click(); };
 

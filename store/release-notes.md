@@ -1,4 +1,8 @@
-## localCAI v0.8.41 · Extractor 0.5.6
+## localCAI v0.8.42
+
+- Memory facts now have one tab per person, like C.ai's Memory page: the character, you ("(you)"), and anyone else the facts are about, each with how many facts it has. Facts about you are no longer listed under the character. **Add fact** adds to the tab you're on; **+ Someone else** starts a tab for a new person (a friend, a pet…).
+
+### Earlier in localCAI v0.8.41 · Extractor 0.5.6
 
 - Extractor 0.5.6: after Clear, stopping Load full history while pages in the middle were still missing and then pressing it again could stop at once ("Already at the first message") and leave those pages out. After Clear, the collection only counts as complete once a Load full history run (or a stopped run that you continue) has itself walked every page down to the first message; pressing it again always carries on from where it stopped.
 - Memory facts you wrote yourself stay yours: if a later C.ai import has the same fact and then C.ai changes it, you're asked (Use C.ai's / Keep mine) instead of it being overwritten.
