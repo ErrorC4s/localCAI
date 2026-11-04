@@ -1227,3 +1227,21 @@ def test_prompt_too_long_for_the_context_is_trimmed_and_retried(tmp_path, monkey
         httpd.shutdown()
         httpd.server_close()
         fake.shutdown()
+
+
+def test_long_pins_and_examples_are_shortened_to_leave_room_for_the_chat():
+    from localcai import facts
+    card = {"data": {"name": "Mira", "personality": "Quiet, kind librarian.", "mes_example": "<START>\n" + "Mira: Hello there. " * 300}}
+    pins = [f"Mira: *pin {i} starts here.* " + "She keeps talking about the sea. " * 40 for i in range(17)]
+    fs = facts.apply([], "add", {"about": "Mira", "category": "hair", "value": "long silver"})
+    hist = [{"role": "user", "content": f"line {i} " * 20} if i % 2 == 0 else {"role": "assistant", "content": f"reply {i} " * 20}
+            for i in range(40)]
+    msgs = build_messages(card, hist, "Sam", max_chars=16000, memories=pins, facts=fs)
+    system = msgs[0]["content"]
+    assert len(system) <= 16000 * 0.6
+    assert "Quiet, kind librarian." in system and "hair: long silver" in system   # card and facts are never cut
+    assert "pin 16 starts here" in system                                         # the newest pin stays
+    assert len(msgs) > 6                                                          # room left for the chat
+    # with room to spare nothing is shortened
+    roomy = build_messages(card, hist[-2:], "Sam", max_chars=200000, memories=pins, facts=fs)[0]["content"]
+    assert all(p in roomy for p in pins) and card["data"]["mes_example"].strip() in roomy

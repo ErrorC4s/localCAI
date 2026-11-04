@@ -1,4 +1,9 @@
-## localCAI v0.8.43
+## localCAI v0.8.44
+
+- Fixed "too long for this model's context" in chats with many long pinned messages. What's sent with every reply (the character, memories, pinned messages, example dialogue, guidance) now always leaves room for the chat itself: when it's too long for the context, the example dialogue is shortened first, then each long pinned message, then the story so far; only if that isn't enough are the oldest pinned messages left out. The character's description and personality, memory facts and rules are never cut. Nothing is changed in your chat; this only affects what's sent to the model.
+- Chat memory says when pinned messages are long enough to be shortened, and how to keep more of them.
+
+### Earlier in localCAI v0.8.43
 
 - Fixed "Couldn't reach the model … HTTP Error 400: Bad Request" in long chats with a lot of memory. The prompt was a bit longer than the model's context: localCAI guesses how many tokens text takes, and some chats (and models) use more tokens than the guess. Now, when the model says a prompt is too long, localCAI learns the real size for that model, keeps a little less of the older chat so the prompt fits with room for the reply, and tries again at once. You don't see the first attempt.
 - If even the character's setup and memory don't fit, it now says so (with what to change) instead of a bare "Bad Request"; other model errors show the model server's own reason too.

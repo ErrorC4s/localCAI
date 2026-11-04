@@ -705,7 +705,9 @@ async function openMemory() {
   const r = await api(`/api/chat?character=${enc(S.character)}&chat=${enc(S.chat)}`);
   const pinned = r.rows.filter((x) => (x.extra || {}).pinned).length;
   const book = ((r.card.character_book || {}).entries || []).filter((e) => !((e.extensions || {}).localcai || {}).from_memory);
-  $("mem-counts").innerHTML = `${ic("pinned")} ${pinned} pinned in this chat · ${ic("memory")} ${book.length} always-on lorebook ${book.length === 1 ? "entry" : "entries"}`;
+  const pinChars = r.rows.filter((x) => (x.extra || {}).pinned).reduce((n, x) => n + (x.mes || "").length, 0);
+  $("mem-counts").innerHTML = `${ic("pinned")} ${pinned} pinned in this chat · ${ic("memory")} ${book.length} always-on lorebook ${book.length === 1 ? "entry" : "entries"}`
+    + (pinChars > 4000 ? `<div class="muted">The pinned messages are long, so they're shortened in the prompt when the context is small (the oldest go first). Unpin some, or raise Context size in Settings, to keep more of them.</div>` : "");
   const you = $("persona").value || (r.meta || {}).user_name || S.state.settings.user_name || "";
   FACT_TAB = null;  // start on the character's tab
   await loadFacts([r.card.name, you]);

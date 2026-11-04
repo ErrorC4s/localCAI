@@ -28,6 +28,24 @@ def active_lore(book: dict | None, recent_text: str) -> list[str]:
 HISTORY_BLOCK = 16  # history is dropped in blocks, so the prompt's beginning stays the same for many turns
 
 
+FIXED_SHARE = 0.6  # at most this much of the prompt for what's sent every time; the rest is the chat
+
+
+def _shorten(text: str, n: int, keep_end: bool = False) -> str:
+    """Cut to about n characters at a sentence or word end, marked with "…"."""
+    text = text.strip()
+    if len(text) <= n:
+        return text
+    if keep_end:
+        cut = text[-n:]
+        m = re.search(r"(?<=[.!?…~\n])\s", cut)
+        return "…" + (cut[m.end():] if m and m.end() < n // 2 else cut).lstrip()
+    cut = text[:n]
+    ends = [m.end() for m in re.finditer(r"[.!?…~\"*)](?=\s)", cut)]
+    end = ends[-1] if ends and ends[-1] > n // 2 else (cut.rfind(" ") if cut.rfind(" ") > n // 2 else n)
+    return cut[:end].rstrip() + " …"
+
+
 def build_messages(card: dict, history: list[dict], user_name: str = "User",
                    max_chars: int = 24000, persona: str = "", memories: list[str] | None = None,
                    story: str = "", recalled: list[str] | None = None,
@@ -56,20 +74,26 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         # C.ai "persona": who the user says they are in this story
         parts.append(f"[About {user_name}]\n{persona}")
     book = d.get("character_book") or {}
-    constant = [e["content"] for e in sorted(book.get("entries", []), key=lambda e: e.get("insertion_order", 0))
-                if e.get("enabled", True) and e.get("constant")
-                and not (facts is not None and is_memory_entry(e))]  # the chat's own facts replace these
-    for m in memories or []:  # pinned in this chat (in localCAI or on C.ai)
-        if m not in constant:
-            constant.append(m)
-    if constant:
-        parts.append("[Memories — always keep these in mind]\n" + "\n".join(f"- {x}" for x in constant))
-    if facts:
-        parts.append("[Facts to remember — grouped by who they are about; keep them true]\n" + facts_block(facts))
-    if story:
-        parts.append(f"[The story so far between {char} and {user_name}]\n{story}")
-    if d.get("mes_example"):
-        parts.append("[Example dialogue — style reference only]\n" + d["mes_example"])
+    lore = [e["content"] for e in sorted(book.get("entries", []), key=lambda e: e.get("insertion_order", 0))
+            if e.get("enabled", True) and e.get("constant")
+            and not (facts is not None and is_memory_entry(e))]  # the chat's own facts replace these
+    pins = [m for m in memories or [] if m not in lore]  # pinned in this chat (in localCAI or on C.ai)
+    example = d.get("mes_example") or ""
+    head = list(parts)
+    constant = lore + pins  # (read by the per-turn part below)
+
+    def memory_parts(lore: list[str], pins: list[str], story: str, example: str) -> list[str]:
+        out = []
+        if lore or pins:
+            out.append("[Memories — always keep these in mind]\n" + "\n".join(f"- {x}" for x in lore + pins))
+        if facts:
+            out.append("[Facts to remember — grouped by who they are about; keep them true]\n" + facts_block(facts))
+        if story:
+            out.append(f"[The story so far between {char} and {user_name}]\n{story}")
+        if example:
+            out.append("[Example dialogue — style reference only]\n" + example)
+        return out
+
     char_pr = character_pronouns(d)
     user_pr = user_pronouns or guess_pronouns(persona) or guess_user_pronouns(history)
     parts.append(perspective_block(char, user_name, char_pr, user_pr))
@@ -84,7 +108,32 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         parts.append(f"[Reply length]\nKeep each reply to about {reply_words} words or fewer, "
                      f"like {char}'s earlier replies. Say one or two things, then stop at a natural point "
                      f"and leave room for {user_name} to answer. Don't repeat yourself.")
-    system = _fill("\n\n".join(parts), char, user_name)
+    tail = parts[len(head):]
+
+    def assemble(lore, pins, story, example) -> str:
+        return _fill("\n\n".join(head + memory_parts(lore, pins, story, example) + tail), char, user_name)
+
+    # What's sent every time (card, memories, guidance) must leave room for the chat itself. When it's too
+    # long for the context (many long pinned messages, a long example dialogue...), shorten the parts that
+    # matter least first: the example dialogue, then each long pinned message, then the oldest pins.
+    # The card, the facts and the guidance are never cut.
+    limit = int(max_chars * FIXED_SHARE)
+    system = assemble(lore, pins, story, example)
+    steps = [lambda l, p, st, ex: (l, p, st, _shorten(ex, 1200)),
+             lambda l, p, st, ex: (l, [_shorten(x, 400) for x in p], st, ex),
+             lambda l, p, st, ex: (l, p, _shorten(st, 1500, keep_end=True), ex),
+             lambda l, p, st, ex: (l, p, st, ""),
+             lambda l, p, st, ex: (l, [_shorten(x, 200) for x in p], st, ex),
+             lambda l, p, st, ex: ([_shorten(x, 200) for x in l], p, st, ex)]
+    state = (lore, pins, story, example)
+    for step in steps:
+        if len(system) <= limit:
+            break
+        state = step(*state)
+        system = assemble(*state)
+    while len(system) > limit and state[1]:  # still too long: keep the newest pins
+        state = (state[0], state[1][1:], state[2], state[3])
+        system = assemble(*state)
 
     # per-turn context: keyword-triggered memories + recalled earlier moments
     scan_depth = book.get("scan_depth", 4)
