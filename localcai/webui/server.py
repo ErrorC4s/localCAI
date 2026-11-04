@@ -31,13 +31,14 @@ from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
 from ..runtime.guard import check_reply, same_reply, spoken_part
 from ..runtime.scene import build_state, save_state, state_for
-from ..runtime.client import other_speakers, strip_markers, strip_meta, strip_name_prefix, trim_to_sentence
+from ..runtime.client import ContextTooLong, other_speakers, strip_markers, strip_meta, strip_name_prefix, trim_to_sentence
 from ..runtime.prompt import PRONOUN_CHOICES, reply_words_for
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
 GUARD_MARK = "\x1e"  # sent after the streamed reply while the OOC guard checks it
+CHARS_PER_TOKEN: dict[str, float] = {}  # learned per model when the server says a prompt didn't fit
 STALE_MARK = "\x1d"  # end of a reply that wasn't saved because the chat changed meanwhile
 
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
@@ -589,7 +590,9 @@ def make_handler(app: App, port: int):
                 recalled = recall(rows, query, exclude_last=40, cache_key=str(path))
             # the engine may run with less context than asked (it shrinks it to fit free VRAM)
             ctx = ENGINE.ctx if s["backend"] == "builtin" and ENGINE.ctx else int(s["ctx_size"])
-            budget = max(6000, int(ctx * 3.2) - int(s["max_tokens"]) * 4)
+            # characters per token differ by model and text; start from what this model showed so far
+            ratio = CHARS_PER_TOKEN.get(s["model"], 3.2)
+            budget = max(2000, int((ctx - int(s["max_tokens"])) * ratio))
             history = chatlog.to_history(rows)
             target_words = reply_words_for(str(s.get("reply_length", "auto")), history, card)
             instruction = str(body.get("instruction") or "")[:600]
@@ -624,10 +627,29 @@ def make_handler(app: App, port: int):
             temp = float(s["temperature"])
             if swipe_row is not None and not instruction:
                 temp = min(1.3, temp + 0.15)  # another version: a little more variety
-            gen = strip_name_prefix(stream_chat(url, s["model"], msgs, temperature=temp,
-                                                max_tokens=int(s["max_tokens"]), info=info, extra=extra), char, info)
+            def start(msgs: list[dict]):
+                return strip_name_prefix(stream_chat(url, s["model"], msgs, temperature=temp,
+                                                     max_tokens=int(s["max_tokens"]), info=info, extra=extra), char, info)
+            gen = start(msgs)
             try:
-                first = next(gen, "")
+                try:
+                    first = next(gen, "")
+                except ContextTooLong as e:
+                    # The estimate was off for this text: the server said how many tokens the prompt really had.
+                    # Learn this model's ratio, keep less history so it fits with room for the reply, retry once.
+                    chars = sum(len(m["content"]) for m in msgs)
+                    ratio = max(1.2, min(ratio, chars / e.n_prompt) * 0.95)
+                    CHARS_PER_TOKEN[s["model"]] = ratio
+                    budget = max(1000, int((e.n_ctx - int(s["max_tokens"]) - 64) * ratio))
+                    msgs = make_msgs(instruction, (swipe_row or {}).get("mes", "") if instruction else "")
+                    gen = start(msgs)
+                    try:
+                        first = next(gen, "")
+                    except ContextTooLong as e2:
+                        return self.send_json({"error": (
+                            f"The character's setup and memory alone are too long for this model's context "
+                            f"({e2.n_prompt} tokens, {e2.n_ctx} fit). Raise Context size in Settings, or shorten "
+                            f"the memory (facts, pinned messages, the story so far).")}, 502)
             except OSError as e:
                 return self.send_json({"error": f"Couldn't reach the model at {url}: {e}"}, 502)
 

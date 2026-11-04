@@ -1,4 +1,9 @@
-## localCAI v0.8.42
+## localCAI v0.8.43
+
+- Fixed "Couldn't reach the model … HTTP Error 400: Bad Request" in long chats with a lot of memory. The prompt was a bit longer than the model's context: localCAI guesses how many tokens text takes, and some chats (and models) use more tokens than the guess. Now, when the model says a prompt is too long, localCAI learns the real size for that model, keeps a little less of the older chat so the prompt fits with room for the reply, and tries again at once. You don't see the first attempt.
+- If even the character's setup and memory don't fit, it now says so (with what to change) instead of a bare "Bad Request"; other model errors show the model server's own reason too.
+
+### Earlier in localCAI v0.8.42
 
 - Memory facts now have one tab per person, like C.ai's Memory page: the character, you ("(you)"), and anyone else the facts are about, each with how many facts it has. Facts about you are no longer listed under the character. **Add fact** adds to the tab you're on; **+ Someone else** starts a tab for a new person (a friend, a pet…).
 

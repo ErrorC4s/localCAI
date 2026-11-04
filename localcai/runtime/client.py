@@ -7,8 +7,40 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.error
 import urllib.request
 from typing import Iterator
+
+
+class ContextTooLong(OSError):
+    """The model server refused the prompt: more tokens than its context holds (llama-server answers 400
+    with how many tokens the prompt had and how many fit)."""
+
+    def __init__(self, message: str, n_prompt: int, n_ctx: int):
+        super().__init__(message)
+        self.n_prompt, self.n_ctx = n_prompt, n_ctx
+
+
+def _http_error(e: urllib.error.HTTPError) -> OSError:
+    """The server's own reason instead of a bare "HTTP Error 400: Bad Request"."""
+    try:
+        body = e.read().decode("utf-8", "replace")
+    except OSError:
+        body = ""
+    msg, err = body.strip()[:300], {}
+    try:
+        obj = json.loads(body)
+        err = obj.get("error") if isinstance(obj, dict) else None
+        err = err if isinstance(err, dict) else {"message": str(err or "")}
+        msg = str(err.get("message") or msg)
+    except ValueError:
+        pass
+    m = re.search(r"\((\d+) tokens\).*?context size \((\d+) tokens\)", msg)
+    n_prompt = int(err.get("n_prompt_tokens") or (m and m.group(1)) or 0)
+    n_ctx = int(err.get("n_ctx") or (m and m.group(2)) or 0)
+    if (err.get("type") == "exceed_context_size_error" or "exceeds the available context" in msg) and n_prompt and n_ctx:
+        return ContextTooLong(msg, n_prompt, n_ctx)
+    return OSError(f"HTTP {e.code}: {msg or e.reason}")
 
 BACKENDS = {
     "ollama":    "http://localhost:11434/v1",
@@ -167,7 +199,11 @@ def _stream_chat(base_url: str, model: str, messages: list[dict], temperature: f
     body = json.dumps(payload_obj).encode("utf-8")
     req = urllib.request.Request(f"{base_url}/chat/completions", data=body, headers={
         "Content-Type": "application/json", "Authorization": f"Bearer {api_key}"})
-    with urllib.request.urlopen(req, timeout=300) as r:
+    try:
+        r = urllib.request.urlopen(req, timeout=300)
+    except urllib.error.HTTPError as e:
+        raise _http_error(e) from None
+    with r:
         for raw in r:
             line = raw.decode("utf-8").strip()
             if not line.startswith("data:"):

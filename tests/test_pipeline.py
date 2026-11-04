@@ -1153,3 +1153,77 @@ def test_import_path_keeps_a_users_fact_protected(tmp_path):
     meta, _ = chatlog.load(f)
     got = facts.chat_facts(meta, card)
     assert [(x["value"], x.get("pending"), x["source"]) for x in got] == [("Porto", "Madrid", "you")]
+
+
+def test_prompt_too_long_for_the_context_is_trimmed_and_retried(tmp_path, monkeypatch):
+    """A model server with a small context rejects a long prompt (400, like llama-server). The reply must still
+    come: localCAI learns the real characters-per-token, keeps less history and retries."""
+    import threading
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from localcai import chatlog, desktop
+    from localcai.webui import server as srv
+    monkeypatch.setenv("LOCALCAI_HOME", str(tmp_path))
+    srv.CHARS_PER_TOKEN.clear()
+    seen = []
+
+    class Fake(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            chars = sum(len(m["content"]) for m in body["messages"])
+            tokens = chars // 2 + 4 * len(body["messages"])   # denser than the 3.2 chars/token first guess
+            if body["messages"][0]["content"].startswith("You keep"):
+                tokens = 0  # background notes: not what's tested here
+            seen.append(tokens)
+            if tokens > 4096:
+                err = json.dumps({"error": {"code": 400, "type": "exceed_context_size_error", "n_ctx": 4096,
+                                            "n_prompt_tokens": tokens, "message": f"request ({tokens} tokens) exceeds "
+                                            "the available context size (4096 tokens), try increasing it"}}).encode()
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err)))
+                self.end_headers()
+                self.wfile.write(err)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            for part in ('{"choices":[{"delta":{"content":"*nods* Fine."}}]}',
+                         '{"choices":[{"delta":{},"finish_reason":"stop"}]}', "[DONE]"):
+                self.wfile.write(f"data: {part}\n\n".encode())
+
+    fake = ThreadingHTTPServer(("127.0.0.1", 0), Fake)
+    threading.Thread(target=fake.serve_forever, daemon=True).start()
+    lib = tmp_path / "lib"
+    port = desktop._free_port()
+    httpd = srv.create_server(port, lib)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+    def call(path, body):
+        req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=json.dumps(body).encode(),
+                                     headers={"X-LocalCAI": "1", "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.read().decode()
+    try:
+        (lib / "characters" / "Mira.card.json").write_text(json.dumps({"spec": "chara_card_v2", "data": {
+            "name": "Mira", "description": "A quiet librarian."}}), "utf-8")
+        rows = []
+        for i in range(120):
+            rows.append(chatlog.row("Sam", True, f"*leans on the desk* Tell me about book {i}, please. " * 4))
+            rows.append(chatlog.row("Mira", False, f"*smiles* Book {i} is about the sea and old ships. " * 4))
+        chatlog.save(lib / "chats" / "Mira.c1.jsonl", {"user_name": "Sam", "character_name": "Mira"}, rows)
+        call("/api/settings", {"backend": f"http://127.0.0.1:{fake.server_address[1]}/v1", "model": "m",
+                               "age_confirmed": True, "ctx_size": 4096, "max_tokens": 256,
+                               "scene_state": False, "auto_facts": False, "ooc_guard": False})
+        out = call("/api/chat/send", {"character": "Mira", "chat": "Mira.c1.jsonl", "text": "hello"})
+        assert "Fine." in out
+        assert seen[0] > 4096 and seen[1] <= 4096 - 256, seen      # rejected, then trimmed to fit with room to reply
+        call("/api/chat/send", {"character": "Mira", "chat": "Mira.c1.jsonl", "text": "and then?"})
+        assert seen[2] <= 4096, seen                                 # the learned ratio fits at once next time
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        fake.shutdown()
