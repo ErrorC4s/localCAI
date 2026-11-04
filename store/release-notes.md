@@ -1,4 +1,8 @@
-## localCAI v0.8.45
+## localCAI v0.8.46
+
+- Reply length is now set per character, in **Edit** (like her past replies, short, medium, long, or no target), instead of one setting for everyone in Settings. A character keeps the setting you had before until you change it. The hard limit per reply (tokens) stays in Settings: it's what the model and its context can handle, the same for every character.
+
+### Earlier in localCAI v0.8.45
 
 - Less stalling: when the character's last reply asked or offered something ("Do you want to…?") and you answer, the model is told your message is the answer and to act on it now, instead of asking again in other words, teasing, or putting a new question in its place.
 - Your actions aren't skipped: when you do something (not only talk), the reply starts with how the character's body and feelings respond to it, before her own next move.

@@ -288,6 +288,8 @@ def main(shot=None):
             page.click("#edit-char")
             page.fill("#char-fields textarea[data-key='description']", "Lives on the moon. Loves riddles.")
             page.select_option("#char-pronouns", "she/her")
+            expect(page.locator("#char-reply-length")).to_have_value("auto")
+            page.select_option("#char-reply-length", "short")   # reply length belongs to the character
             page.click("#char-save")
             expect(page.locator(".toast", has_text="Character saved")).to_have_count(1)
             expect(page.locator("#head-sub")).to_contain_text("she/her")
@@ -296,6 +298,8 @@ def main(shot=None):
             page.wait_for_timeout(800)
             sent = json.load(open(last_path, encoding="utf-8"))
             assert "Loves riddles." in sent["messages"][0]["content"], "edited description used"
+            assert "about 60 words or fewer" in sent["messages"][0]["content"], "the character's own reply length"
+            assert page.locator("#set-reply-length").count() == 0, "no longer a global setting"
             card = json.loads((Path(home) / "library" / "characters" / "Luna.card.json").read_text("utf-8"))
             assert card["data"]["description"].endswith("Loves riddles.")
             # 🔍 learn style from history → personality + example dialogue written into the card

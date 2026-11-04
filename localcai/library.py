@@ -212,7 +212,8 @@ def list_library(lib: Path) -> dict:
                       "custom_background": _find(lib / "characters", f"{stem}.custom-bg"),
                       "tagline": d.get("creator_notes", ""), "creator": d.get("creator", ""),
                       "memories": len(book.get("entries", [])), "chats": chats,
-                      "pronouns": local.get("pronouns", ""), "pronouns_guess": guess_card_pronouns(d)})
+                      "pronouns": local.get("pronouns", ""), "pronouns_guess": guess_card_pronouns(d),
+                      "reply_length": local.get("reply_length", "")})
     pfile = lib / "personas" / "personas.json"
     personas = json.loads(pfile.read_text("utf-8")) if pfile.exists() else []
     for p in personas if isinstance(personas, list) else []:

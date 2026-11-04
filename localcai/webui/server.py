@@ -38,6 +38,7 @@ from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
 GUARD_MARK = "\x1e"  # sent after the streamed reply while the OOC guard checks it
+REPLY_LENGTHS = ("auto", "short", "medium", "long", "off")
 CHARS_PER_TOKEN: dict[str, float] = {}  # learned per model when the server says a prompt didn't fit
 STALE_MARK = "\x1d"  # end of a reply that wasn't saved because the chat changed meanwhile
 
@@ -465,6 +466,11 @@ def make_handler(app: App, port: int):
                 if "rules" in body:
                     rules = [str(r).strip()[:300] for r in (body.get("rules") or []) if str(r).strip()][:30]
                     d.setdefault("extensions", {}).setdefault("localcai", {})["rules"] = rules
+                if "reply_length" in body:
+                    rl = str(body["reply_length"] or "auto")
+                    if rl not in REPLY_LENGTHS:
+                        raise ValueError("unknown reply length")
+                    d.setdefault("extensions", {}).setdefault("localcai", {})["reply_length"] = rl
                 if "pronouns" in body:
                     pr = str(body["pronouns"] or "")
                     if pr and pr not in PRONOUN_CHOICES:
@@ -594,7 +600,9 @@ def make_handler(app: App, port: int):
             ratio = CHARS_PER_TOKEN.get(s["model"], 3.2)
             budget = max(2000, int((ctx - int(s["max_tokens"])) * ratio))
             history = chatlog.to_history(rows)
-            target_words = reply_words_for(str(s.get("reply_length", "auto")), history, card)
+            # set per character (Edit); older versions had one setting for everyone, used until it's set
+            own_length = ((card.get("data", card).get("extensions") or {}).get("localcai") or {}).get("reply_length")
+            target_words = reply_words_for(str(own_length or s.get("reply_length") or "auto"), history, card)
             instruction = str(body.get("instruction") or "")[:600]
             use_scene = s.get("scene_state", True) is not False
             facts_now = factmem.chat_facts(meta, card)

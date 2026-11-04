@@ -561,6 +561,13 @@ $("edit-char").onclick = async () => {
   pl.textContent = "Pronouns (so the model keeps who's who straight)";
   const ps = pronounSelect(ci.pronouns, ci.pronouns_guess, "guessed from the description"); ps.id = "char-pronouns";
   pl.appendChild(ps); box.appendChild(pl);
+  const ll = document.createElement("label"); ll.className = "field";
+  ll.textContent = "Reply length (a target for the model; the hard limit in tokens is in Settings)";
+  const ls = document.createElement("select"); ls.id = "char-reply-length";
+  for (const [v, t] of [["auto", `Like ${ci.name}'s past replies`], ["short", "Short (~60 words)"], ["medium", "Medium (~120 words)"],
+    ["long", "Long (~220 words)"], ["off", "No target"]]) ls.add(new Option(t, v));
+  ls.value = ci.reply_length || S.state.settings.reply_length || "auto";
+  ll.appendChild(ls); box.appendChild(ll);
   for (const [k, label] of CHAR_FIELDS) {
     const l = document.createElement("label"); l.className = "field"; l.textContent = label;
     const ta = document.createElement("textarea"); ta.dataset.key = k; ta.rows = k === "creator_notes" ? 1 : 4;
@@ -579,7 +586,8 @@ $("char-save").onclick = async () => {
   for (const ta of $("char-fields").querySelectorAll("textarea[data-key]")) data[ta.dataset.key] = ta.value;
   const rules = $("char-rules").value.split("\n").map((x) => x.trim()).filter(Boolean);
   try {
-    const r = await api("/api/character/save", { json: { character: S.character, data, rules, pronouns: $("char-pronouns").value } });
+    const r = await api("/api/character/save", { json: { character: S.character, data, rules, pronouns: $("char-pronouns").value,
+      reply_length: $("char-reply-length").value } });
     S.card = r.card; $("char-dialog").close(); await loadState(); openCharacter(S.character, S.chat); toast("Character saved.");
   } catch (e) { toast(e.message, "error"); }
 };
@@ -624,7 +632,6 @@ $("open-settings").onclick = () => {
   $("set-custom-url").value = s.backend in S.state.backends ? "" : s.backend;
   $("set-temperature").value = s.temperature; $("temp-val").textContent = s.temperature;
   $("set-max-tokens").value = s.max_tokens;
-  $("set-reply-length").value = s.reply_length || "auto";
   $("set-recall").checked = s.recall !== false;
   $("set-pacing").checked = s.pacing !== false;
   $("set-scene").checked = s.scene_state !== false;
@@ -654,7 +661,6 @@ $("settings-cancel").onclick = () => $("settings-dialog").close();
 $("settings-save").onclick = async () => {
   const patch = { user_name: $("set-user-name").value.trim(), temperature: parseFloat($("set-temperature").value),
     max_tokens: parseInt($("set-max-tokens").value, 10) || 512,
-    reply_length: $("set-reply-length").value,
     engine_variant: $("set-engine-variant").value,
     recall: $("set-recall").checked,
     pacing: $("set-pacing").checked,
