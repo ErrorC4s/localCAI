@@ -210,12 +210,12 @@ h3 .ic { width: 20px; height: 20px; vertical-align: -3px; margin-right: 2px; col
 
 /* welcome steps + extension setup */
 .steps { display: grid; gap: 12px; margin: 18px 0; }
-.step { display: flex; gap: 14px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 12px; padding: 14px 16px; }
-.step > b { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+.steps .step { flex-direction: row; gap: 14px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 14px 16px; margin: 0; }
+.steps .step > b { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
   background: var(--accent, #7c6cff); color: #fff; }
-.step h4 { margin: 2px 0 4px; }
-.step p { margin: 0 0 10px; }
+.steps .step h4 { margin: 2px 0 4px; }
+.steps .step p { margin: 0 0 10px; }
 dialog.wide { width: min(620px, 92vw); }
 .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
 .tab { background: transparent; border: 1px solid var(--line); color: var(--text); border-radius: 999px;
@@ -225,3 +225,20 @@ dialog.wide { width: min(620px, 92vw); }
 .copyrow { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 .copyrow code { flex: 1; overflow-x: auto; white-space: nowrap; background: var(--bg, #15161d); padding: 6px 8px;
   border-radius: 6px; border: 1px solid var(--line); }
+
+/* memory facts (like C.ai's Memory page) */
+.mem-bar { height: 6px; background: var(--bg, #15161d); border-radius: 99px; overflow: hidden; }
+.mem-bar span { display: block; height: 100%; background: var(--accent, #7c6cff); }
+.mem-bar.full span { background: #e8a33c; }
+.fact-group { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+.fact-group > h5 { margin: 2px 0 4px; font-size: 13px; }
+.fact { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; border-top: 1px solid var(--line); }
+.fact:first-of-type { border-top: 0; }
+.fact .cat { font-size: 11px; color: var(--muted); display: block; }
+.fact .val { flex: 1; min-width: 0; word-break: break-word; }
+.fact .tag { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 0 6px; margin-left: 4px; }
+.fact button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px; }
+.fact button:hover { color: var(--text); }
+.fact input { width: 100%; }
+#facts-list { display: flex; flex-direction: column; gap: 8px; max-height: 42vh; overflow-y: auto; }
+.fact-add input { flex: 1; min-width: 90px; }

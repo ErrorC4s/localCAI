@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import re
 
+from ..facts import facts_block, is_memory_entry
+
 
 def _fill(text: str, char: str, user: str) -> str:
     return (text.replace("{{char}}", char).replace("{{user}}", user)
@@ -31,7 +33,8 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
                    story: str = "", recalled: list[str] | None = None,
                    reply_words: int = 0, pacing: bool = True, user_pronouns: str = "",
                    initiative: str = "auto", instruction: str = "", rewrite_of: str = "",
-                   avoid: list[str] | None = None, scene: str = "") -> list[dict]:
+                   avoid: list[str] | None = None, scene: str = "",
+                   facts: list[dict] | None = None) -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
     Built to be prompt-cache friendly: everything that stays the same from turn to turn
@@ -54,12 +57,15 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         parts.append(f"[About {user_name}]\n{persona}")
     book = d.get("character_book") or {}
     constant = [e["content"] for e in sorted(book.get("entries", []), key=lambda e: e.get("insertion_order", 0))
-                if e.get("enabled", True) and e.get("constant")]
+                if e.get("enabled", True) and e.get("constant")
+                and not (facts is not None and is_memory_entry(e))]  # the chat's own facts replace these
     for m in memories or []:  # pinned in this chat (in localCAI or on C.ai)
         if m not in constant:
             constant.append(m)
     if constant:
         parts.append("[Memories — always keep these in mind]\n" + "\n".join(f"- {x}" for x in constant))
+    if facts:
+        parts.append("[Facts to remember — grouped by who they are about; keep them true]\n" + facts_block(facts))
     if story:
         parts.append(f"[The story so far between {char} and {user_name}]\n{story}")
     if d.get("mes_example"):

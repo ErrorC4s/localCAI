@@ -1,4 +1,12 @@
-## localCAI v0.8.38 · Extractor 0.5.4
+## localCAI v0.8.39
+
+- **Memory facts**, like C.ai's Memory page: in 📖 Chat memory, each chat now has a list of short facts grouped by who they are about (the character, you, anyone else), each with a category (hair, age, pets...). Add, edit or delete any of them; a bar shows how much memory is used. They are sent with every reply.
+- Your C.ai memory is imported into this list (marked "C.ai"), and re-importing a chat keeps the facts you added or edited.
+- Every few replies, new lasting facts from the chat (names, looks, likes, relationships) are added in the background (marked "auto"). It never changes facts you wrote or edited, and stops when memory is nearly full. You can turn it off in Settings.
+- Re-importing a chat no longer drops what you added in localCAI to that chat (the story so far, its background settings).
+- Fixed: the labels in the memory and settings dialogs were drawn as numbered circles.
+
+### Earlier in v0.8.38 · Extractor 0.5.4
 
 - Extractor 0.5.4: a shorter extension description that fits the Chrome Web Store's 132-character limit (needed to publish it there). No other changes.
 

@@ -905,3 +905,92 @@ def test_extension_manifest_fits_the_store_limits():
     m = json.loads((Path(__file__).resolve().parents[1] / "localcai" / "extension" / "manifest.json").read_text("utf-8"))
     assert len(m["description"]) <= 132, len(m["description"])   # Chrome Web Store rejects longer ones
     assert len(m["name"]) <= 75
+
+
+# ── memory facts (C.ai's Memory page) ────────────────────────────────────────
+
+def test_imported_cai_memory_becomes_chat_facts_and_survives_reimport(tmp_path):
+    from localcai import chatlog, facts
+    from localcai.library import import_into
+    src = FX / "extension_export.lcai.json"
+    import_into(src, tmp_path / "lib")
+    f = next((tmp_path / "lib" / "chats").glob("Luna.*.jsonl"))
+    meta, rows = chatlog.load(f)
+    card = json.loads(next((tmp_path / "lib" / "characters").glob("Luna*.card.json")).read_text("utf-8"))
+    got = facts.chat_facts(meta, card)
+    assert {(x["about"], x["category"], x["value"], x["source"]) for x in got} == {
+        ("Luna", "likes", "Earl Grey tea", "cai"), ("Alex", "hometown", "Lisbon", "cai")}
+    # the user adds a fact, edits one, writes a story; then re-imports the same chat
+    new = facts.apply(got, "add", {"about": "Alex", "category": "pets", "value": "a cat named Pip"})
+    lis = next(x for x in new if x["value"] == "Lisbon")
+    new = facts.apply(new, "edit", {"id": lis["id"], "value": "Porto (moved from Lisbon)"})
+    facts.set_facts(meta, new)
+    meta["chat_metadata"]["localcai_story"] = "They met at a tea shop."
+    chatlog.save(f, meta, rows)
+    import_into(src, tmp_path / "lib")
+    meta, _ = chatlog.load(f)
+    vals = {x["value"] for x in facts.chat_facts(meta, card)}
+    assert "a cat named Pip" in vals and "Porto (moved from Lisbon)" in vals and "Earl Grey tea" in vals
+    assert meta["chat_metadata"]["localcai_story"] == "They met at a tea shop."  # re-import keeps local additions
+
+
+def test_old_imports_read_facts_from_the_card_and_prompt_has_no_duplicates():
+    from localcai import facts
+    card = {"data": {"name": "Mira", "character_book": {"entries": [
+        {"content": "Mira — hair: long silver", "constant": True, "extensions": {"localcai": {"from_memory": True}}},
+        {"content": "Sam: pinned line", "constant": True, "extensions": {"localcai": {"from_pin": True}}}]}}}
+    got = facts.chat_facts({}, card)
+    assert [(x["about"], x["category"], x["value"]) for x in got] == [("Mira", "hair", "long silver")]
+    got = facts.apply(got, "add", {"about": "Sam", "category": "age", "value": "24"})
+    msgs = build_messages(card, [{"role": "user", "content": "hi"}], "Sam", facts=got)
+    system = msgs[0]["content"]
+    assert "- Mira: hair: long silver" in system and "- Sam: age: 24" in system
+    assert "Mira — hair" not in system  # the old lorebook copy isn't sent too
+    assert "Sam: pinned line" in system  # pins stay
+    # without facts (older callers) the lorebook entry is still used
+    assert "Mira — hair" in build_messages(card, [{"role": "user", "content": "hi"}], "Sam")[0]["content"]
+
+
+def test_fact_limit_and_errors():
+    from localcai import facts
+    fs = []
+    with pytest.raises(ValueError):
+        facts.apply(fs, "add", {"about": "Mira", "value": "  "})
+    for i in range(200):
+        try:
+            fs = facts.apply(fs, "add", {"about": "Mira", "category": f"c{i}", "value": "x" * 150})
+        except ValueError as e:
+            assert "full" in str(e)
+            break
+    else:
+        raise AssertionError("limit never reached")
+    assert facts.used(fs) <= facts.LIMIT
+    with pytest.raises(ValueError):
+        facts.apply(fs, "delete", {"id": "nope"})
+    assert len(facts.apply(fs, "delete", {"id": fs[0]["id"]})) == len(fs) - 1
+
+
+def test_auto_facts_never_overwrite_the_users_facts():
+    from localcai import facts
+    mine = facts.apply([], "add", {"about": "Mira", "category": "hair", "value": "long silver"})
+    auto = facts.merge_auto(mine, [facts.make("Mira", "eyes", "green", "auto")])
+    found = facts.parse_auto("Mira | hair | short black\nmira | eyes | blue\nWho | category | fact\nNONE",
+                             ["Mira", "Sam"])
+    assert [(f["about"], f["category"]) for f in found] == [("Mira", "hair"), ("Mira", "eyes")]
+    out = facts.merge_auto(auto, found)
+    by = {f["category"]: f["value"] for f in out}
+    assert by == {"hair": "long silver", "eyes": "blue"}  # the user's stays, the automatic one is updated
+    assert len(out) == 2
+
+
+def test_find_new_reads_the_recent_chat():
+    from localcai import facts
+    seen = {}
+
+    def ask(system, prompt):
+        seen["p"] = prompt
+        return "Sam | pets | a dog called Rex"
+    hist = [{"role": "user", "content": "My dog Rex says hi"}, {"role": "assistant", "content": "*waves at Rex*"}]
+    got = facts.find_new(ask, hist, "Mira", "Sam", [facts.make("Mira", "age", "19")])
+    assert got[0]["value"] == "a dog called Rex" and got[0]["source"] == "auto"
+    assert "Mira: age: 19" in seen["p"] and "My dog Rex" in seen["p"]

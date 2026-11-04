@@ -23,8 +23,12 @@ class H(BaseHTTPRequestHandler):
         msgs = body["messages"]
         check = msgs[0]["role"] == "system" and msgs[0]["content"].startswith("You are a strict editor")
         scene = msgs[0]["role"] == "system" and msgs[0]["content"].startswith("You keep notes on a role-play scene")
-        with open(LAST + (".check" if check else ".scene" if scene else ""), "w", encoding="utf-8") as f:
+        facts = msgs[0]["role"] == "system" and msgs[0]["content"].startswith("You keep a short list of lasting facts")
+        with open(LAST + (".check" if check else ".scene" if scene else ".facts" if facts else ""), "w",
+                  encoding="utf-8") as f:
             json.dump(body, f, ensure_ascii=False)
+        if facts:  # memory facts picked up every few replies
+            return self.sse(["Alex | hobbies | painting watercolours"], "stop")
         if scene:  # the scene-state note made after a reply
             return self.sse(["Where: the tea room; Luna: sipping tea by the window; Alex: across the table"], "stop")
         if check:  # the OOC guard asking for a verdict

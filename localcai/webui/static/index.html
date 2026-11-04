@@ -110,6 +110,7 @@
   <label class="field">Reply length
     <select id="set-reply-length"><option value="auto">Like the character's past replies</option><option value="short">Short</option><option value="medium">Medium</option><option value="long">Long</option><option value="off">No limit</option></select></label>
   <label class="check-row"><input type="checkbox" id="set-guard"> OOC guard: double-check every reply stays in character, and fix it if not (adds a second or two)</label>
+  <label class="check-row"><input type="checkbox" id="set-facts"> Memory facts: every few replies, add new lasting facts from the chat (names, looks, likes, relationships) to the chat's Memory (in the background)</label>
   <label class="check-row"><input type="checkbox" id="set-scene"> Scene memory: after each reply, note where everyone is and what's still going on, so ongoing actions aren't forgotten (a second or two, in the background)</label>
   <label class="check-row"><input type="checkbox" id="set-pacing"> Natural pacing: keep actions, scene and dialogue apart, and fit them to the moment</label>
   <label class="field">Who leads the scene
@@ -242,6 +243,20 @@
 <dialog id="memory-dialog">
   <h3><i data-ic="book"></i> Chat memory</h3>
   <p class="muted small">Everything here is sent to the model with every reply, so the character keeps it in mind.</p>
+  <div class="step">
+    <div class="row"><b class="grow">Facts</b><span id="mem-used" class="small muted"></span></div>
+    <div class="mem-bar" id="mem-bar"><span></span></div>
+    <div id="facts-list"></div>
+    <div class="row wrap fact-add">
+      <input id="fact-about" list="fact-abouts" placeholder="About (who)" maxlength="60">
+      <input id="fact-category" list="fact-categories" placeholder="Category (e.g. hair)" maxlength="40">
+      <input id="fact-value" placeholder="The fact" maxlength="200">
+      <button class="btn" id="fact-add"><i data-ic="plus"></i> Add fact</button>
+    </div>
+    <datalist id="fact-abouts"></datalist>
+    <datalist id="fact-categories"></datalist>
+    <div class="small muted">Like C.ai's Memory: short facts about each person, sent with every reply. New facts are also picked up from the chat every few replies (Settings).</div>
+  </div>
   <div class="step">
     <b>Always remembered</b>
     <div id="mem-counts" class="small"></div>

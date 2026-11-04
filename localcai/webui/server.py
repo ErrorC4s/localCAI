@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from .. import __version__, chatlog
 from ..engine import ENGINE, models_dir
 from .. import analyze
+from .. import facts as factmem
 from ..recall import recall
 from ..library import delete_character, import_into, list_library
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
@@ -40,11 +41,11 @@ GUARD_MARK = "\x1e"  # sent after the streamed reply while the OOC guard checks 
 STALE_MARK = "\x1d"  # end of a reply that wasn't saved because the chat changed meanwhile
 
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
-                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns", "persona_pronouns", "initiative", "ooc_guard", "kv_cache", "scene_state"}
+                 "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns", "persona_pronouns", "initiative", "ooc_guard", "kv_cache", "scene_state", "auto_facts"}
 DEFAULTS = {"backend": "builtin", "model": "", "persona": "", "user_name": "",
             "temperature": 0.8, "max_tokens": 512, "age_confirmed": False,
             "engine_variant": "auto", "ctx_size": 8192, "gpu_layers": 999, "recall": True,
-            "gpu_device": "auto", "kv_cache": "auto", "scene_state": True, "reply_length": "auto", "pacing": True, "user_pronouns": "",
+            "gpu_device": "auto", "kv_cache": "auto", "scene_state": True, "auto_facts": True, "reply_length": "auto", "pacing": True, "user_pronouns": "",
             "persona_pronouns": {}, "initiative": "auto", "ooc_guard": True}
 
 # Background jobs (history analysis). One at a time; the UI polls /api/job.
@@ -202,6 +203,10 @@ def make_handler(app: App, port: int):
                         return self.send_json({"models": list_models(url)})
                     except OSError as e:
                         return self.send_json({"models": [], "error": f"No model runner found at {url}. Start Ollama / LM Studio / llama.cpp, or pick another backend."})
+                if u.path == "/api/facts":
+                    card = app.card(q["character"])
+                    meta, _ = chatlog.load(app.safe_file("chats", q["chat"], ""))
+                    return self.send_json(self.facts_info(factmem.chat_facts(meta, card)))
                 if u.path == "/api/chat":
                     card = app.card(q["character"])
                     meta, rows = chatlog.load(app.safe_file("chats", q["chat"], ""))
@@ -299,6 +304,16 @@ def make_handler(app: App, port: int):
                     return self.send_json({"ok": True})
                 if path == "/api/character/save":
                     return self.character_save(self.body_json())
+                if path == "/api/facts":
+                    body = self.body_json()
+                    card = app.card(body["character"])
+                    p = app.safe_file("chats", body["chat"], "")
+                    with app.lock:
+                        meta, rows = chatlog.load(p)
+                        new = factmem.apply(factmem.chat_facts(meta, card), str(body.get("op", "")), body)
+                        factmem.set_facts(meta, new)
+                        chatlog.save(p, meta, rows)
+                    return self.send_json(self.facts_info(new))
                 if path in ("/api/chat/new", "/api/chat/send", "/api/chat/regenerate"):
                     if not settings()["age_confirmed"]:
                         return self.send_json({"error": "Please confirm you are 18 or older first."}, 403)
@@ -308,6 +323,9 @@ def make_handler(app: App, port: int):
                 self.send_json({"error": "not found"}, 404)
             except (FileNotFoundError, KeyError, ValueError) as e:
                 self.send_json({"error": str(e)}, 400)
+
+        def facts_info(self, facts: list[dict]) -> dict:
+            return {"facts": facts, "used": factmem.used(facts), "limit": factmem.LIMIT}
 
         def do_import(self):
             n = int(self.headers.get("Content-Length") or 0)
@@ -569,6 +587,7 @@ def make_handler(app: App, port: int):
             target_words = reply_words_for(str(s.get("reply_length", "auto")), history, card)
             instruction = str(body.get("instruction") or "")[:600]
             use_scene = s.get("scene_state", True) is not False
+            facts_now = factmem.chat_facts(meta, card)
             scene_now = ""
             if use_scene and history and history[-1]["role"] == "user":
                 last_bot = max((i for i, m in enumerate(history[:-1]) if m["role"] == "assistant"), default=-1)
@@ -585,7 +604,7 @@ def make_handler(app: App, port: int):
                     initiative=str(s.get("initiative") or "auto"),
                     instruction=instruction, rewrite_of=rewrite_of,
                     avoid=(swipe_row.get("swipes") or [swipe_row.get("mes", "")]) if swipe_row and not instruction else None,
-                    scene=scene_now)
+                    scene=scene_now, facts=facts_now)
 
             msgs = make_msgs(instruction, (swipe_row or {}).get("mes", "") if instruction else "")
             info: dict = {}
@@ -694,25 +713,49 @@ def make_handler(app: App, port: int):
                     pass
                 return
             final = fixed or text_out
-            if use_scene and final and not stopped and not crisis:
-                # Scene state for the next turn, made in the background so this reply isn't held up.
-                scene_history = history + [{"role": "assistant", "content": final}]
+            if not final or stopped or crisis:
+                return
+            done_history = history + [{"role": "assistant", "content": final}]
+            replies = sum(1 for m in done_history if m["role"] == "assistant")
+            want_facts = s.get("auto_facts", True) is not False and replies % factmem.AUTO_EVERY == 0
+            if not use_scene and not want_facts:
+                return
 
-                def note_scene() -> None:
-                    ask = lambda system, prompt: "".join(stream_chat(
-                        url, s["model"], [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-                        temperature=0.1, max_tokens=110, extra=sampler or None))
-                    state = build_state(ask, scene_history, char, user, prev=scene_now)
+            # Made in the background so this reply isn't held up: the scene note for the next turn and,
+            # every few replies, new lasting facts for the chat's memory. One after the other (one GPU).
+            def ask(system: str, prompt: str, n: int) -> str:
+                return "".join(stream_chat(
+                    url, s["model"], [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+                    temperature=0.1, max_tokens=n, extra=sampler or None))
+
+            def background() -> None:
+                if use_scene:
+                    state = build_state(lambda a, b: ask(a, b, 110), done_history, char, user, prev=scene_now)
                     if state:
                         with app.lock:
                             try:
                                 # only if the chat still is what the note describes (not edited meanwhile)
                                 _, rows_now = chatlog.load(path)
-                                if chatlog.to_history(rows_now) == scene_history:
-                                    save_state(path, scene_history, state)
+                                if chatlog.to_history(rows_now) == done_history:
+                                    save_state(path, done_history, state)
                             except (OSError, ValueError):
                                 pass
-                threading.Thread(target=note_scene, daemon=True).start()
+                if want_facts and factmem.used(facts_now) < factmem.LIMIT * factmem.AUTO_STOP:
+                    found = factmem.find_new(lambda a, b: ask(a, b, 160), done_history, char, user, facts_now)
+                    if found:
+                        with app.lock:
+                            try:
+                                meta_now, rows_now = chatlog.load(path)
+                                if chatlog.to_history(rows_now)[:len(done_history)] != done_history:
+                                    return  # edited or rewound meanwhile: what was read may no longer be true
+                                cur = factmem.chat_facts(meta_now, card)
+                                merged = factmem.merge_auto(cur, found)
+                                if merged != cur:
+                                    factmem.set_facts(meta_now, merged)
+                                    chatlog.save(path, meta_now, rows_now)
+                            except (OSError, ValueError):
+                                pass
+            threading.Thread(target=background, daemon=True).start()
 
     return H
 

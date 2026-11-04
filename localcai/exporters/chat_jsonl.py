@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from .. import facts
 from ..schema import Chat
 from .card_v2 import _safe
 
@@ -37,6 +38,8 @@ def write_chat(chat: Chat, out_dir: Path, index: int = 0) -> Path:
     lines = [{"user_name": chat.user_name, "character_name": chat.character_name,
               "create_date": chat.created or "", "chat_metadata": {"localcai_title": chat.title,
                                                                    "source_id": chat.source_id}}]
+    if chat.memories:  # C.ai chat memory: this chat's facts (see facts.py)
+        lines[0]["chat_metadata"][facts.KEY] = facts.from_cai(chat.memories)
     rows = []
     for m in chat.messages:
         extra = {"pinned": True} if m.pinned else {}
@@ -52,6 +55,12 @@ def write_chat(chat: Chat, out_dir: Path, index: int = 0) -> Path:
         from ..chatlog import load
         old_meta, old_rows = load(p)
         rows = _merge(old_rows, rows)
+        # keep what was added in localCAI (story, background, the user's facts and edits)
+        old_cm = old_meta.get("chat_metadata") or {}
+        new_cm = lines[0]["chat_metadata"]
+        if facts.KEY in old_cm:
+            new_cm[facts.KEY] = facts.merge_import(old_cm[facts.KEY], new_cm.get(facts.KEY, []))
+        lines[0]["chat_metadata"] = {**old_cm, **new_cm}
     elif p.exists():
         # can't line the messages up without ids: keep the existing chat (it may have been continued
         # in localCAI) and save this import next to it instead of over it

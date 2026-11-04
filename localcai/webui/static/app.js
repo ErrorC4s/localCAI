@@ -628,6 +628,7 @@ $("open-settings").onclick = () => {
   $("set-recall").checked = s.recall !== false;
   $("set-pacing").checked = s.pacing !== false;
   $("set-scene").checked = s.scene_state !== false;
+  $("set-facts").checked = s.auto_facts !== false;
   $("set-initiative").value = s.initiative || "auto";
   $("set-guard").checked = s.ooc_guard !== false;
   {
@@ -658,6 +659,7 @@ $("settings-save").onclick = async () => {
     recall: $("set-recall").checked,
     pacing: $("set-pacing").checked,
     scene_state: $("set-scene").checked,
+    auto_facts: $("set-facts").checked,
     initiative: $("set-initiative").value,
     ooc_guard: $("set-guard").checked,
     persona_pronouns: { ...(S.state.settings.persona_pronouns || {}), [$("persona").value]: $("set-pronouns").value },
@@ -702,8 +704,10 @@ $("learn-style").onclick = async () => {
 async function openMemory() {
   const r = await api(`/api/chat?character=${enc(S.character)}&chat=${enc(S.chat)}`);
   const pinned = r.rows.filter((x) => (x.extra || {}).pinned).length;
-  const book = (r.card.character_book || {}).entries || [];
-  $("mem-counts").innerHTML = `${ic("pinned")} ${pinned} pinned in this chat · ${ic("memory")} ${book.length} memories from Character.AI (pins and chat memory)`;
+  const book = ((r.card.character_book || {}).entries || []).filter((e) => !((e.extensions || {}).localcai || {}).from_memory);
+  $("mem-counts").innerHTML = `${ic("pinned")} ${pinned} pinned in this chat · ${ic("memory")} ${book.length} always-on lorebook ${book.length === 1 ? "entry" : "entries"}`;
+  const names = [r.card.name, (r.meta || {}).user_name, $("persona").value, S.state.settings.user_name].filter(Boolean);
+  await loadFacts(names);
   $("story-text").value = ((r.meta || {}).chat_metadata || {}).localcai_story || "";
   $("story-hint").textContent = `This chat has ${r.rows.length.toLocaleString()} messages. Generating reads them in parts with your model; you can stop any time and keep what was read.`;
   $("memory-dialog").showModal();
@@ -723,6 +727,84 @@ $("story-generate").onclick = async () => {
     watchJob(() => { if (S.chat) openMemory(); });
   } catch (e) { toast(e.message, "error"); }
 };
+
+// Memory facts, grouped by who they're about (like C.ai's Memory page)
+const FACT_CATEGORIES = ["age", "appearance", "body type", "clothing", "distinguishing features", "eyes", "family",
+  "gender", "hair", "height", "hobbies", "languages", "likes", "dislikes", "occupation", "pets", "relationship",
+  "species", "personality", "home"];
+let FACTS = { facts: [], used: 0, limit: 1 }, FACT_NAMES = [];
+async function loadFacts(names) {
+  if (names) FACT_NAMES = names;
+  try {
+    FACTS = await api(`/api/facts?character=${enc(S.character)}&chat=${enc(S.chat)}`);
+  } catch (e) { return toast(e.message, "error"); }
+  renderFacts();
+}
+async function factOp(json) {
+  try {
+    FACTS = await api("/api/facts", { json: { character: S.character, chat: S.chat, ...json } });
+    renderFacts();
+    return true;
+  } catch (e) { toast(e.message, "error"); return false; }
+}
+function renderFacts() {
+  const pct = Math.min(100, Math.round((FACTS.used / FACTS.limit) * 100));
+  $("mem-used").textContent = `${pct}% used · ${100 - pct}% left`;
+  $("mem-bar").classList.toggle("full", pct >= 90);
+  $("mem-bar").firstElementChild.style.width = pct + "%";
+  const groups = new Map();
+  for (const n of FACT_NAMES) groups.set(n, []);
+  for (const f of FACTS.facts) {
+    const k = f.about || "Story";
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(f);
+  }
+  const list = $("facts-list");
+  list.innerHTML = "";
+  const tagFor = { cai: "C.ai", auto: "auto" };
+  for (const [who, facts] of groups) {
+    if (!facts.length) continue;
+    const g = document.createElement("div");
+    g.className = "fact-group";
+    g.innerHTML = `<h5>${escHtml(who)}</h5>`;
+    for (const f of facts) {
+      const row = document.createElement("div");
+      row.className = "fact";
+      row.dataset.id = f.id;
+      row.innerHTML = `<div class="val"><span class="cat">${escHtml(f.category || "fact")}`
+        + (tagFor[f.source] ? `<span class="tag">${tagFor[f.source]}</span>` : "")
+        + (f.edited ? `<span class="tag">edited</span>` : "")
+        + `</span><span class="text">${escHtml(f.value)}</span></div>`
+        + `<button title="Edit" class="f-edit">${ic("pencil")}</button><button title="Delete" class="f-del">${ic("trash")}</button>`;
+      row.querySelector(".f-del").onclick = () => factOp({ op: "delete", id: f.id });
+      row.querySelector(".f-edit").onclick = () => {
+        const v = row.querySelector(".val");
+        v.innerHTML = `<input class="f-cat" maxlength="40"><input class="f-val" maxlength="200">`;
+        v.querySelector(".f-cat").value = f.category;
+        const inp = v.querySelector(".f-val");
+        inp.value = f.value;
+        inp.focus();
+        const save = () => factOp({ op: "edit", id: f.id, category: v.querySelector(".f-cat").value, value: inp.value });
+        inp.onkeydown = (e) => { if (e.key === "Enter") save(); if (e.key === "Escape") renderFacts(); };
+        row.querySelector(".f-edit").outerHTML = `<button title="Save" class="f-save">${ic("download")}</button>`;
+        row.querySelector(".f-save").onclick = save;
+      };
+      g.appendChild(row);
+    }
+    list.appendChild(g);
+  }
+  if (!FACTS.facts.length) list.innerHTML = `<div class="small muted">No facts yet. Add one below, or keep chatting and they'll be picked up.</div>`;
+  const abouts = [...new Set([...FACT_NAMES, ...FACTS.facts.map((f) => f.about).filter(Boolean)])];
+  $("fact-abouts").innerHTML = abouts.map((n) => `<option value="${escHtml(n)}">`).join("");
+  const cats = [...new Set([...FACT_CATEGORIES, ...FACTS.facts.map((f) => f.category).filter(Boolean)])];
+  $("fact-categories").innerHTML = cats.map((n) => `<option value="${escHtml(n)}">`).join("");
+  if (!$("fact-about").value && FACT_NAMES[0]) $("fact-about").value = FACT_NAMES[0];
+}
+$("fact-add").onclick = async () => {
+  const ok = await factOp({ op: "add", about: $("fact-about").value, category: $("fact-category").value, value: $("fact-value").value });
+  if (ok) { $("fact-value").value = ""; $("fact-category").value = ""; }
+};
+$("fact-value").onkeydown = (e) => { if (e.key === "Enter") $("fact-add").click(); };
 
 // ── Boot ──────────────────────────────────────────────
 loadState().then(loadModels).then(refreshEngine).then(() => watchJob()).catch((e) => toast("Couldn't load: " + e.message, "error"));

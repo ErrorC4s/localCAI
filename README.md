@@ -70,7 +70,7 @@ Run `localcai` and it opens at `http://127.0.0.1:8765`:
 - **🖼 Background**: set your own picture as a chat's background (✕ to remove)
 - **✎ Edit character**: description, personality, scenario, greeting, example dialogue, custom instructions
 - **🔍 Learn style**: the model reads a sample of the character's replies from your history and writes style notes (tone, catchphrases, how they narrate) into the character, plus picks example dialogues. Great for characters whose definition is private
-- **📖 Chat memory**: see what's always remembered (pins, C.ai memories) and edit *the story so far*, or **✨ generate it from history** (last 500 / 2,000 / 5,000 messages or the whole chat; stoppable)
+- **📖 Chat memory**: **memory facts** like C.ai's Memory page (grouped by who they're about, with categories; add, edit, delete, usage bar; your C.ai memory imported; new facts picked up from the chat every few replies), see what's always remembered (pins), and edit *the story so far*, or **✨ generate it from history** (last 500 / 2,000 / 5,000 messages or the whole chat; stoppable)
 - **Recall**: on every reply, moments from the whole chat that match what you're talking about are found (fast keyword search, works for English and Chinese) and added to the prompt, so old events aren't forgotten
 - **⬇ Card**: download a Character Card V2 PNG for SillyTavern, RisuAI, etc.
 - ⚙ **Settings**: your name, creativity (temperature), reply length, and for the built-in engine: build (GPU/CPU), context size and GPU layers
@@ -86,7 +86,7 @@ Your library lives in `~/.localcai/library`, models in `~/.localcai/models` and 
 | Full chat history, oldest first | SillyTavern `.jsonl` chat |
 | Rerolled replies | Swipes |
 | 📌 Pinned messages | Always-on lorebook memories |
-| Chat memory ("conversation facts") | Always-on lorebook memories |
+| Chat memory ("conversation facts") | Memory facts per chat (editable, sent with every reply) |
 | Your personas | Selectable "You are" profiles |
 | Character & persona avatars | Real pictures (the character's avatar becomes the card PNG) |
 | Character, persona & chat backgrounds | Chat backgrounds in the app |

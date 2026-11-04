@@ -315,12 +315,34 @@ def main(shot=None):
             expect(page.locator("#story-text")).not_to_have_value("")
             page.fill("#story-text", "- Luna and Alex share tea every night.")
             page.click("#story-save")
+            # memory facts, like C.ai's Memory page: imported ones, then add / edit / delete
+            expect(page.locator("#facts-list .fact", has_text="Earl Grey tea")).to_contain_text("C.ai")
+            expect(page.locator("#mem-used")).to_contain_text("% left")
+            page.fill("#fact-about", "Alex")
+            page.fill("#fact-category", "pets")
+            page.fill("#fact-value", "a cat named Pip")
+            page.click("#fact-add")
+            pip = page.locator("#facts-list .fact", has_text="a cat named Pip")
+            expect(pip).to_have_count(1)
+            fid = page.locator("#facts-list .fact", has_text="Lisbon").get_attribute("data-id")
+            lisbon = page.locator(f'#facts-list .fact[data-id="{fid}"]')
+            lisbon.locator(".f-edit").click()
+            lisbon.locator(".f-val").fill("Porto")
+            lisbon.locator(".f-val").press("Enter")
+            expect(page.locator("#facts-list .fact", has_text="Porto")).to_contain_text("edited")
+            page.locator("#facts-list .fact", has_text="Earl Grey tea").locator(".f-del").click()
+            expect(page.locator("#facts-list .fact", has_text="Earl Grey tea")).to_have_count(0)
+            if os.environ.get("LCAI_SHOT"):
+                page.locator("#memory-dialog").screenshot(path=os.environ["LCAI_SHOT"])
             page.click("#memory-close")
             page.fill("#input", "tea time?")
             page.click("#send")
             page.wait_for_timeout(800)
             sent = json.load(open(last_path, encoding="utf-8"))
             assert "share tea every night" in sent["messages"][0]["content"], "story in prompt"
+            alex = next((l for l in sent["messages"][0]["content"].splitlines() if l.startswith("- Alex: ") and "hometown" in l), "")
+            assert "hometown: Porto" in alex and "pets: a cat named Pip" in alex, ("facts in prompt", alex)
+            assert "Earl Grey" not in sent["messages"][0]["content"], "a deleted fact isn't sent"
             n_before = page.locator(".msg").count() - 4  # keep later count checks relative
 
             # crisis banner (shown, never blocking)
