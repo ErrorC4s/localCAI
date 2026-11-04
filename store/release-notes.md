@@ -1,4 +1,9 @@
-## localCAI v0.8.50
+## localCAI v0.8.51
+
+- Learn style learns from the character's real C.ai replies only (when the chat has enough of them), not from replies written in localCAI, which may have drifted (e.g. pet names the character never used). The example dialogue is picked from the C.ai part too.
+- The style notes no longer contradict the habits counted from those replies (how speech is marked, their laugh, what they call you): the model is given them and writes about the rest instead: who the character is, their attitude toward you, how they react in different moods, how they speak.
+
+### Earlier in localCAI v0.8.50
 
 - Fixed: after restoring from the Trash, the restored chat didn't show up in the chat list at the top until you switched characters. It now appears at once, marked "restored".
 

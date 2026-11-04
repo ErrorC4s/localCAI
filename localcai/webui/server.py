@@ -561,8 +561,9 @@ def make_handler(app: App, port: int):
                             words = len(text.split())
                             JOB.update(progress=0.15 + 0.75 * min(1.0, words / 260),
                                        message=f"Writing style notes… {words} words")
+                        known = voice_rules(voice_profile(chat_path, rows), char, user)
                         notes = analyze.style_notes(rows, char, user, lambda p: analyze.complete(
-                            url, model, p, analyze.STYLE_SYSTEM, on_text=writing))
+                            url, model, p, analyze.STYLE_SYSTEM, on_text=writing), known=known)
                         JOB.update(message="Picking example dialogues…", progress=0.9)
                         examples = analyze.pick_examples(rows, user, char)
                         with app.lock:

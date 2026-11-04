@@ -1371,3 +1371,20 @@ def test_style_notes_live_in_personality_and_keep_the_users_own_text():
     assert e["personality"] == "- learned" and analyze.style_notes_of(e) == "- learned"
     analyze.set_examples(e, "<START>\nx", learned=False)
     assert not e["extensions"][analyze.AUTO_MARK].get("mes_example")  # edited by the user: kept from now on
+
+
+def test_learn_style_reads_the_cai_replies_and_knows_the_counted_habits():
+    from localcai import analyze, chatlog
+    rows = _voice_rows()
+    drifted = chatlog.row("Mira", False, "*She gives a sly grin.* \"Hello darling, you naughty mister~\" " * 3)
+    seen = {}
+
+    def ask(prompt):
+        seen["p"] = prompt
+        return "- shy and clingy"
+    notes = analyze.style_notes(rows + [drifted] * 40, "Mira", "Sam", ask, known=['Mira calls Sam "boss"'])
+    assert notes == "- shy and clingy"
+    assert "darling" not in seen["p"] and "nyeh heh" in seen["p"]   # replies written in localCAI aren't learned from
+    assert 'Mira calls Sam "boss"' in seen["p"] and "never contradict" in seen["p"]
+    ex = analyze.pick_examples(rows + [chatlog.row("Sam", True, "hi there"), drifted] * 40, "Sam", "Mira")
+    assert "darling" not in ex

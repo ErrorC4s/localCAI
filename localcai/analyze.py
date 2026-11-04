@@ -54,6 +54,7 @@ def _styled(text: str) -> float:
 
 # ── 3. example dialogue ────────────────────────────────────────────────────
 def pick_examples(rows: list[dict], user: str, char: str, k: int = 4) -> str:
+    rows = _real(rows)  # from the C.ai chat when there's enough of it (see _real)
     pairs = []
     for i in range(1, len(rows)):
         u, b = rows[i - 1], rows[i]
@@ -77,9 +78,18 @@ def pick_examples(rows: list[dict], user: str, char: str, k: int = 4) -> str:
 STYLE_SYSTEM = "You are an expert at analysing fictional characters' voices for roleplay writers."
 
 
+def _real(rows: list[dict]) -> list[dict]:
+    """The chat as written on C.ai (imported messages, with an id) when there's enough of it. Replies written
+    in localCAI are left out: they may have drifted from the character, and learning from them would bake
+    the drift in."""
+    real = [r for r in rows if (r.get("extra") or {}).get("source_id")]
+    return real if sum(1 for r in real if not r.get("is_user")) >= 30 else rows
+
+
 def style_notes(rows: list[dict], char: str, user: str, ask: Callable[[str], str],
-                sample: int = 24, budget: int = 14000) -> str:
-    replies = [r["mes"].strip() for r in rows if not r.get("is_user") and len(r.get("mes", "")) > 30]
+                sample: int = 24, budget: int = 14000, known: list[str] | None = None) -> str:
+    """known: writing habits already counted from the replies (runtime/voice.py); the notes cover the rest."""
+    replies = [r["mes"].strip() for r in _real(rows) if not r.get("is_user") and len(r.get("mes", "")) > 30]
     if len(replies) < 2:
         raise ValueError("Not enough of the character's messages to learn from yet.")
     picked = _spread(sorted(replies, key=_styled, reverse=True)[: sample * 3], sample)
@@ -91,13 +101,19 @@ def style_notes(rows: list[dict], char: str, user: str, ask: Callable[[str], str
         text.append(r)
         used += len(r)
     joined = "\n---\n".join(text)
+    counted = ("\n\nThese writing habits were already counted exactly from ALL of their replies and are given to the "
+               "writer separately. They are correct: never contradict them and don't repeat them:\n"
+               + "\n".join(f"- {k}" for k in known)) if known else ""
     prompt = (f"Below are {len(text)} messages written by the character \"{char}\" in a long roleplay with {user}.\n\n"
-              f"{joined}\n\n"
-              f"Write concise notes another writer can follow to sound exactly like {char}. Cover, as short bullet points:\n"
-              f"- personality and attitude toward {user}\n- how they speak (tone, sentence length, verbal tics, catchphrases, "
-              f"pet names, how they address {user})\n- how they write actions/narration (point of view, *asterisks*, "
-              f"(parentheses), formatting)\n- recurring themes or habits\n"
-              f"Write only the notes, in English, at most 15 bullets. Describe the style; don't copy long passages.")
+              f"{joined}{counted}\n\n"
+              f"Write concise notes another writer can follow to play {char} exactly. Cover, as short bullet points:\n"
+              f"- who {char} is: personality, what they care about, insecurities and quirks\n"
+              f"- their attitude toward {user} and how they show it\n"
+              f"- how they react in different moods (calm, playful, sleepy, upset, jealous, intimate), and how the mood "
+              f"changes\n- how they speak (tone, sentence length, verbal tics, catchphrases)"
+              + ("" if known else f", pet names, and how they write actions and speech (*asterisks*, \"quotes\")") + "\n"
+              f"Write only the notes, in English, at most 12 bullets. Only say what the messages clearly show, and for "
+              f"pet names and catchphrases only the ones they use often. Describe; don't quote explicit lines.")
     return _clean(ask(prompt))
 
 
