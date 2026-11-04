@@ -554,7 +554,10 @@ const CHAR_FIELDS = [["description", "Description"], ["personality", "Personalit
   ["first_mes", "Greeting (first message)"], ["mes_example", "Example dialogue / definition"],
   ["creator_notes", "Tagline"], ["system_prompt", "Custom instructions (optional)"]];
 $("edit-char").onclick = async () => {
-  if (!S.card) { const r = await api(`/api/chat?character=${enc(S.character)}&chat=${enc(S.chat || "")}`).catch(() => null); if (r) S.card = r.card; }
+  // always the card as it is now (Learn style may have changed it since this chat was opened)
+  const fresh = await api(`/api/chat?character=${enc(S.character)}&chat=${enc(S.chat || "")}`).catch(() => null);
+  if (fresh) S.card = fresh.card;
+  S.editBase = {};
   const box = $("char-fields"); box.innerHTML = "";
   const ci = charInfo(S.character);
   const pl = document.createElement("label"); pl.className = "field";
@@ -571,7 +574,7 @@ $("edit-char").onclick = async () => {
   for (const [k, label] of CHAR_FIELDS) {
     const l = document.createElement("label"); l.className = "field"; l.textContent = label;
     const ta = document.createElement("textarea"); ta.dataset.key = k; ta.rows = k === "creator_notes" ? 1 : 4;
-    ta.value = (S.card && S.card[k]) || ""; l.appendChild(ta); box.appendChild(l);
+    ta.value = (S.card && S.card[k]) || ""; S.editBase[k] = ta.value; l.appendChild(ta); box.appendChild(l);
   }
   const rl = document.createElement("label"); rl.className = "field";
   rl.textContent = "Rules (one per line): always followed, e.g. \"Never writes code.\" or \"Has never heard of video games.\"";
@@ -583,7 +586,9 @@ $("edit-char").onclick = async () => {
 $("char-cancel").onclick = () => $("char-dialog").close();
 $("char-save").onclick = async () => {
   const data = {};
-  for (const ta of $("char-fields").querySelectorAll("textarea[data-key]")) data[ta.dataset.key] = ta.value;
+  // only what was changed here: a field updated meanwhile (e.g. by Learn style) is never overwritten with an old copy
+  for (const ta of $("char-fields").querySelectorAll("textarea[data-key]"))
+    if (ta.value !== (S.editBase || {})[ta.dataset.key]) data[ta.dataset.key] = ta.value;
   const rules = $("char-rules").value.split("\n").map((x) => x.trim()).filter(Boolean);
   try {
     const r = await api("/api/character/save", { json: { character: S.character, data, rules, pronouns: $("char-pronouns").value,

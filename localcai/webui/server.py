@@ -32,7 +32,8 @@ from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, s
 from ..runtime.guard import check_reply, same_reply, spoken_part
 from ..runtime.scene import build_state, save_state, state_for
 from ..runtime.client import ContextTooLong, other_speakers, strip_markers, strip_meta, strip_name_prefix, trim_to_sentence
-from ..runtime.prompt import PRONOUN_CHOICES, reply_words_for
+from ..runtime.prompt import PRONOUN_CHOICES, reply_words_for, words_bucket
+from ..runtime.voice import for_chat as voice_profile
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
 STATIC = Path(__file__).parent / "static"
@@ -611,7 +612,11 @@ def make_handler(app: App, port: int):
             history = chatlog.to_history(rows)
             # set per character (Edit); older versions had one setting for everyone, used until it's set
             own_length = ((card.get("data", card).get("extensions") or {}).get("localcai") or {}).get("reply_length")
-            target_words = reply_words_for(str(own_length or s.get("reply_length") or "auto"), history, card)
+            length_setting = str(own_length or s.get("reply_length") or "auto")
+            # the character's writing habits, counted from their real (C.ai) replies; cached per chat
+            voice = voice_profile(path, rows)
+            target_words = (words_bucket(voice["median_words"]) if length_setting == "auto" and voice
+                            else reply_words_for(length_setting, history, card))
             instruction = str(body.get("instruction") or "")[:600]
             use_scene = s.get("scene_state", True) is not False
             facts_now = factmem.chat_facts(meta, card)
@@ -631,7 +636,7 @@ def make_handler(app: App, port: int):
                     initiative=str(s.get("initiative") or "auto"),
                     instruction=instruction, rewrite_of=rewrite_of,
                     avoid=(swipe_row.get("swipes") or [swipe_row.get("mes", "")]) if swipe_row and not instruction else None,
-                    scene=scene_now, facts=facts_now)
+                    scene=scene_now, facts=facts_now, voice=voice)
 
             msgs = make_msgs(instruction, (swipe_row or {}).get("mes", "") if instruction else "")
             info: dict = {}

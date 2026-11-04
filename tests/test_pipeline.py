@@ -1272,3 +1272,55 @@ def test_mood_rule_and_scene_note_cover_the_aftermath_of_a_peak():
     last = build_messages({"data": {"name": "Mira"}}, hist, "Sam", scene="Where: bed; Mira: trembling; Mood: afterglow")[-1]["content"]
     assert "aftermath first" in last and "doesn't appear out of nowhere" in last
     assert "afterglow" in SCENE_PROMPT
+
+
+def _voice_rows(n=60):
+    from localcai import chatlog
+    rows = []
+    for i in range(n):
+        u = chatlog.row("Sam", True, f"hi {i}")
+        u["extra"] = {"source_id": f"u{i}"}
+        b = chatlog.row("Mira", False, f'*I tilt my head.* **"B-boss... nyeh heh, you came back~"** *I hug the **old** book.* '
+                                       f'"Stay a little, boss…" *line {i}*')
+        b["extra"] = {"source_id": f"b{i}"}
+        rows += [u, b]
+    return rows
+
+
+def test_voice_fingerprint_from_real_replies():
+    from localcai.runtime import voice
+    rows = _voice_rows()
+    p = voice.profile(voice.real_replies(rows))
+    assert p["speech_quoted"] and p["bold_speech"] and p["laughs"][0] == "nyeh heh"
+    assert p["calls"] == ["boss"] and "darling" in p["never_calls"] and "sly grin" in p["avoid"]
+    rules = "\n".join(voice.rules(p, "Mira", "Sam"))
+    assert 'laugh is written "nyeh heh"' in rules and 'calls Sam "boss"' in rules and '**"…"**' in rules
+    assert "B-Boss" in rules  # stutter example uses what she calls him
+    # replies written in localCAI (no id) don't count once there are enough real ones
+    from localcai import chatlog
+    local = chatlog.row("Mira", False, "*She gives a sly grin.* Hello darling. " * 20)
+    assert voice.real_replies(rows + [local] * 10) == voice.real_replies(rows)
+    assert voice.profile(voice.real_replies(rows[:20])) == {}  # too few to say
+
+
+def test_voice_goes_into_the_prompt_and_sets_the_length():
+    from localcai.runtime import voice
+    from localcai.runtime.prompt import build_messages, words_bucket
+    from localcai import chatlog
+    p = voice.profile(voice.real_replies(_voice_rows()))
+    hist = chatlog.to_history(_voice_rows(3)) + [{"role": "user", "content": "*I wave*"}]
+    msgs = build_messages({"data": {"name": "Mira"}}, hist, "Sam", voice=p, reply_words=words_bucket(p["median_words"]))
+    assert "[How Mira writes — counted from 60 of Mira's real replies" in msgs[0]["content"]
+    assert 'Write in Mira\'s own voice from the start' in msgs[-1]["content"] and "nyeh heh" in msgs[-1]["content"]
+    assert words_bucket(94) == 120 and words_bucket(20) == 25
+
+
+def test_example_dialogue_outlasts_long_pins():
+    from localcai.runtime.prompt import build_messages
+    ex = "\n".join(f"<START>\n{{{{user}}}}: hi {i}\n{{{{char}}}}: *waves* \"Hello {i}~\" " + "word " * 60 for i in range(8))
+    card = {"data": {"name": "Mira", "mes_example": ex}}
+    pins = [f"Mira: *pin {i}* " + "long pinned text. " * 60 for i in range(17)]
+    system = build_messages(card, [{"role": "user", "content": "hi"}], "Sam", max_chars=16000, memories=pins)[0]["content"]
+    shown = system.split("[Example dialogue — style reference only]\n", 1)[1]
+    assert shown.count("<START>") >= 3            # whole exchanges kept…
+    assert "pin 16" in system                     # …while the pins were shortened instead

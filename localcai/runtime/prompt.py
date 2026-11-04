@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 
 from ..facts import facts_block, is_memory_entry
+from .voice import reminder as voice_reminder, rules as voice_rules
 
 
 def _fill(text: str, char: str, user: str) -> str:
@@ -46,13 +47,28 @@ def _shorten(text: str, n: int, keep_end: bool = False) -> str:
     return cut[:end].rstrip() + " …"
 
 
+def _shorten_examples(ex: str, n: int) -> str:
+    """Keep whole example exchanges (<START> blocks) that fit in n characters; at least one, shortened."""
+    if len(ex) <= n:
+        return ex
+    if n <= 0:
+        return ""
+    blocks = [b for b in re.split(r"(?=<START>)", ex) if b.strip()]
+    out = ""
+    for b in blocks:
+        if len(out) + len(b) > n:
+            break
+        out += b
+    return out.strip() or _shorten(blocks[0] if blocks else ex, n)
+
+
 def build_messages(card: dict, history: list[dict], user_name: str = "User",
                    max_chars: int = 24000, persona: str = "", memories: list[str] | None = None,
                    story: str = "", recalled: list[str] | None = None,
                    reply_words: int = 0, pacing: bool = True, user_pronouns: str = "",
                    initiative: str = "auto", instruction: str = "", rewrite_of: str = "",
                    avoid: list[str] | None = None, scene: str = "",
-                   facts: list[dict] | None = None) -> list[dict]:
+                   facts: list[dict] | None = None, voice: dict | None = None) -> list[dict]:
     """history: [{"role": "user"|"assistant", "content": str}, ...]
 
     Built to be prompt-cache friendly: everything that stays the same from turn to turn
@@ -73,6 +89,10 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
     if persona:
         # C.ai "persona": who the user says they are in this story
         parts.append(f"[About {user_name}]\n{persona}")
+    vr = voice_rules(voice or {}, char, user_name)
+    if vr:
+        parts.append(f"[How {char} writes — counted from {voice['n']} of {char}'s real replies; follow these exactly]\n"
+                     + "\n".join(f"- {x}" for x in vr))
     book = d.get("character_book") or {}
     lore = [e["content"] for e in sorted(book.get("entries", []), key=lambda e: e.get("insertion_order", 0))
             if e.get("enabled", True) and e.get("constant")
@@ -119,11 +139,12 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
     # The card, the facts and the guidance are never cut.
     limit = int(max_chars * FIXED_SHARE)
     system = assemble(lore, pins, story, example)
-    steps = [lambda l, p, st, ex: (l, p, st, _shorten(ex, 1200)),
-             lambda l, p, st, ex: (l, [_shorten(x, 400) for x in p], st, ex),
+    # The example dialogue is the best guide to the character's voice, so it keeps ~2000 characters
+    # until everything else has given way.
+    steps = [lambda l, p, st, ex: (l, [_shorten(x, 400) for x in p], st, ex),
              lambda l, p, st, ex: (l, p, _shorten(st, 1500, keep_end=True), ex),
-             lambda l, p, st, ex: (l, p, st, ""),
              lambda l, p, st, ex: (l, [_shorten(x, 200) for x in p], st, ex),
+             lambda l, p, st, ex: (l, p, st, _shorten_examples(ex, 2000)),
              lambda l, p, st, ex: ([_shorten(x, 200) for x in l], p, st, ex)]
     state = (lore, pins, story, example)
     for step in steps:
@@ -133,6 +154,11 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         system = assemble(*state)
     while len(system) > limit and state[1]:  # still too long: keep the newest pins
         state = (state[0], state[1][1:], state[2], state[3])
+        system = assemble(*state)
+    for n in (1200, 0):                      # last resort: the example dialogue
+        if len(system) <= limit:
+            break
+        state = (state[0], state[1], state[2], _shorten_examples(state[3], n))
         system = assemble(*state)
 
     # per-turn context: keyword-triggered memories + recalled earlier moments
@@ -145,7 +171,7 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         extra.append("[Relevant memories]\n" + "\n".join(f"- {x}" for x in triggered))
     if scene and history and history[-1]["role"] == "user":
         # what is true right now (built from the last few rounds): ongoing actions an older reply started
-        extra.append(f"Scene right now: {scene.strip()}\nKeep all of this true (positions, what each is doing, "
+        extra.append(f"Scene right now: {scene.strip()}\nKeep all of this true (positions, what each is doing and with what, "
                      f"clothing) unless this turn changes it; carry ongoing actions on, don't drop or restart them. "
                      f"Mood moves with the story: keep {char}'s current mood and intensity unless what just happened "
                      f"gives a reason to change it; a real reason (a surprise, a hurtful word, a climax, a sudden "
@@ -187,6 +213,10 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         extra.append(d_note)
     if recalled:
         extra.append("[Earlier moments that may be relevant now]\n" + "\n".join(f"- {x}" for x in recalled))
+    if history and history[-1]["role"] == "user" and voice:
+        r = voice_reminder(voice, char, user_name)
+        if r:
+            extra.append(r)
     if extra:
         extra.append(f"(Direction for you only: follow it silently. Write just {char}'s reply, never mention, "
                      f"list or check off these notes, and add no notes or commentary after the reply.)")
@@ -379,7 +409,8 @@ Let the moment decide the balance between action and speech:
 - intimate, tender or sleepy moments (cuddling, kissing, holding each other, lying in bed): mostly slow, gentle actions and touch, with at most one or two short whispered lines — closeness is shown, not talked about;
 - talking, teasing, arguing or explaining: mostly dialogue, with small gestures;
 - fast or physical moments (fighting, running, a battle, cooking): short action beats and short lines.
-Don't attach a line of speech to every gesture, and don't alternate action, line, action, line. Several actions can flow together in one paragraph; {char} can act without speaking, or speak without a gesture. Write in normal paragraphs, not one-line poem stacks. Never write {user}'s actions or words."""
+Don't attach a line of speech to every gesture, and don't alternate action, line, action, line. Several actions can flow together in one paragraph; {char} can act without speaking, or speak without a gesture. Write in normal paragraphs, not one-line poem stacks. Never write {user}'s actions or words.
+Keep track of who is doing what to whom: whose hands, mouth and body are where. Don't swap it, don't move the scene a step further than {user} took it (if {user} is kissing or touching, they haven't done more), and don't jump back to something that has already ended."""
 
 
 _MOMENTS = (
@@ -427,6 +458,11 @@ def card_reply_samples(d: dict) -> list[str]:
         if m and m.group(1).strip():
             out.append(m.group(1).strip())
     return out
+
+
+def words_bucket(median: int) -> int:
+    """A typical reply length (words) as one of a few fixed targets, so the prompt stays the same turn to turn."""
+    return min(_BUCKETS, key=lambda b: abs(b - median * 1.15))
 
 
 def reply_words_for(setting: str, history: list[dict], card: dict | None = None) -> int:

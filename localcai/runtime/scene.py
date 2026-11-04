@@ -31,7 +31,8 @@ The latest part of the role-play:
 >>>
 
 Write ONE line (at most 55 words) saying what is true right now, at the very end of the text:
-where they are; {char}'s position and what {char} is doing; {user}'s position and what {user} is doing; \
+where they are; {char}'s position and what {char} is doing (with hands and mouth); {user}'s position and what \
+{user} is doing (with hands and mouth); \
 anything still going on (holding, sitting on, lying with...); clothing only if the text changed it; \
 {char}'s mood and how intense the moment is right now (e.g. calm, playful, nervous, angry, heated, near the edge; \
 right after a climax, a scare or crying say so, e.g. "afterglow, still catching breath").

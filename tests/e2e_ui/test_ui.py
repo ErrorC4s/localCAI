@@ -290,6 +290,10 @@ def main(shot=None):
             page.select_option("#char-pronouns", "she/her")
             expect(page.locator("#char-reply-length")).to_have_value("auto")
             page.select_option("#char-reply-length", "short")   # reply length belongs to the character
+            # meanwhile something else (e.g. Learn style finishing) changes the card: saving must not undo it
+            cp = Path(home) / "library" / "characters" / "Luna.card.json"
+            cj = json.loads(cp.read_text("utf-8")); cj["data"]["scenario"] = "Written meanwhile."
+            cp.write_text(json.dumps(cj), "utf-8")
             page.click("#char-save")
             expect(page.locator(".toast", has_text="Character saved")).to_have_count(1)
             expect(page.locator("#head-sub")).to_contain_text("she/her")
@@ -302,6 +306,7 @@ def main(shot=None):
             assert page.locator("#set-reply-length").count() == 0, "no longer a global setting"
             card = json.loads((Path(home) / "library" / "characters" / "Luna.card.json").read_text("utf-8"))
             assert card["data"]["description"].endswith("Loves riddles.")
+            assert card["data"]["scenario"] == "Written meanwhile.", "Edit only saves the fields changed in it"
             # 🔍 learn style from history → personality + example dialogue written into the card
             page.click("#learn-style")   # confirm() accepted by the dialog handler
             expect(page.locator(".toast", has_text="Learned Luna's style")).to_have_count(1, timeout=20000)

@@ -1,4 +1,12 @@
-## localCAI v0.8.47
+## localCAI v0.8.48
+
+- **Sounds more like the character from C.ai.** localCAI now counts the character's writing habits from their real C.ai replies in the chat (not the ones written in localCAI): how speech is marked (quotes, bold quotes), bold emphasis, their own laugh, what they call you (and the pet names they never use), stutters, trailing … and —, asides, and stock phrases they never write ("sly grin", "the dim light"…). These go to the model as exact rules, with a one-line reminder on every turn, so the model doesn't drift into its own habits as its replies fill the recent chat.
+- Reply length "like their past replies" now follows the character's real C.ai replies, so replies don't grow longer and longer.
+- When the context is small, long pinned messages are shortened before the example dialogue, which is the best guide to the character's voice; whole example exchanges are kept.
+- Keeps better track of who is doing what to whom (whose hands and mouth are where), and doesn't move the scene further than you took it.
+- Fixed: saving in Edit could put back old text in fields you didn't touch, e.g. undo style notes that Learn style had just written. Edit now only saves the fields you changed.
+
+### Earlier in localCAI v0.8.47
 
 - Learn style shows its progress while the model writes (word count), instead of a bar that stopped at a fifth and then vanished, so it no longer looks like it failed halfway.
 - When it's done, a window shows the style notes it wrote, where they were saved (the character's Personality) and how many example exchanges it picked, with a button to open Edit.
