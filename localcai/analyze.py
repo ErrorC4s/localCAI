@@ -17,9 +17,15 @@ AUTO_MARK = "localcai_auto"  # extensions key recording which card fields were a
 
 
 def complete(url: str, model: str, prompt: str, system: str = "", max_tokens: int = 700,
-             temperature: float = 0.4) -> str:
+             temperature: float = 0.4, on_text: Callable[[str], None] | None = None) -> str:
+    """The model's whole answer. on_text gets the text so far as it's written (for progress)."""
     msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
-    return "".join(stream_chat(url, model, msgs, temperature=temperature, max_tokens=max_tokens)).strip()
+    out = []
+    for tok in stream_chat(url, model, msgs, temperature=temperature, max_tokens=max_tokens):
+        out.append(tok)
+        if on_text:
+            on_text("".join(out))
+    return "".join(out).strip()
 
 
 def _clean(text: str) -> str:

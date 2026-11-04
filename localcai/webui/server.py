@@ -505,8 +505,15 @@ def make_handler(app: App, port: int):
                     url, model = model_url(), settings()["model"]
                     ask = lambda prompt, sys_="": analyze.complete(url, model, prompt, sys_)
                     if kind == "style":
-                        JOB.update(message="Reading her replies…", progress=0.2)
-                        notes = analyze.style_notes(rows, char, user, lambda p: ask(p, analyze.STYLE_SYSTEM))
+                        JOB.update(message=f"Reading {char}'s replies…", progress=0.1)
+
+                        def writing(text: str) -> None:
+                            # one long answer: show it being written instead of a bar that sits still
+                            words = len(text.split())
+                            JOB.update(progress=0.15 + 0.75 * min(1.0, words / 260),
+                                       message=f"Writing style notes… {words} words")
+                        notes = analyze.style_notes(rows, char, user, lambda p: analyze.complete(
+                            url, model, p, analyze.STYLE_SYSTEM, on_text=writing))
                         JOB.update(message="Picking example dialogues…", progress=0.9)
                         examples = analyze.pick_examples(rows, user, char)
                         auto = d.setdefault("extensions", {}).setdefault(analyze.AUTO_MARK, {})
@@ -524,7 +531,9 @@ def make_handler(app: App, port: int):
                             if pp.exists():
                                 from ..exporters import embed_card_in_png
                                 pp.write_bytes(embed_card_in_png(pp.read_bytes(), card))
-                        JOB.update(message="Learned her style.", progress=1.0)
+                        JOB.update(message=f"Learned {char}'s style.", progress=1.0, notes=notes,
+                                   examples=examples.count("<START>") if examples and auto.get("mes_example") else 0,
+                                   added=not auto.get("personality"))
                     else:
                         part = rows[-scope:] if scope else rows
                         def prog(done, total):

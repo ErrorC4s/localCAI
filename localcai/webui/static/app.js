@@ -703,9 +703,26 @@ $("learn-style").onclick = async () => {
   try {
     await api("/api/analyze/style", { json: { character: S.character, chat: S.chat } });
     refreshEngine();
-    watchJob(async () => { await loadState(); await openCharacter(S.character, S.chat); });
+    watchJob(async (j) => {
+      await loadState(); await openCharacter(S.character, S.chat);
+      if (!j.error && j.notes) showStyle(j);
+    });
   } catch (e) { toast(e.message, "error"); }
 };
+// What Learn style wrote, so it's clear it worked and what the character will now be told
+function showStyle(j) {
+  const name = charInfo(S.character).name;
+  $("style-title").textContent = `Learned ${name}'s style`;
+  $("style-where").textContent = j.added
+    ? `Added to the end of ${name}'s Personality (your own text there is kept). It's sent with every reply.`
+    : `Saved as ${name}'s Personality (replacing the notes from the last time). It's sent with every reply.`;
+  $("style-notes").textContent = j.notes;
+  $("style-examples").textContent = j.examples
+    ? `Also picked ${j.examples} example exchanges from your chat as the Example dialogue.` : "";
+  $("style-dialog").showModal();
+}
+$("style-close").onclick = () => $("style-dialog").close();
+$("style-edit").onclick = () => { $("style-dialog").close(); $("edit-char").click(); };
 
 async function openMemory() {
   const r = await api(`/api/chat?character=${enc(S.character)}&chat=${enc(S.chat)}`);

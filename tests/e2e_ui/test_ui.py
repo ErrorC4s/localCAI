@@ -304,7 +304,10 @@ def main(shot=None):
             assert card["data"]["description"].endswith("Loves riddles.")
             # 🔍 learn style from history → personality + example dialogue written into the card
             page.click("#learn-style")   # confirm() accepted by the dialog handler
-            expect(page.locator(".toast", has_text="Learned her style")).to_have_count(1, timeout=20000)
+            expect(page.locator(".toast", has_text="Learned Luna's style")).to_have_count(1, timeout=20000)
+            expect(page.locator("#style-dialog")).to_be_visible()          # shows what was learned
+            expect(page.locator("#style-notes")).to_contain_text("Darjeeling")
+            page.click("#style-close")
             card = json.loads((Path(home) / "library" / "characters" / "Luna.card.json").read_text("utf-8"))
             assert "Darjeeling" in card["data"]["personality"], "style notes saved"
             assert "Hello~" in card["data"]["mes_example"], "a creator's own example dialogue is never overwritten"

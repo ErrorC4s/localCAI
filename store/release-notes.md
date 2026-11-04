@@ -1,4 +1,9 @@
-## localCAI v0.8.46
+## localCAI v0.8.47
+
+- Learn style shows its progress while the model writes (word count), instead of a bar that stopped at a fifth and then vanished, so it no longer looks like it failed halfway.
+- When it's done, a window shows the style notes it wrote, where they were saved (the character's Personality) and how many example exchanges it picked, with a button to open Edit.
+
+### Earlier in localCAI v0.8.46
 
 - Reply length is now set per character, in **Edit** (like her past replies, short, medium, long, or no target), instead of one setting for everyone in Settings. A character keeps the setting you had before until you change it. The hard limit per reply (tokens) stays in Settings: it's what the model and its context can handle, the same for every character.
 
