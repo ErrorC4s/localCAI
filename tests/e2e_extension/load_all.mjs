@@ -184,9 +184,73 @@ async function clearThenScroll() {
   console.log(`clear, scroll, load: ${s.job.message} (after scrolling only ${scrolled}); ids t0..t99 in order`);
 }
 
+// Clear, scroll up so the page asks for the OLDEST page, then Load full history while that answer is still
+// on its way: the oldest page (the start of the chat) arrives before the extension's newest page. The
+// extension's own run must still walk every page in between (it used to stop at "first message" with a gap).
+async function interleaved() {
+  const ctx = await chromium.launchPersistentContext(mkdtempSync(path.join(tmpdir(), "lcai-")), {
+    headless: true, channel: "chromium", args: [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`] });
+  await ctx.route("https://character.ai/**", (r) => r.fulfill({ status: 200, contentType: "text/html", body: HTML }));
+  let pageAskedOldest = false, pageAsked = new Set();
+  await ctx.route("https://neo.character.ai/turns/**", async (r) => {
+    const req = r.request();
+    const tok = new URL(req.url()).searchParams.get("next_token");
+    const headers = { "Access-Control-Allow-Origin": "https://character.ai", "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": "x-from-page" };
+    if (req.method() === "OPTIONS") return r.fulfill({ status: 204, headers });
+    const fromPage = !!req.headers()["x-from-page"];
+    if (fromPage) pageAsked.add(tok);
+    const last = "p" + (PAGES - 1);
+    if (fromPage && tok === last) { pageAskedOldest = true; await new Promise((ok) => setTimeout(ok, 1200)); }
+    if (!fromPage && !tok) await new Promise((ok) => setTimeout(ok, 2500));   // the extension's newest page: later
+    r.fulfill({ status: 200, contentType: "application/json", headers, body: JSON.stringify(page(tok ? +tok.slice(1) : 0)) });
+  });
+  const tab = await ctx.newPage();
+  await tab.goto("https://character.ai/chat/x");
+  await tab.waitForTimeout(800);
+  const popup = await ctx.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup/popup.html`);
+  const ask = (type) => popup.evaluate(async (type) => {
+    const [t] = await chrome.tabs.query({ url: "https://character.ai/*" });
+    return chrome.tabs.sendMessage(t.id, { type });
+  }, type);
+  const scrollUp = () => tab.evaluate(() => { const l = document.getElementById("list"); l.scrollTop = -l.scrollHeight;
+    l.dispatchEvent(new Event("scroll")); });
+  // before Clear the page has already shown every page but the oldest (they're cleared, so the middle
+  // pages are only in what the extension itself fetches again)
+  for (let i = 0; i < 20 && !pageAsked.has("p" + (PAGES - 2)); i++) { await scrollUp(); await tab.waitForTimeout(250); }
+  await tab.waitForTimeout(300);
+  await ask("clear");
+  for (let i = 0; i < 20 && !pageAskedOldest; i++) {
+    await tab.evaluate(() => { const l = document.getElementById("list"); l.scrollTop = -l.scrollHeight;
+      l.dispatchEvent(new Event("scroll")); });
+    await tab.waitForTimeout(250);
+  }
+  if (!pageAskedOldest) fail("test setup: the page never asked for the oldest page");
+  await ask("loadAll");                                // the oldest page's answer is still on its way
+  const check = async (label) => {
+    let s;
+    for (let i = 0; i < 60; i++) { await tab.waitForTimeout(500); s = await ask("stats"); if (s.job.done && !s.job.running) break; }
+    const doc = (await ask("export")).doc;
+    const ids = ((doc.chats || [])[0]?.turns || []).map((t) => t.id);
+    const want = Array.from({ length: PAGES * PER }, (_, i) => "t" + i);
+    return { s, ok: JSON.stringify(ids) === JSON.stringify(want), ids };
+  };
+  const a = await check("first");
+  if (!a.ok) {
+    const b = await (async () => { await ask("loadAll"); return check("again"); })();  // pressing again must fill it
+    await ctx.close();
+    fail(`interleaved pages left a gap: ${a.ids.length} ids (${a.s.job.message}); `
+         + `pressing again: ${b.ids.length} ids (${b.s.job.message})`);
+  }
+  await ctx.close();
+  console.log(`interleaved oldest/newest pages: ${a.s.job.message}; ids t0..t99 in order`);
+}
+
 const fail = (m) => { console.error("FAIL:", m); process.exit(1); };
 await run(true);
 await run(false);
 await race();
 await clearThenScroll();
+await interleaved();
 console.log("LOAD-ALL PASS");

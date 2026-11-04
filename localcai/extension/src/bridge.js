@@ -6,13 +6,18 @@
   // History paging: C.ai's turns endpoint returns meta.next_token while older messages exist.
   // chatId/nextToken: where the oldest page we've seen says older messages continue.
   const paging = { lastPageAt: 0, reachedStart: false, chatId: null, nextToken: null, cleared: false,
-                   clearedAt: 0, round: 0, needNewest: false };
+                   clearedAt: 0, round: 0, needNewest: false, complete: false, resume: null };
+  // reachedStart/nextToken follow the pages the C.ai page itself loads. "complete" means the collection holds
+  // every page from the newest to the first without a gap: set only by an unbroken run. A page the C.ai page
+  // loads on its own is merged in, but never ends or steers a Load full history run (which keeps its own
+  // place in "resume"): after Clear those pages can be far apart, and one reaching the start says nothing
+  // about the pages in between.
   // needNewest: after Clear the chat's newest page is gone from the collection, and the page never asks for it
   // again (scrolling up only loads older pages). Only our own fetch of the newest page clears this, so
   // Load full history always starts from the newest page after a Clear.
 
   const seenTurns = new Set();
-  function record(kind, url, t, data, t0) {
+  function record(kind, url, t, data, t0, own = false) {
     // an answer to a request sent before Clear belongs to the old collection: never mix it in
     // (it would move the paging past the newest page and lose it)
     if (t0 && t0 < paging.clearedAt) return;
@@ -24,10 +29,14 @@
       paging.lastPageAt = Date.now();
       if (data.turns.length) paging.cleared = false;
       if (paging.chatId !== m[1]) {
-        Object.assign(paging, { chatId: m[1], reachedStart: false, nextToken: null });
+        Object.assign(paging, { chatId: m[1], reachedStart: false, nextToken: null, complete: false, resume: null });
       }
-      if (!data.turns.length || !data.meta || !data.meta.next_token) paging.reachedStart = true;
-      else paging.nextToken = data.meta.next_token; // pages arrive newest → oldest
+      if (own) return;  // a Load full history run tracks its own place
+      if (!data.turns.length || !data.meta || !data.meta.next_token) {
+        paging.reachedStart = true;
+        // the page's own loading runs newest → oldest without gaps, unless Clear removed pages in between
+        if (!paging.needNewest) paging.complete = true;
+      } else paging.nextToken = data.meta.next_token; // pages arrive newest → oldest
     }
   }
 
@@ -77,15 +86,12 @@
     Object.assign(job, { running: true, done: false, stopped: false, message: "Looking for the chat…" });
     try {
       job.turns = turnCount();
-      if (paging.needNewest) {
-        // cleared (and maybe scrolled up since): start over from the newest page, so the export is complete
-        // and collected in one continuous run (pages already seen just merge)
-        Object.assign(paging, { reachedStart: false, nextToken: null, cleared: true });
+      if (paging.complete && !paging.needNewest) {
+        job.message = `Already at the first message. ${job.turns} messages loaded.`; return;
       }
-      if (paging.reachedStart) { job.message = `Already at the first message. ${job.turns} messages loaded.`; return; }
       if (await fastLoad()) return;         // direct page-by-page history requests
       if (job.stopped) return;
-      if (paging.cleared) {                 // nothing left to scroll to: the page has to fetch it again
+      if (paging.cleared || paging.needNewest) {               // nothing left to scroll to: the page has to fetch it again
         job.message = "Cleared. Reload this C.ai page, then press Load full history again.";
         return;
       }
@@ -117,16 +123,24 @@
   // its own web app makes when you scroll up. The browser attaches your session cookie by itself;
   // the extension never reads or handles any login data. Returns false to fall back to scrolling.
   async function fastLoad() {
-    // after Clear there is no next_token: start again from the newest page of the same chat
-    if (!paging.chatId || (!paging.nextToken && !paging.cleared)) return false;
-    let retries = 0;
+    if (!paging.chatId) return false;
+    // Where this run starts: after Clear always the newest page (cleared pages aren't loaded by the page again);
+    // else where a stopped run left off; else just below the oldest page the C.ai page loaded (unbroken
+    // since it opened, so nothing is skipped).
     const round = paging.round;   // Clear starts a new round; this loop's late answers are then dropped
-    while (!job.stopped && !paging.reachedStart && round === paging.round) {
-      const url = `https://neo.character.ai/turns/${encodeURIComponent(paging.chatId)}/`;
+    let cursor;
+    if (paging.needNewest || paging.cleared) cursor = null;
+    else if (paging.resume && paging.resume.round === round && paging.resume.chatId === paging.chatId) cursor = paging.resume.token;
+    else if (paging.nextToken) cursor = paging.nextToken;
+    else return false;
+    const chatId = paging.chatId;
+    let retries = 0, atStart = false;
+    while (!job.stopped && round === paging.round && chatId === paging.chatId) {
+      const url = `https://neo.character.ai/turns/${encodeURIComponent(chatId)}/`;
       const t0 = Date.now();
       let res;
       try {
-        res = await fetch(paging.nextToken ? `${url}?next_token=${encodeURIComponent(paging.nextToken)}` : url,
+        res = await fetch(cursor ? `${url}?next_token=${encodeURIComponent(cursor)}` : url,
                           { credentials: "include" });
       } catch { return false; }
       if (res.status === 429 || res.status >= 500) {          // busy: back off, then fall back
@@ -141,15 +155,21 @@
       if (!Array.isArray(data?.turns)) return false;
       if (round !== paging.round) break;   // cleared while this page was on its way
       retries = 0;
-      const wasNewest = !paging.nextToken;
-      record("http", url, Date.now(), data, t0);
-      if (wasNewest) paging.needNewest = false;
+      record("http", url, Date.now(), data, t0, true);
+      if (!cursor) Object.assign(paging, { needNewest: false, cleared: false });
       job.turns = turnCount();
+      if (!data.turns.length || !data.meta || !data.meta.next_token) {
+        atStart = true;
+        Object.assign(paging, { reachedStart: true, complete: true, resume: null });
+        break;
+      }
+      cursor = data.meta.next_token;
+      paging.resume = { round, chatId, token: cursor };   // Stop, then Load again: carry on from here
       job.message = `Loading older messages… ${job.turns}`;
       await sleep(200 + Math.random() * 200);
     }
-    job.message = job.stopped ? `Stopped. ${job.turns} messages loaded.`
-      : `Reached the first message. ${job.turns} messages loaded.`;
+    job.message = atStart ? `Reached the first message. ${job.turns} messages loaded.`
+      : `Stopped. ${job.turns} messages loaded.`;
     return true;
   }
 
@@ -173,7 +193,8 @@
       seenTurns.clear();
       // forget how far back we got too, or "Load full history" would think it's already done
       Object.assign(paging, { reachedStart: false, nextToken: null, cleared: true, lastPageAt: 0,
-                              clearedAt: Date.now(), round: paging.round + 1, needNewest: true });
+                              clearedAt: Date.now(), round: paging.round + 1, needNewest: true,
+                              complete: false, resume: null });
       if (job.running) job.stopped = true;   // a load in progress ends; its late answers are ignored
       else Object.assign(job, { done: false, stopped: false, turns: 0, message: "" });
       reply({ ok: true });

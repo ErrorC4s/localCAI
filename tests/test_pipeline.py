@@ -994,3 +994,100 @@ def test_find_new_reads_the_recent_chat():
     got = facts.find_new(ask, hist, "Mira", "Sam", [facts.make("Mira", "age", "19")])
     assert got[0]["value"] == "a dog called Rex" and got[0]["source"] == "auto"
     assert "Mira: age: 19" in seen["p"] and "My dog Rex" in seen["p"]
+
+
+def test_old_card_facts_keep_their_ids_so_edit_and_delete_work():
+    from localcai import facts
+    card = {"data": {"name": "Mira", "character_book": {"entries": [
+        {"content": "Mira — hair: long silver", "constant": True, "extensions": {"localcai": {"from_memory": True}}},
+        {"content": "Sam — age: 24", "constant": True, "extensions": {"localcai": {"from_memory": True}}}]}}}
+    shown = facts.chat_facts({}, card)  # what the dialog got
+    assert [f["id"] for f in shown] == [f["id"] for f in facts.chat_facts({}, card)]  # read again: same ids
+    meta = {}
+    got = facts.apply_to_chat(meta, card, "edit", {"id": shown[0]["id"], "value": "short black"})
+    assert got[0]["value"] == "short black" and got[0]["edited"]
+    meta2 = {}
+    got = facts.apply_to_chat(meta2, card, "delete", {"id": shown[1]["id"]})
+    assert [f["value"] for f in got] == ["long silver"]
+
+
+def _reimport(old_meta, imported):
+    from localcai import facts
+    cm = old_meta["chat_metadata"]
+    return facts.merge_import(cm[facts.KEY], facts.from_cai(imported), cm.get(facts.REMOVED))
+
+
+def test_reimport_respects_edits_deletions_and_asks_on_real_conflicts():
+    from localcai import facts
+    cai = [{"about": "Alex", "category": "hometown", "value": "Lisbon"},
+           {"about": "Luna", "category": "likes", "value": "Earl Grey tea"},
+           {"about": "Luna", "category": "eyes", "value": "green"}]
+    meta = {"chat_metadata": {facts.KEY: facts.from_cai(cai)}}
+    card = {"data": {"name": "Luna"}}
+    ids = {f["value"]: f["id"] for f in facts.chat_facts(meta, card)}
+    facts.apply_to_chat(meta, card, "edit", {"id": ids["Lisbon"], "value": "Porto"})
+    facts.apply_to_chat(meta, card, "delete", {"id": ids["Earl Grey tea"]})
+    # the same C.ai data again: Porto stays alone, the deleted fact stays deleted
+    out = _reimport(meta, cai)
+    assert sorted(f["value"] for f in out) == ["Porto", "green"]
+    # C.ai changed both remaining facts: the untouched one follows, the edited one asks
+    out = _reimport({"chat_metadata": {facts.KEY: out}}, [
+        {"about": "Alex", "category": "hometown", "value": "Madrid"},
+        {"about": "Luna", "category": "eyes", "value": "amber"}])
+    by = {f["category"]: f for f in out}
+    assert by["eyes"]["value"] == "amber" and "pending" not in by["eyes"]
+    assert by["hometown"]["value"] == "Porto" and by["hometown"]["pending"] == "Madrid"
+    msgs = build_messages(card, [{"role": "user", "content": "hi"}], "Alex", facts=out)
+    assert "Porto" in msgs[0]["content"] and "Madrid" not in msgs[0]["content"]  # only the chosen value is sent
+    took = facts.apply(out, "use-cai", {"id": by["hometown"]["id"]})
+    h = next(f for f in took if f["category"] == "hometown")
+    assert h["value"] == "Madrid" and "pending" not in h and not h["edited"]
+    kept = facts.apply(out, "keep-mine", {"id": by["hometown"]["id"]})
+    h = next(f for f in kept if f["category"] == "hometown")
+    assert h["value"] == "Porto" and "pending" not in h
+    # …and importing Madrid again after keeping Porto doesn't ask again
+    again = _reimport({"chat_metadata": {facts.KEY: kept}}, [{"about": "Alex", "category": "hometown", "value": "Madrid"}])
+    assert [f.get("pending") for f in again if f["category"] == "hometown"] == [None]
+
+
+def test_reimport_after_an_edit_made_before_origins_were_kept():
+    from localcai import facts
+    old = [{"id": "a1", "about": "Alex", "category": "hometown", "value": "Porto", "source": "cai", "edited": True}]
+    out = facts.merge_import(old, facts.from_cai([{"about": "Alex", "category": "hometown", "value": "Lisbon"}]))
+    assert [f["value"] for f in out] == ["Porto"]
+
+
+def test_api_edit_and_delete_old_card_facts(tmp_path, monkeypatch):
+    """A chat imported before facts existed: its memory is only on the card. Open, then edit and delete."""
+    import threading
+    import urllib.request
+    from localcai import chatlog, desktop
+    from localcai.webui.server import create_server
+    monkeypatch.setenv("LOCALCAI_HOME", str(tmp_path))
+    lib = tmp_path / "lib"
+    port = desktop._free_port()
+    httpd = create_server(port, lib)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        (lib / "characters" / "Mira.card.json").write_text(json.dumps({"spec": "chara_card_v2", "data": {
+            "name": "Mira", "character_book": {"entries": [
+                {"content": "Mira — hair: long silver", "constant": True, "extensions": {"localcai": {"from_memory": True}}},
+                {"content": "Sam — age: 24", "constant": True, "extensions": {"localcai": {"from_memory": True}}}]}}}), "utf-8")
+        chatlog.save(lib / "chats" / "Mira.c1.jsonl", {"user_name": "Sam", "character_name": "Mira"},
+                     [chatlog.row("Mira", False, "Hi")])
+
+        def call(path, body=None):
+            req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers={
+                "X-LocalCAI": "1", "Content-Type": "application/json"},
+                data=json.dumps(body).encode() if body is not None else None)
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.loads(r.read())
+        shown = call("/api/facts?character=Mira&chat=Mira.c1.jsonl")["facts"]
+        base = {"character": "Mira", "chat": "Mira.c1.jsonl"}
+        out = call("/api/facts", {**base, "op": "edit", "id": shown[0]["id"], "value": "short black"})
+        assert out["facts"][0]["value"] == "short black"
+        out = call("/api/facts", {**base, "op": "delete", "id": shown[1]["id"]})
+        assert [f["value"] for f in out["facts"]] == ["short black"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()

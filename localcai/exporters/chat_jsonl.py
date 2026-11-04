@@ -59,7 +59,8 @@ def write_chat(chat: Chat, out_dir: Path, index: int = 0) -> Path:
         old_cm = old_meta.get("chat_metadata") or {}
         new_cm = lines[0]["chat_metadata"]
         if facts.KEY in old_cm:
-            new_cm[facts.KEY] = facts.merge_import(old_cm[facts.KEY], new_cm.get(facts.KEY, []))
+            new_cm[facts.KEY] = facts.merge_import(old_cm[facts.KEY], new_cm.get(facts.KEY, []),
+                                                    old_cm.get(facts.REMOVED))
         lines[0]["chat_metadata"] = {**old_cm, **new_cm}
     elif p.exists():
         # can't line the messages up without ids: keep the existing chat (it may have been continued

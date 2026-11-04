@@ -205,8 +205,16 @@ def make_handler(app: App, port: int):
                         return self.send_json({"models": [], "error": f"No model runner found at {url}. Start Ollama / LM Studio / llama.cpp, or pick another backend."})
                 if u.path == "/api/facts":
                     card = app.card(q["character"])
-                    meta, _ = chatlog.load(app.safe_file("chats", q["chat"], ""))
-                    return self.send_json(self.facts_info(factmem.chat_facts(meta, card)))
+                    p = app.safe_file("chats", q["chat"], "")
+                    with app.lock:
+                        meta, rows = chatlog.load(p)
+                        got = factmem.chat_facts(meta, card)
+                        if factmem.KEY not in (meta.get("chat_metadata") or {}):
+                            # an older import (facts only on the card): give the chat its own list now,
+                            # so the ids the dialog uses are the ones that are saved
+                            factmem.set_facts(meta, got)
+                            chatlog.save(p, meta, rows)
+                    return self.send_json(self.facts_info(got))
                 if u.path == "/api/chat":
                     card = app.card(q["character"])
                     meta, rows = chatlog.load(app.safe_file("chats", q["chat"], ""))
@@ -310,8 +318,7 @@ def make_handler(app: App, port: int):
                     p = app.safe_file("chats", body["chat"], "")
                     with app.lock:
                         meta, rows = chatlog.load(p)
-                        new = factmem.apply(factmem.chat_facts(meta, card), str(body.get("op", "")), body)
-                        factmem.set_facts(meta, new)
+                        new = factmem.apply_to_chat(meta, card, str(body.get("op", "")), body)
                         chatlog.save(p, meta, rows)
                     return self.send_json(self.facts_info(new))
                 if path in ("/api/chat/new", "/api/chat/send", "/api/chat/regenerate"):

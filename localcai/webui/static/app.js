@@ -774,9 +774,16 @@ function renderFacts() {
       row.innerHTML = `<div class="val"><span class="cat">${escHtml(f.category || "fact")}`
         + (tagFor[f.source] ? `<span class="tag">${tagFor[f.source]}</span>` : "")
         + (f.edited ? `<span class="tag">edited</span>` : "")
-        + `</span><span class="text">${escHtml(f.value)}</span></div>`
+        + `</span><span class="text">${escHtml(f.value)}</span>`
+        + (f.pending ? `<span class="pending">C.ai now says: <b>${escHtml(f.pending)}</b>`
+          + ` <button class="btn small f-take">Use C.ai's</button> <button class="btn small f-keep">Keep mine</button></span>` : "")
+        + `</div>`
         + `<button title="Edit" class="f-edit">${ic("pencil")}</button><button title="Delete" class="f-del">${ic("trash")}</button>`;
       row.querySelector(".f-del").onclick = () => factOp({ op: "delete", id: f.id });
+      if (f.pending) {
+        row.querySelector(".f-take").onclick = () => factOp({ op: "use-cai", id: f.id });
+        row.querySelector(".f-keep").onclick = () => factOp({ op: "keep-mine", id: f.id });
+      }
       row.querySelector(".f-edit").onclick = () => {
         const v = row.querySelector(".val");
         v.innerHTML = `<input class="f-cat" maxlength="40"><input class="f-val" maxlength="200">`;

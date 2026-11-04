@@ -242,3 +242,5 @@ dialog.wide { width: min(620px, 92vw); }
 .fact input { width: 100%; }
 #facts-list { display: flex; flex-direction: column; gap: 8px; max-height: 42vh; overflow-y: auto; }
 .fact-add input { flex: 1; min-width: 90px; }
+.fact .pending { display: block; font-size: 12px; color: #f0c46c; margin-top: 3px; }
+.fact .pending .btn { padding: 1px 8px; font-size: 11px; color: var(--text); border: 1px solid var(--line); }

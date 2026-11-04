@@ -6,15 +6,18 @@ Stored in the chat file's metadata (chat_metadata.localcai_facts) as a list of
 
 Chats imported before facts existed have their C.ai memory only as lorebook entries on the
 character card ("about — category: value"); those are read as the chat's facts until the chat
-gets its own list (the first edit saves it).
+gets its own list (the first look at them in the Memory dialog saves them, with fixed ids).
+Imported C.ai facts keep what C.ai had ("orig") so re-imports respect the user's edits and deletions.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from typing import Callable
 
 KEY = "localcai_facts"
+REMOVED = "localcai_facts_removed"  # C.ai facts the user deleted: a re-import doesn't bring them back
 LIMIT = 3000          # characters of facts sent with every reply (~750 tokens); like C.ai's memory bar
 AUTO_STOP = 0.9       # automatic facts stop being added past this share of the limit
 AUTO_EVERY = 6        # look for new facts every 6 replies
@@ -35,15 +38,32 @@ def make(about: str, category: str, value: str, source: str = "you", edited: boo
             "value": _clean(value, MAX_VALUE), "source": source, "edited": bool(edited)}
 
 
+def orig_key(f: dict) -> str:
+    """Identifies an imported C.ai fact as C.ai had it (who, category, value), whatever it was changed to here."""
+    o = f.get("orig") if isinstance(f.get("orig"), dict) else f
+    return "\x1f".join(_clean(o.get(k), 200).casefold() for k in ("about", "category", "value"))
+
+
+def _stable_id(f: dict, n: int) -> str:
+    # the same fact read twice gets the same id (facts read from the card are not stored with ids)
+    return hashlib.sha1(f"{n}\x1f{orig_key(f)}".encode("utf-8")).hexdigest()[:10]
+
+
 def normalize(facts: object) -> list[dict]:
     out, seen = [], set()
-    for f in facts if isinstance(facts, list) else []:
+    for n, f in enumerate(facts if isinstance(facts, list) else []):
         if not isinstance(f, dict) or not _clean(f.get("value"), MAX_VALUE):
             continue
         g = make(f.get("about", ""), f.get("category", ""), f.get("value", ""),
                  f.get("source") if f.get("source") in ("cai", "you", "auto") else "you", f.get("edited", False))
-        if f.get("id"):
-            g["id"] = _clean(f["id"], 20)
+        g["id"] = _clean(f["id"], 20) if f.get("id") else _stable_id(f, n)
+        if g["source"] == "cai":
+            o = f.get("orig") if isinstance(f.get("orig"), dict) else None
+            if o or not g["edited"]:
+                o = o or g
+                g["orig"] = {k: _clean(o.get(k), MAX_VALUE) for k in ("about", "category", "value")}
+            if _clean(f.get("pending"), MAX_VALUE):
+                g["pending"] = _clean(f["pending"], MAX_VALUE)
         k = _same(g)
         if k in seen:
             continue
@@ -76,6 +96,7 @@ def card_facts(card: dict) -> list[dict]:
         if ((e.get("extensions") or {}).get("localcai") or {}).get("from_memory"):
             f = parse_legacy(e.get("content", ""))
             if f:
+                f.pop("id")  # normalize gives it an id that's the same every time it's read
                 out.append(f)
     return normalize(out)
 
@@ -95,23 +116,39 @@ def set_facts(meta: dict, facts: list[dict]) -> None:
     meta.setdefault("chat_metadata", {})[KEY] = normalize(facts)
 
 
-def merge_import(old: list[dict], new: list[dict]) -> list[dict]:
-    """Re-importing a chat: keep every fact the user has (their own, their edits, deletions of C.ai facts
-    can't be told apart from "not imported yet", so a deleted C.ai fact may come back), update C.ai facts
-    that C.ai changed, add new ones."""
+def merge_import(old: list[dict], new: list[dict], removed: list[str] | None = None) -> list[dict]:
+    """Re-importing a chat. Every imported C.ai fact remembers what C.ai had (orig), so:
+    - a C.ai fact the user edited or deleted here stays edited / deleted;
+    - C.ai changing a fact the user never touched updates it;
+    - C.ai changing a fact the user edited doesn't overwrite theirs: the new C.ai value waits as
+      "pending" (not sent to the model) until they pick one in the Memory dialog;
+    - new C.ai facts are added; the user's own and automatic facts are kept."""
     out = [dict(f) for f in normalize(old)]
-    have = {_same(f) for f in out}
+    gone = set(removed or [])
     for f in normalize(new):
-        if _same(f) in have:
+        k = orig_key(f)
+        if k in gone or any(g.get("orig") and orig_key(g) == k for g in out):
+            continue  # already here (maybe edited) or deleted by the user
+        if any(_same(g) == _same(f) for g in out):
+            for g in out:  # the same fact written by the user or found automatically: now known as C.ai's too
+                if _same(g) == _same(f) and g["source"] != "cai":
+                    g.update(source="cai", orig=dict(f["orig"]))
+                    break
             continue
-        same_slot = [g for g in out if g["source"] == "cai" and not g["edited"] and f["category"]
-                     and g["about"].casefold() == f["about"].casefold()
-                     and g["category"].casefold() == f["category"].casefold()]
-        if same_slot:
-            same_slot[0]["value"] = f["value"]
-        else:
-            out.append(f)
-        have.add(_same(f))
+        slot = [g for g in out if g["source"] == "cai" and f["category"]
+                and g["about"].casefold() == f["about"].casefold()
+                and g["category"].casefold() == f["category"].casefold()]
+        if slot:
+            g = slot[0]
+            if not g["edited"]:
+                g.update(value=f["value"], orig=dict(f["orig"]))
+                g.pop("pending", None)
+            elif not g.get("orig"):
+                g["orig"] = dict(f["orig"])  # edited before origins were kept: this is what it was edited from
+            else:
+                g["pending"], g["orig"] = f["value"], dict(f["orig"])
+            continue
+        out.append(f)
     return out
 
 
@@ -128,8 +165,20 @@ def used(facts: list[dict]) -> int:
     return len(facts_block(facts))
 
 
+def apply_to_chat(meta: dict, card: dict, op: str, body: dict) -> list[dict]:
+    """One change from the Memory dialog, saved into the chat's metadata (the caller saves the file)."""
+    facts = chat_facts(meta, card)
+    f = next((f for f in facts if f["id"] == body.get("id")), None)
+    new = apply(facts, op, body)
+    if op == "delete" and f and f.get("orig"):
+        cm = meta.setdefault("chat_metadata", {})
+        cm[REMOVED] = sorted(set(cm.get(REMOVED) or []) | {orig_key(f)})
+    set_facts(meta, new)
+    return normalize(new)
+
+
 def apply(facts: list[dict], op: str, body: dict) -> list[dict]:
-    """add / edit / delete one fact (from the Memory dialog)."""
+    """add / edit / delete one fact; keep (keep-mine) or take (use-cai) a pending C.ai value."""
     facts = normalize(facts)
     if op == "add":
         f = make(body.get("about", ""), body.get("category", ""), body.get("value", ""), "you")
@@ -143,12 +192,21 @@ def apply(facts: list[dict], op: str, body: dict) -> list[dict]:
         raise ValueError("That fact isn't there any more. Reopen Memory.")
     if op == "delete":
         return facts[:i] + facts[i + 1:]
+    if op in ("keep-mine", "use-cai"):
+        g = dict(facts[i])
+        if op == "use-cai" and g.get("pending"):
+            g.update(value=g["pending"], edited=False)
+        g.pop("pending", None)
+        return facts[:i] + [g] + facts[i + 1:]
     if op == "edit":
         g = make(body.get("about", facts[i]["about"]), body.get("category", facts[i]["category"]),
                  body.get("value", ""), facts[i]["source"], True)
         if not g["value"]:
             raise ValueError("A fact can't be empty. Delete it instead.")
         g["id"] = facts[i]["id"]
+        for k in ("orig", "pending"):
+            if k in facts[i]:
+                g[k] = facts[i][k]
         new = facts[:i] + [g] + facts[i + 1:]
         if used(new) > LIMIT and used(new) > used(facts):
             raise ValueError("Memory is full. Shorten this or delete other facts first.")

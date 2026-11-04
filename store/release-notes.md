@@ -1,4 +1,10 @@
-## localCAI v0.8.39
+## localCAI v0.8.40 · Extractor 0.5.5
+
+- Extractor 0.5.5: Load full history no longer leaves a gap when C.ai's page and the extension are loading pages at the same time (for example: Clear, scroll up, then Load full history while the page is still fetching). Before, the oldest page arriving first could end the load early, missing the messages in between while it said it had reached the first message, and pressing it again didn't fill the gap. Each Load full history run now keeps its own place and is only done when it has walked every page itself.
+- Memory facts from chats imported before v0.8.39 can now be edited and deleted (before, the first edit or delete said the fact "isn't there any more").
+- Re-importing a chat now respects what you did to its C.ai facts: a fact you corrected isn't added back with its old value, and a fact you deleted stays deleted. When C.ai changed a fact you had corrected, the Memory dialog shows "C.ai now says: …" with **Use C.ai's** / **Keep mine**; until you choose, only your version is sent to the model.
+
+### Earlier in v0.8.39
 
 - **Memory facts**, like C.ai's Memory page: in 📖 Chat memory, each chat now has a list of short facts grouped by who they are about (the character, you, anyone else), each with a category (hair, age, pets...). Add, edit or delete any of them; a bar shows how much memory is used. They are sent with every reply.
 - Your C.ai memory is imported into this list (marked "C.ai"), and re-importing a chat keeps the facts you added or edited.
