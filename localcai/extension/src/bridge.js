@@ -6,7 +6,10 @@
   // History paging: C.ai's turns endpoint returns meta.next_token while older messages exist.
   // chatId/nextToken: where the oldest page we've seen says older messages continue.
   const paging = { lastPageAt: 0, reachedStart: false, chatId: null, nextToken: null, cleared: false,
-                   clearedAt: 0, round: 0 };
+                   clearedAt: 0, round: 0, needNewest: false };
+  // needNewest: after Clear the chat's newest page is gone from the collection, and the page never asks for it
+  // again (scrolling up only loads older pages). Only our own fetch of the newest page clears this, so
+  // Load full history always starts from the newest page after a Clear.
 
   const seenTurns = new Set();
   function record(kind, url, t, data, t0) {
@@ -20,7 +23,9 @@
       for (const tn of data.turns) seenTurns.add(tn?.turn_key?.turn_id || JSON.stringify(tn).slice(0, 120));
       paging.lastPageAt = Date.now();
       if (data.turns.length) paging.cleared = false;
-      if (paging.chatId !== m[1]) { paging.chatId = m[1]; paging.reachedStart = false; paging.nextToken = null; }
+      if (paging.chatId !== m[1]) {
+        Object.assign(paging, { chatId: m[1], reachedStart: false, nextToken: null });
+      }
       if (!data.turns.length || !data.meta || !data.meta.next_token) paging.reachedStart = true;
       else paging.nextToken = data.meta.next_token; // pages arrive newest → oldest
     }
@@ -72,6 +77,11 @@
     Object.assign(job, { running: true, done: false, stopped: false, message: "Looking for the chat…" });
     try {
       job.turns = turnCount();
+      if (paging.needNewest) {
+        // cleared (and maybe scrolled up since): start over from the newest page, so the export is complete
+        // and collected in one continuous run (pages already seen just merge)
+        Object.assign(paging, { reachedStart: false, nextToken: null, cleared: true });
+      }
       if (paging.reachedStart) { job.message = `Already at the first message. ${job.turns} messages loaded.`; return; }
       if (await fastLoad()) return;         // direct page-by-page history requests
       if (job.stopped) return;
@@ -131,7 +141,9 @@
       if (!Array.isArray(data?.turns)) return false;
       if (round !== paging.round) break;   // cleared while this page was on its way
       retries = 0;
+      const wasNewest = !paging.nextToken;
       record("http", url, Date.now(), data, t0);
+      if (wasNewest) paging.needNewest = false;
       job.turns = turnCount();
       job.message = `Loading older messages… ${job.turns}`;
       await sleep(200 + Math.random() * 200);
@@ -161,7 +173,7 @@
       seenTurns.clear();
       // forget how far back we got too, or "Load full history" would think it's already done
       Object.assign(paging, { reachedStart: false, nextToken: null, cleared: true, lastPageAt: 0,
-                              clearedAt: Date.now(), round: paging.round + 1 });
+                              clearedAt: Date.now(), round: paging.round + 1, needNewest: true });
       if (job.running) job.stopped = true;   // a load in progress ends; its late answers are ignored
       else Object.assign(job, { done: false, stopped: false, turns: 0, message: "" });
       reply({ ok: true });

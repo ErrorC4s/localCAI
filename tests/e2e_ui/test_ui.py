@@ -214,6 +214,27 @@ def main(shot=None):
             sent = json.load(open(last_path, encoding="utf-8"))
             assert "never heard of video games" in sent["messages"][-1]["content"]
 
+            # editing the chat while a reply is being written: the edit stays, the stale reply isn't saved,
+            # and the message that was sent goes back into the input box
+            n0 = page.locator(".msg").count()
+            page.fill("#input", "slow reply please"); page.click("#send")
+            page.wait_for_timeout(700)
+            chat_file = next(Path(home, "library", "chats").glob("Luna.*.jsonl"))
+            first_bot = next(i for i, l in enumerate(chat_file.read_text("utf-8").splitlines()[1:])
+                             if not json.loads(l)["is_user"])
+            r = page.evaluate("""async ([chat, i]) => (await fetch('/api/chat/edit', {method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-LocalCAI': '1'},
+                body: JSON.stringify({chat, index: i, text: 'Edited while she was thinking.'})})).status""",
+                [chat_file.name, first_bot])
+            assert r == 200, r
+            expect(page.locator(".toast", has_text="reply wasn't saved")).to_have_count(1, timeout=15000)
+            expect(page.locator("#input")).to_have_value("slow reply please")
+            expect(page.locator(".msg")).to_have_count(n0)
+            rows = [json.loads(l) for l in chat_file.read_text("utf-8").splitlines()[1:]]
+            assert rows[first_bot]["mes"] == "Edited while she was thinking.", "the edit survived"
+            assert not any("slow reply please" in r["mes"] for r in rows), "the stale turn wasn't written"
+            page.fill("#input", "")
+
             # ✨ "always do this" → saved as a rule on the character, sent with every reply after
             page.locator(".msg").last.locator(".tool[title^='Tell the character']").click()
             page.fill("#direct-text", "Never writes code.")
@@ -231,7 +252,7 @@ def main(shot=None):
 
             # custom backgrounds: this chat, then every chat with the character, hide the C.ai one
             bg = Path(home) / "bg.png"
-            bg.write_bytes(Path(ROOT / "extension" / "icons" / "icon48.png").read_bytes())
+            bg.write_bytes(Path(ROOT / "localcai" / "extension" / "icons" / "icon48.png").read_bytes())
             layer = lambda: page.eval_on_selector("#bg-layer", "e => e.style.backgroundImage")
             page.click("#open-bg")
             expect(page.locator("#bg-source")).to_have_text("From Character.AI")

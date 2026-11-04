@@ -8,6 +8,7 @@ Without pywebview installed it falls back to opening your browser.
 from __future__ import annotations
 
 import json
+import os
 import socket
 import sys
 import threading
@@ -103,10 +104,14 @@ def main() -> int:
     url = f"http://127.0.0.1:{port}/"
     print(f"localCAI running at {url}")
 
+    headless = os.environ.get("LOCALCAI_NO_WINDOW") == "1"  # automated tests of the packaged exe
     try:
+        if headless:
+            raise ImportError
         import webview  # pywebview
     except ImportError:
-        webbrowser.open(url)
+        if not headless:
+            webbrowser.open(url)
         if httpd is None:
             return 0
         stop = threading.Event()

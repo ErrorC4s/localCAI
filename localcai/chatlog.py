@@ -47,3 +47,17 @@ def add_swipe(row: dict, text: str) -> None:
     swipes = row.get("swipes") or [row.get("mes", "")]
     swipes.append(text)
     row["swipes"], row["swipe_id"], row["mes"] = swipes, len(swipes) - 1, text
+
+
+def _key(r: dict) -> tuple:
+    return (bool(r.get("is_user")), r.get("mes", ""), r.get("swipe_id", 0), tuple(r.get("swipes") or ()))
+
+
+def snapshot(rows: list[dict]) -> list[tuple]:
+    """What the messages say (text, chosen swipe, alternatives). Pins and other marks are left out:
+    toggling a pin while a reply is being written is fine."""
+    return [_key(r) for r in rows]
+
+
+def same_messages(rows: list[dict], snap: list[tuple]) -> bool:
+    return len(rows) == len(snap) and all(_key(r) == k for r, k in zip(rows, snap))

@@ -1,5 +1,5 @@
 """Tiny fake OpenAI-compatible server for UI tests. Records the last request body."""
-import json
+import json, time
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -31,19 +31,23 @@ class H(BaseHTTPRequestHandler):
             verdict = "FIX: She has never heard of video games; react with confusion." \
                 if "ooc test" in msgs[-1]["content"].lower() else "OK"
             return self.sse([verdict], "stop")
+        if "slow reply" in body["messages"][-1]["content"]:   # time to edit the chat while it streams
+            return self.sse(["*thinks* ", "Hmm", "m..."], "stop", delay=1.0)
         ramble = "ramble" in body["messages"][-1]["content"]
         if "never heard of video games" in body["messages"][-1]["content"]:
             return self.sse(["*tilts head* A video... what?"], "stop")
         parts = ["She nods. ", "Then she lea"] if ramble else ["*sips tea* ", "Oolong ", "from **Darjeeling**~"]
         self.sse(parts, "length" if ramble else "stop")
 
-    def sse(self, parts, finish):
+    def sse(self, parts, finish, delay=0.0):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
         for t in parts:
             self.wfile.write(f"data: {json.dumps({'choices': [{'delta': {'content': t}}]})}\n\n".encode())
             self.wfile.flush()
+            if delay:
+                time.sleep(delay)
         fin = {"choices": [{"delta": {}, "finish_reason": finish}]}
         self.wfile.write(f"data: {json.dumps(fin)}\n\n".encode())
         self.wfile.write(b"data: [DONE]\n\n")

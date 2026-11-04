@@ -9,7 +9,6 @@ on:
     branches: [main]
     paths:
       - "localcai/**"
-      - "extension/**"
       - "assets/**"
       - "packaging/**"
       - "tools/package_extension.py"
@@ -50,6 +49,11 @@ jobs:
         run: python tests/e2e_ui/test_ui.py
       - name: Built-in engine end-to-end
         run: python tests/e2e_ui/test_engine.py
+      - name: Clean pip install includes the extension
+        run: |
+          python -m venv /tmp/pipcheck
+          /tmp/pipcheck/bin/pip install -q .
+          cp tests/pip_install_check.py /tmp/ && cd /tmp && /tmp/pipcheck/bin/python pip_install_check.py
       - name: Extension end-to-end
         run: |
           node tests/e2e_extension/e2e.mjs /tmp/e2e.lcai.json
@@ -79,12 +83,15 @@ jobs:
             --icon assets\logo.ico ^
             --add-data "assets\logo.ico;assets" ^
             --add-data "localcai\webui\static;localcai\webui\static" ^
-            --add-data "extension;extension" ^
+            --add-data "localcai\extension;localcai\extension" ^
             --collect-all webview ^
             packaging\exe_entry.py
       - name: Smoke test the exe's bundle
         shell: bash
         run: test -s dist/localCAI.exe && ls -la dist/localCAI.exe
+      - name: Run the built exe (start, prepare extension, import, export card + chat, quit)
+        shell: bash
+        run: python tests/exe_smoke.py dist/localCAI.exe
       - name: Package extension
         run: python tools/package_extension.py
       - uses: actions/upload-artifact@v4

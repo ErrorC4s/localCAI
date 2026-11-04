@@ -37,6 +37,7 @@ from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD = 200 * 1024 * 1024
 GUARD_MARK = "\x1e"  # sent after the streamed reply while the OOC guard checks it
+STALE_MARK = "\x1d"  # end of a reply that wasn't saved because the chat changed meanwhile
 
 SETTINGS_KEYS = {"backend", "model", "persona", "user_name", "temperature", "max_tokens", "age_confirmed",
                  "engine_variant", "ctx_size", "gpu_layers", "recall", "gpu_device", "reply_length", "pacing", "user_pronouns", "persona_pronouns", "initiative", "ooc_guard", "kv_cache", "scene_state"}
@@ -62,9 +63,9 @@ def model_url() -> str:
         return ENGINE.base_url
     return resolve_base_url(s["backend"])
 def extension_source() -> Path | None:
-    """The browser extension's files: bundled inside the exe, or the repo's extension/ folder."""
-    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
-    src = base / "extension"
+    """The browser extension's files. They live inside the package (localcai/extension), so the same
+    lookup works from source, a pip install (package data) and the Windows exe (bundled at the same path)."""
+    src = Path(__file__).resolve().parents[1] / "extension"
     return src if (src / "manifest.json").exists() else None
 
 
@@ -537,6 +538,7 @@ def make_handler(app: App, port: int):
             s = settings()
             with app.lock:
                 meta, rows = chatlog.load(path)
+            base = chatlog.snapshot(rows)  # what this reply is based on: checked again before saving
             crisis = False
             swipe_row = None
             if regenerate:
@@ -662,19 +664,35 @@ def make_handler(app: App, port: int):
                             fixed = ""
                     except OSError:
                         fixed = ""
-            target = swipe_row
-            if swipe_row is not None:
-                if text_out:
-                    chatlog.add_swipe(swipe_row, text_out)
-                rows.append(swipe_row)
-            elif text_out:
-                target = chatlog.row(char, False, text_out, datetime.now().isoformat())
-                rows.append(target)
-            if fixed and target is not None:
-                chatlog.add_swipe(target, fixed)  # the in-character version is shown; the first try stays a swipe
-                target.setdefault("extra", {})["ooc_fixed"] = fix_reason[:300]
             with app.lock:
-                chatlog.save(path, meta, rows)
+                # The chat may have been edited, rewound, swiped or answered in another window while this
+                # reply was being written. Save onto the chat as it is *now*, and only if the messages the
+                # reply was based on are unchanged; otherwise drop the reply instead of undoing those changes.
+                meta_now, now = chatlog.load(path)
+                stale = not chatlog.same_messages(now, base)
+                if not stale:
+                    if swipe_row is not None:
+                        target = now[-1]
+                        if text_out:
+                            chatlog.add_swipe(target, text_out)
+                    else:
+                        if len(rows) > len(base):
+                            now.append(rows[len(base)])  # the user's new message (none when regenerating)
+                        target = None
+                        if text_out:
+                            target = chatlog.row(char, False, text_out, datetime.now().isoformat())
+                            now.append(target)
+                    if fixed and target is not None:
+                        chatlog.add_swipe(target, fixed)  # the in-character version is shown; the first try stays a swipe
+                        target.setdefault("extra", {})["ooc_fixed"] = fix_reason[:300]
+                    chatlog.save(path, meta_now, now)
+            if stale:
+                try:
+                    self.wfile.write(STALE_MARK.encode("utf-8"))  # tells the UI the reply wasn't saved
+                    self.wfile.flush()
+                except OSError:
+                    pass
+                return
             final = fixed or text_out
             if use_scene and final and not stopped and not crisis:
                 # Scene state for the next turn, made in the background so this reply isn't held up.
@@ -688,8 +706,11 @@ def make_handler(app: App, port: int):
                     if state:
                         with app.lock:
                             try:
-                                save_state(path, scene_history, state)
-                            except OSError:
+                                # only if the chat still is what the note describes (not edited meanwhile)
+                                _, rows_now = chatlog.load(path)
+                                if chatlog.to_history(rows_now) == scene_history:
+                                    save_state(path, scene_history, state)
+                            except (OSError, ValueError):
                                 pass
                 threading.Thread(target=note_scene, daemon=True).start()
 

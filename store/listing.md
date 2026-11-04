@@ -114,12 +114,12 @@ localCAI Extractor saves the user's own Character.AI chats to a local JSON file.
 - Images are fetched by the popup from characterai.io only when the user exports with images.
 - No remote code, no analytics, no external servers. data_collection_permissions: none.
 - Source is not minified or bundled; the uploaded files are the source:
-  https://github.com/ErrorC4s/localCAI/tree/main/extension
+  https://github.com/ErrorC4s/localCAI/tree/main/localcai/extension
 - Test: open any character.ai chat, refresh, click the toolbar icon → Load full history → Export.
 ```
 
 ## Images
-- Icon: `extension/icons/icon128.png`
+- Icon: `localcai/extension/icons/icon128.png`
 - Screenshots (1280×800): `store/screenshots/*.png`
 - Chrome small promo tile (440×280): `store/promo-440x280.png`
 

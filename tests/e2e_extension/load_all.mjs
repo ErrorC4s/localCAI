@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const { chromium } = createRequire(import.meta.url)("playwright");
 const here = path.dirname(fileURLToPath(import.meta.url));
-const extDir = path.resolve(here, "../../extension");
+const extDir = path.resolve(here, "../../localcai/extension");
 const extId = [...createHash("sha256").update(extDir).digest("hex").slice(0, 32)]
   .map((c) => String.fromCharCode(97 + parseInt(c, 16))).join("");
 
@@ -136,8 +136,57 @@ async function race() {
   console.log(`clear during load: ${s.job.message}`);
 }
 
+// Clear, then scroll the chat up yourself (the page loads older pages on its own), then Load full history:
+// the newest page was cleared and the page never asks for it again, so the extension must fetch it.
+async function clearThenScroll() {
+  const ctx = await chromium.launchPersistentContext(mkdtempSync(path.join(tmpdir(), "lcai-")), {
+    headless: true, channel: "chromium", args: [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`] });
+  await ctx.route("https://character.ai/**", (r) => r.fulfill({ status: 200, contentType: "text/html", body: HTML }));
+  await ctx.route("https://neo.character.ai/turns/**", (r) => {
+    const req = r.request();
+    const tok = new URL(req.url()).searchParams.get("next_token");
+    const headers = { "Access-Control-Allow-Origin": "https://character.ai", "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": "x-from-page" };
+    if (req.method() === "OPTIONS") return r.fulfill({ status: 204, headers });
+    r.fulfill({ status: 200, contentType: "application/json", headers, body: JSON.stringify(page(tok ? +tok.slice(1) : 0)) });
+  });
+  const tab = await ctx.newPage();
+  await tab.goto("https://character.ai/chat/x");
+  await tab.waitForTimeout(800);                       // the page has loaded the newest page
+  const popup = await ctx.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup/popup.html`);
+  const ask = (type) => popup.evaluate(async (type) => {
+    const [t] = await chrome.tabs.query({ url: "https://character.ai/*" });
+    return chrome.tabs.sendMessage(t.id, { type });
+  }, type);
+  await ask("clear");
+  for (let i = 0; i < 8; i++) {                        // scroll to the top: the page fetches older pages itself
+    await tab.evaluate(() => { const l = document.getElementById("list"); l.scrollTop = -l.scrollHeight;
+      l.dispatchEvent(new Event("scroll")); });
+    await tab.waitForTimeout(250);
+  }
+  let s = await ask("stats");
+  const scrolled = s.turns;
+  await ask("loadAll");
+  for (let i = 0; i < 60; i++) { await tab.waitForTimeout(500); s = await ask("stats"); if (s.job.done && !s.job.running) break; }
+  const doc = (await ask("export")).doc;
+  await ctx.close();
+  const texts = new Set((doc.chats || []).flatMap((c) => (c.turns || []).flatMap((t) => t.candidates || [])));
+  const newest = PAGES * PER - 1;
+  if (s.turns !== PAGES * PER || !texts.has("message " + newest) || !/Reached the first message/.test(s.job.message))
+    fail(`Clear → scroll → Load full history must collect everything incl. the newest page: ${s.turns} ` +
+         `(had ${scrolled} after scrolling), newest present: ${texts.has("message " + newest)} · ${s.job.message}`);
+  // every message id once, oldest first, no gaps
+  const ids = (doc.chats[0].turns || []).map((t) => t.id);
+  const want = Array.from({ length: PAGES * PER }, (_, i) => "t" + i);
+  if (JSON.stringify(ids) !== JSON.stringify(want))
+    fail(`export ids/order wrong: ${ids.length} ids, first ${ids.slice(0, 3)}, last ${ids.slice(-3)}`);
+  console.log(`clear, scroll, load: ${s.job.message} (after scrolling only ${scrolled}); ids t0..t99 in order`);
+}
+
 const fail = (m) => { console.error("FAIL:", m); process.exit(1); };
 await run(true);
 await run(false);
 await race();
+await clearThenScroll();
 console.log("LOAD-ALL PASS");

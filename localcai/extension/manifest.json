@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "localCAI Extractor",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Save your own Character.AI chats, pins and characters to an open file you can run on a local model. Not affiliated with Character.AI.",
   "host_permissions": [
     "https://character.ai/*",

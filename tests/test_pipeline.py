@@ -719,6 +719,12 @@ def test_scene_state_round_trip_and_prompt(tmp_path):
     scene.save_state(chat, lib_h, "Where: library")
     scene.save_state(chat, beach_h, "Where: beach")
     assert scene.state_for(chat, lib_h) == "Where: library" and scene.state_for(chat, beach_h) == "Where: beach"
+    # an edit far back (beyond the last few messages) still invalidates the note
+    long_h = [{"role": "user", "content": "We meet in the library."}] + [
+        {"role": "assistant" if i % 2 == 0 else "user", "content": "Mm." if i % 2 == 0 else "Okay."} for i in range(10)]
+    scene.save_state(chat, long_h, "Where: library")
+    moved = [{"role": "user", "content": "We meet on the beach."}] + long_h[1:]
+    assert scene.state_for(chat, long_h) == "Where: library" and scene.state_for(chat, moved) == ""
     for i in range(12):
         scene.save_state(chat, [{"role": "assistant", "content": f"r{i}"}], f"Where: room {i}; Mira: standing")
     assert len(scene.load_states(chat)["states"]) == scene.KEEP
@@ -878,3 +884,17 @@ def test_engine_start_uses_the_context_that_fits(tmp_path, monkeypatch):
         assert cmd[cmd.index("-c") + 1] == want_ctx and cmd[cmd.index("-ngl") + 1] == "999", cmd
         assert e.ctx == int(want_ctx) and e.ctx_wanted == 8192
     assert "doesn't fit in free VRAM: using 6144" in (eng.engine_dir() / "engine.log").read_text()
+
+
+def test_reply_is_only_saved_onto_the_chat_it_was_based_on():
+    from localcai import chatlog
+    rows = [chatlog.row("Mira", False, "*waves* Hi."), chatlog.row("Sam", True, "Hello.")]
+    snap = chatlog.snapshot(rows)
+    same = [dict(r) for r in rows]
+    same[0] = {**same[0], "extra": {"pinned": True}}          # pinning meanwhile is fine
+    assert chatlog.same_messages(same, snap)
+    edited = [dict(r) for r in rows]; edited[0] = {**edited[0], "mes": "*waves* Hey."}
+    assert not chatlog.same_messages(edited, snap)            # edited → the reply is stale
+    assert not chatlog.same_messages(rows[:1], snap)          # rewound → stale
+    swiped = [dict(r) for r in rows]; chatlog.add_swipe(swiped[0], "*nods*")
+    assert not chatlog.same_messages(swiped, snap)            # another version chosen → stale

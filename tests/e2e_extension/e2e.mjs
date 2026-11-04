@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 // works with a local or a global (NODE_PATH) playwright install
 const { chromium } = createRequire(import.meta.url)("playwright");
 const here = path.dirname(fileURLToPath(import.meta.url));
-const extDir = path.resolve(here, "../../extension");
+const extDir = path.resolve(here, "../../localcai/extension");
 const out = process.argv[2] || path.join(tmpdir(), "e2e.lcai.json");
 
 // Chromium derives an unpacked extension's id from its absolute path.

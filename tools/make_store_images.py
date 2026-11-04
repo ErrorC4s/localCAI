@@ -54,7 +54,7 @@ def slide(page, title, sub, bullets, png: bytes, name: str):
 
 def main():
     (OUT / "screenshots").mkdir(parents=True, exist_ok=True)
-    version = json.loads((ROOT / "extension" / "manifest.json").read_text())["version"]
+    version = json.loads((ROOT / "localcai" / "extension" / "manifest.json").read_text())["version"]
     home = tempfile.mkdtemp(prefix="lcai-store-")
     Path(home, "config.json").write_text(json.dumps({"age_confirmed": True, "backend": "builtin",
                                                      "model": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", "persona": "Alex"}))
@@ -82,7 +82,7 @@ def main():
             # popup, rendered from the real extension files with a stubbed browser API
             pop = b.new_page(viewport={"width": 300, "height": 520}, device_scale_factor=2)
             pop.add_init_script(STUB % (version, version))
-            pop.goto((ROOT / "extension" / "popup" / "popup.html").as_uri())
+            pop.goto((ROOT / "localcai" / "extension" / "popup" / "popup.html").as_uri())
             pop.wait_for_timeout(400)
             popup_png = pop.locator("body").screenshot()
             # the app

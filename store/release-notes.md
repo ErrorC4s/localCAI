@@ -1,4 +1,12 @@
-## localCAI v0.8.36 · Extractor 0.5.2
+## localCAI v0.8.37 · Extractor 0.5.3
+
+- Your changes are never undone by a reply: if you edit, rewind or switch versions of messages (or reply from another window) while a reply is being written, the reply isn't saved over them. You get a notice, and the message you sent goes back into the input box.
+- Extractor 0.5.3: after Clear, Load full history always starts again from the newest page, even if you scrolled the chat up in between. Before, the newest messages could be missing while it said it had reached the start.
+- Scene memory notes belong to the whole chat up to that reply, so editing something further back (say, the place) no longer reuses an old note. A note made in the background is only saved if the chat wasn't changed meanwhile.
+- "Set up the extension" also works when localCAI is installed with pip: the extension files are now part of the Python package.
+- Releases now also install localCAI with pip in a clean environment, and run the built Windows exe (start, prepare the extension, import a chat, export a character card and chat in SillyTavern formats, quit) before publishing.
+
+### Earlier in v0.8.36
 
 - New start screen with three simple steps, and **Set up the extension**: the app now carries the extractor inside it, gets a ready-to-load folder for your browser (Chrome, Edge, Brave/Opera or Firefox), opens it, copies its path, and shows exactly which buttons to click. No more hunting for the right zip or folder.
 - The README's extension instructions are rewritten as short numbered steps.

@@ -5,8 +5,8 @@ The model sees the whole recent chat, but small models lose track of an action t
 replies ago and is still going on ("she's sitting in his lap") once the newest reply talks about
 something else. This line hands it the result instead of making it dig through the history.
 
-It is stored next to the chat (chats/<chat>.scene.json), keyed by the reply it was made after and the
-messages just before it, so a regenerated, edited or swiped reply never gets a note that doesn't match.
+It is stored next to the chat (chats/<chat>.scene.json), keyed by the whole chat up to the reply it was
+made after, so after an edit, rewind or swipe anywhere before it, an old note is never used.
 """
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from typing import Callable
 ROUNDS = 5           # how far back to look: the last 5 exchanges (10 messages)
 MSG_CHARS = 700      # each message is cut to its last part; the end is where the scene is now
 KEEP = 8             # states kept per chat (enough for going back a few replies / swipes)
-CONTEXT = 4          # a note belongs to its reply plus the 3 messages before it
 
 SCENE_SYSTEM = ("You keep notes on a role-play scene. You only report what the text shows; "
                 "you never continue the story and never add anything.")
@@ -41,12 +40,14 @@ Format: Where: ...; {char}: ...; {user}: ...; Mood: ...
 
 
 def scene_key(history: list[dict]) -> str:
-    """Identifies "the chat as it stands after this reply": the reply plus the few messages before it.
-    The same short reply ("*nods* Okay.") at two different points of a chat gets two different keys,
-    and editing, regenerating or swiping one of these messages gives a new key (no stale note)."""
-    tail = [m for m in history if m.get("content")][-CONTEXT:]
-    norm = "\x1f".join(m["role"][0] + re.sub(r"\s+", " ", m["content"]).strip() for m in tail)
-    return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
+    """Identifies "the chat exactly as it stands after this reply": every message up to it (the chosen
+    version of each). Editing, rewinding or swiping any earlier message gives a new key, so a note made
+    for the old version is never used (e.g. a place changed from library to beach several messages back)."""
+    h = hashlib.sha1()
+    for m in history:
+        if m.get("content"):
+            h.update(m["role"][0].encode() + re.sub(r"\s+", " ", m["content"]).strip().encode("utf-8") + b"\x1f")
+    return h.hexdigest()[:16]
 
 
 def state_path(chat_path: Path) -> Path:

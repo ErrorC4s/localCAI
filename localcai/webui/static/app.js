@@ -451,7 +451,7 @@ async function reply(path, payload) {
       if (done) break;
       text += dec.decode(value, { stream: true });
       const mark = text.indexOf("\x1e");  // the server is double-checking the reply stays in character
-      body.innerHTML = render(mark >= 0 ? text.slice(0, mark) : text);
+      body.innerHTML = render((mark >= 0 ? text.slice(0, mark) : text).replace(/\x1d/g, ""));
       if (mark >= 0 && !bot.querySelector(".checking")) {
         const c = document.createElement("div"); c.className = "checking small";
         c.innerHTML = ic("sparkle") + " Checking it stays in character…"; bot.appendChild(c);
@@ -465,6 +465,12 @@ async function reply(path, payload) {
     if (poll) { clearInterval(poll); refreshEngine(); }
   }
   await openChat(S.chat); // reload from disk: the server is the source of truth
+  if (text.includes("\x1d")) {
+    // the chat was edited, rewound or answered elsewhere while this reply was being written:
+    // the server kept those changes and didn't save the reply
+    toast("The chat changed while this reply was being written, so the reply wasn't saved. Your changes are kept.", "warn");
+    return false;
+  }
   return true;
 }
 

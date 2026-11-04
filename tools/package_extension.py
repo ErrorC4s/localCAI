@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXT = ROOT / "extension"
+EXT = ROOT / "localcai" / "extension"
 DIST = ROOT / "dist"
 SKIP = {"README.md", ".DS_Store"}
 
