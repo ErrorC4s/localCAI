@@ -39,7 +39,7 @@ const CHAR = { character: { external_id: "abc123", name: "Luna", title: "A sleep
   description: "Lives on the moon.", greeting: "*yawns* Oh, {{user}}...", additional_greetings: null,
   definition: "{{user}}: Hi\n{{char}}: Hello~", has_definition: true, user__username: "alex",
   avatar_file_name: "u/luna.webp", background_image_url: "https://characterai.io/bg/moon.png" }, status: "OK" };
-const OTHER = { character: { external_id: "zzz", name: "Rex", title: "Someone else's bot", visibility: "PUBLIC",
+const OTHER = { character: { external_id: "zzz", name: "Rex", title: "Someone else's bot", visibility: "PUBLIC", copyable: false,
   greeting: "Rawr.", has_definition: true, user__username: "someone_else", avatar_file_name: "u/rex.webp" }, status: "OK" };
 const PERSONAS = { personas: [{ id: 7, external_id: "p1", title: "Alex", greeting: "Hello!", description: "My persona",
   definition: "A tired night-shift baker.", avatar_file_name: "p.webp", visibility: "PRIVATE",
@@ -63,7 +63,14 @@ const HISTORY = { turns: [ // newest first, like the real paginated endpoint
 ], meta: { next_token: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop" } };
 const WS_NEW = { command: "add_turn", turn: turn("t4", "2026-10-01T10:04:00Z", "Luna", false, ["Sweet dreams~"], 0) };
 
-const PAGE = `<!doctype html><html><body>mock c.ai<script>
+// like C.ai: the character the page opens with is server-rendered into __NEXT_DATA__; this one's definition
+// is public (copyable: true), so it's kept even though someone else made the character
+const NEXT_DATA = { props: { pageProps: { i18n: { translations: { secret: "I18N_MARKER" } }, dehydratedState: { json: { queries: [
+  { queryKey: ["user"], state: { data: { user: { username: "alex", email: "PAGE_EMAIL_MARKER" } } } },
+  { queryKey: ["character", "info"], state: { data: { character: { external_id: "pub1", name: "Mira", visibility: "PUBLIC",
+    copyable: true, greeting: "Ke ke~", has_definition: true, user__username: "panto",
+    definition: "{{char}}: Ke ke ke~ hello!\nEND_OF_DIALOG" } } } }] } } } } };
+const PAGE = `<!doctype html><html><head><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(NEXT_DATA)}</script></head><body>mock c.ai<script>
   (async () => {
     const j = (u, o) => fetch(u, o).then(r => r.json());
     await j("https://neo.character.ai/user/");
@@ -126,11 +133,14 @@ await ctx.close();
 const fail = (m) => { console.error("FAIL:", m); process.exit(1); };
 const { stats, doc, raw } = result;
 console.log("stats", stats);
-if (stats.characters !== 2 || stats.chats !== 1 || stats.turns !== 4 || stats.pinned !== 1 || stats.captures !== 8) fail("stats");
+if (stats.characters !== 3 || stats.chats !== 1 || stats.turns !== 4 || stats.pinned !== 1 || stats.captures !== 9) fail("stats");
 const luna = doc.characters.find((c) => c.name === "Luna");
 const rex = doc.characters.find((c) => c.name === "Rex");
 if (!luna.is_own || !luna.definition.includes("Hello~")) fail("own definition should be kept");
 if (rex.definition !== "" || !rex.definition_withheld) fail("other creator's definition must be withheld");
+const mira = doc.characters.find((c) => c.name === "Mira");
+if (!mira || !mira.definition.includes("Ke ke ke~") || mira.definition_withheld) fail("a public definition (copyable) should be kept: " + JSON.stringify(mira));
+if (JSON.stringify(raw).includes("I18N_MARKER") || JSON.stringify(raw).includes("PAGE_EMAIL_MARKER")) fail("only character objects are read from the page");
 if (doc.characters.some((c) => c.name === "Alex")) fail("account/persona misread as a character");
 if (doc.personas.length !== 1 || !doc.personas[0].description.includes("baker")) fail("persona");
 if (doc.chats[0].memories.length !== 2) fail("memories " + JSON.stringify(doc.chats[0].memories));
@@ -153,7 +163,7 @@ for (const leak of ["BILLING", "OTHERCHAT", "2000-01-01", "x@example.com", "PLUS
 // the redacted debug dump must still contain everything needed to rebuild the export
 const N = createRequire(import.meta.url)(path.join(extDir, "src/normalize.js"));
 const again = N.stats(N.normalize(raw.captures));
-if (JSON.stringify(again) !== JSON.stringify({ characters: 2, chats: 1, turns: 4, pinned: 1 }))
+if (JSON.stringify(again) !== JSON.stringify({ characters: 3, chats: 1, turns: 4, pinned: 1 }))
   fail("redaction destroyed chat data: " + JSON.stringify(again));
 writeFileSync(out, JSON.stringify(doc, null, 2));
 console.log("PASS — wrote", out);

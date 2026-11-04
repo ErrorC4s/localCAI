@@ -1,4 +1,10 @@
-## localCAI v0.8.51
+## localCAI v0.8.52 · Extractor 0.5.7
+
+- Extractor 0.5.7: exports a character's definition when its creator made it public (C.ai shows it to everyone under "View character details"). Before, only your own characters' definitions were exported. It's read from the character data the page already has; private definitions are still left out.
+- The definition becomes the character's example dialogue (C.ai's END_OF_DIALOG and {{random_user_1}} turned into the <START> / {{user}} format other apps use). It replaces example dialogue Learn style had picked, and Learn style leaves it alone from then on.
+- Re-importing a character keeps what was written in localCAI and isn't on C.ai: Learn style's notes, your scenario and custom instructions.
+
+### Earlier in localCAI v0.8.51
 
 - Learn style learns from the character's real C.ai replies only (when the chat has enough of them), not from replies written in localCAI, which may have drifted (e.g. pet names the character never used). The example dialogue is picked from the C.ai part too.
 - The style notes no longer contradict the habits counted from those replies (how speech is marked, their laugh, what they call you): the model is given them and writes about the rest instead: who the character is, their attitude toward you, how they react in different moods, how they speak.

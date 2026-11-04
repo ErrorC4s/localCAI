@@ -47,6 +47,23 @@
     window.postMessage({ __localcai: true, kind, url: cleanUrl, t: Date.now(), t0, data: trim(url, data) }, location.origin);
   };
 
+  // The character the page was opened with is also in the page itself (server-rendered, not a request):
+  // that copy carries a public definition. Read just the character objects from it, nothing else.
+  const fromPage = () => {
+    try {
+      const el = document.getElementById("__NEXT_DATA__");
+      const qs = el && JSON.parse(el.textContent)?.props?.pageProps?.dehydratedState?.json?.queries;
+      for (const q of Array.isArray(qs) ? qs : []) {
+        const c = q?.state?.data?.character || q?.state?.data?.data?.character;
+        if (c && c.external_id && c.name) {
+          post("page", "https://neo.character.ai/character/v1/get_character_info", { character: c }, Date.now());
+        }
+      }
+    } catch {}
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fromPage, { once: true });
+  else fromPage();
+
   // fetch
   const origFetch = window.fetch;
   window.fetch = async function (...args) {

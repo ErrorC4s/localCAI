@@ -1388,3 +1388,36 @@ def test_learn_style_reads_the_cai_replies_and_knows_the_counted_habits():
     assert 'Mira calls Sam "boss"' in seen["p"] and "never contradict" in seen["p"]
     ex = analyze.pick_examples(rows + [chatlog.row("Sam", True, "hi there"), drifted] * 40, "Sam", "Mira")
     assert "darling" not in ex
+
+
+def test_cai_definition_becomes_example_dialogue():
+    from localcai.importers.lcai import cai_definition
+    out = cai_definition("{{char}}: Ke ke~ hi!\n{{random_user_1}}: w-who?\nEND_OF_DIALOG\n\n{{char}}: Hm~\n{{random_user_2}}: hey\nEND_OF_DIALOG")
+    assert out == "{{char}}: Ke ke~ hi!\n{{user}}: w-who?\n<START>\n{{char}}: Hm~\n{{user}}: hey"
+
+
+def test_reimport_keeps_what_was_written_in_localcai_and_takes_a_public_definition(tmp_path):
+    import copy
+    from localcai import analyze
+    from localcai.library import import_into
+    full = json.loads((FX / "extension_export.lcai.json").read_text("utf-8"))
+    luna = next(c for c in full["characters"] if c["name"] == "Luna")
+    luna["definition"] = ""
+    (tmp_path / "a.lcai.json").write_text(json.dumps(full), "utf-8")
+    import_into(tmp_path / "a.lcai.json", tmp_path / "lib")
+    cp = tmp_path / "lib" / "characters" / "Luna.card.json"
+    card = json.loads(cp.read_text("utf-8"))
+    d = card["data"]
+    analyze.set_style_notes(d, "- yawns a lot")
+    analyze.set_examples(d, "<START>\n{{user}}: hi\n{{char}}: *yawn*", learned=True)
+    d["scenario"] = "On the moon."
+    cp.write_text(json.dumps(card), "utf-8")
+    import_into(tmp_path / "a.lcai.json", tmp_path / "lib")           # same export again
+    d = json.loads(cp.read_text("utf-8"))["data"]
+    assert d["personality"] == "- yawns a lot" and d["scenario"] == "On the moon." and "*yawn*" in d["mes_example"]
+    luna["definition"] = "{{char}}: Hello~ I'm Luna.\nEND_OF_DIALOG"              # now with a public definition
+    (tmp_path / "b.lcai.json").write_text(json.dumps(full), "utf-8")
+    import_into(tmp_path / "b.lcai.json", tmp_path / "lib")
+    d = json.loads(cp.read_text("utf-8"))["data"]
+    assert d["mes_example"] == "{{char}}: Hello~ I'm Luna." and d["personality"] == "- yawns a lot"
+    assert not d["extensions"][analyze.AUTO_MARK].get("mes_example")   # the creator's: Learn style leaves it alone

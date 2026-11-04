@@ -93,8 +93,10 @@
       const creator = str(first(c, "user__username", "creator_name", "author.username", "author.name"));
       const isOwn = !!me && creator === me;
       const defn = str(c.definition);
-      // Other creators' definitions are only kept when the platform marks them public.
-      const defPublic = /public/i.test(str(first(c, "definition_visibility", "definitionVisibility")));
+      // Other creators' definitions are only kept when they're public: the creator didn't tick "keep the
+      // character definition private" (C.ai then sends it with copyable: true and shows it to everyone
+      // under "View character details").
+      const defPublic = c.copyable === true || /public/i.test(str(first(c, "definition_visibility", "definitionVisibility")));
       const keepDef = isOwn || defPublic;
       const extraGreetings = Array.isArray(c.additional_greetings) ? c.additional_greetings.map(str).filter(Boolean) : [];
       return {

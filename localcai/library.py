@@ -75,6 +75,15 @@ def _merge_card(jp: Path, c: Character, book: dict | None) -> tuple[Path, Path]:
         d["extensions"]["localcai"] = {**mine, **d["extensions"]["localcai"]}  # keep rules, pronouns…
         for k, v in (od.get("extensions") or {}).items():
             d["extensions"].setdefault(k, v)
+        # What C.ai doesn't have (the import leaves it empty) was written in localCAI: Learn style's notes in
+        # personality, your scenario and instructions. Keep it. A real definition from C.ai replaces example
+        # dialogue that Learn style had picked; without one, the old example dialogue stays.
+        for k in ("personality", "scenario", "system_prompt", "post_history_instructions", "description",
+                  "mes_example", "creator_notes"):
+            if not d.get(k) and od.get(k):
+                d[k] = od[k]
+        if c.example_dialogue:
+            ((d["extensions"].get("localcai_auto")) or {}).pop("mes_example", None)
     merged = merge_books_unique(od.get("character_book"), book)
     if merged:
         d["character_book"] = merged

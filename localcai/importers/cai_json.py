@@ -31,7 +31,8 @@ def _looks_like_character(d: dict) -> bool:
 
 def _clean_definition(defn: str) -> str:
     # C.ai separates example chats with END_OF_DIALOG; Tavern uses <START>.
-    return defn.replace("END_OF_DIALOG", "<START>").strip()
+    from .lcai import cai_definition
+    return cai_definition(defn)
 
 
 def _character(d: dict) -> Character:

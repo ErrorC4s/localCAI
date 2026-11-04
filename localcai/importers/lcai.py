@@ -1,6 +1,8 @@
 """Reader for localCAI's own `.lcai.json` format (see docs/lcai-format.md). Exact, no heuristics."""
 from __future__ import annotations
 
+import re
+
 import json
 from pathlib import Path
 
@@ -8,6 +10,13 @@ from ..images import decode_data_url, png_or_none
 from ..schema import Bundle, Character, Chat, Message
 
 SUPPORTED_VERSIONS = {1}
+
+
+def cai_definition(defn: str) -> str:
+    """A C.ai definition as Tavern example dialogue: END_OF_DIALOG separates the examples (Tavern: <START>), and
+    the people the character talks to in them ({{random_user_1}}, …) stand for the user ({{user}})."""
+    defn = re.sub(r"\{\{random_user_\d+\}\}", "{{user}}", defn)
+    return re.sub(r"\s*END_OF_DIALOG\s*", "\n<START>\n", defn).strip().removesuffix("<START>").strip()
 
 
 def is_lcai(data: object) -> bool:
@@ -28,7 +37,7 @@ def import_lcai(path: Path, data: dict | None = None) -> Bundle:
             description=c.get("description", ""),
             greeting=c.get("greeting", ""),
             alternate_greetings=list(c.get("alternate_greetings") or []),
-            example_dialogue=(c.get("definition") or "").replace("END_OF_DIALOG", "<START>").strip(),
+            example_dialogue=cai_definition(c.get("definition") or ""),
             creator=c.get("creator", ""),
             avatar_url=c.get("avatar_url"),
             avatar_png=png_or_none(c.get("avatar_png")),
