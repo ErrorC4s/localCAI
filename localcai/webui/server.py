@@ -61,6 +61,43 @@ def model_url() -> str:
                      kv=s.get("kv_cache", "auto"))
         return ENGINE.base_url
     return resolve_base_url(s["backend"])
+def extension_source() -> Path | None:
+    """The browser extension's files: bundled inside the exe, or the repo's extension/ folder."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
+    src = base / "extension"
+    return src if (src / "manifest.json").exists() else None
+
+
+def setup_extractor(browser: str) -> dict:
+    """Put a ready-to-load copy of the extension in ~/.localcai/extractor/<browser> and open that folder,
+    so "Load unpacked" only needs the user to pick the folder that just opened."""
+    import shutil
+    from ..library import home
+    src = extension_source()
+    if src is None:
+        raise FileNotFoundError("The extension isn't bundled here. Download it from the localCAI releases page.")
+    kind = "firefox" if browser == "firefox" else "chromium"
+    dest = home() / "extractor" / kind
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(src, dest, ignore=shutil.ignore_patterns("README.md", ".DS_Store"))
+    manifest = json.loads((dest / "manifest.json").read_text("utf-8"))
+    if kind == "chromium":
+        manifest.pop("browser_specific_settings", None)  # Firefox-only key: Chrome would show a warning
+    (dest / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), "utf-8")
+    opened = True
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(dest))  # noqa: S606 - Explorer on the user's own machine
+        else:
+            subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(dest)],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        opened = False
+    return {"path": str(dest), "manifest": str(dest / "manifest.json"), "version": manifest.get("version"),
+            "opened": opened}
+
+
 IMPORT_EXT = {".json", ".jsonl", ".png", ".zip"}
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
 
@@ -229,6 +266,8 @@ def make_handler(app: App, port: int):
                     return
                 if path.startswith("/api/engine/"):
                     return self.engine_action(path.rsplit("/", 1)[1], self.body_json())
+                if path == "/api/extractor/setup":
+                    return self.send_json(setup_extractor(str(self.body_json().get("browser") or "chromium")))
                 if path == "/api/character/delete":
                     with app.lock:
                         n = delete_character(app.lib, self.body_json()["character"])

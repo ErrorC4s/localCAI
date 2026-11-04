@@ -207,3 +207,21 @@ h3 .ic { width: 20px; height: 20px; vertical-align: -3px; margin-right: 2px; col
 .msg .fixed { color: var(--accent2); cursor: help; }
 .msg .checking { color: var(--muted); margin-top: 8px; animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .45; } }
+
+/* welcome steps + extension setup */
+.steps { display: grid; gap: 12px; margin: 18px 0; }
+.step { display: flex; gap: 14px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 14px 16px; }
+.step > b { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent, #7c6cff); color: #fff; }
+.step h4 { margin: 2px 0 4px; }
+.step p { margin: 0 0 10px; }
+dialog.wide { width: min(620px, 92vw); }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.tab { background: transparent; border: 1px solid var(--line); color: var(--text); border-radius: 999px;
+  padding: 5px 12px; cursor: pointer; }
+.tab.active { background: var(--accent, #7c6cff); border-color: transparent; color: #fff; }
+.ex-steps li { margin-bottom: 10px; line-height: 1.5; }
+.copyrow { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.copyrow code { flex: 1; overflow-x: auto; white-space: nowrap; background: var(--bg, #15161d); padding: 6px 8px;
+  border-radius: 6px; border: 1px solid var(--line); }

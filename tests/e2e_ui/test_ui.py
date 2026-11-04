@@ -64,6 +64,22 @@ def main(shot=None):
             page = p.chromium.launch().new_page(viewport={"width": 1280, "height": 820})
             page.goto(BASE)
             expect(page.locator("#welcome")).to_be_visible()
+            # guided extension setup: the bundled extension is copied to a folder ready for "Load unpacked"
+            page.click("#open-extractor")
+            expect(page.locator("#extractor-dialog")).to_be_visible()
+            page.click("#ex-browser .tab[data-b=edge]")
+            expect(page.locator("#ex-url")).to_have_text("edge://extensions")
+            page.click("#ex-prepare")
+            expect(page.locator("#ex-path-row")).to_be_visible()
+            ext = Path(home, "extractor", "chromium", "manifest.json")
+            assert ext.exists() and "browser_specific_settings" not in json.loads(ext.read_text()), "chromium copy"
+            assert Path(home, "extractor", "chromium", "src", "bridge.js").exists()
+            page.click("#ex-browser .tab[data-b=firefox]")
+            page.click("#ex-prepare")
+            expect(page.locator("#ex-path")).to_contain_text("manifest.json")
+            ffm = Path(home, "extractor", "firefox", "manifest.json")
+            assert "browser_specific_settings" in json.loads(ffm.read_text()), "firefox keeps its add-on id"
+            page.click("#ex-close")
 
             # import
             page.set_input_files("#file-input", str(FIXTURE))

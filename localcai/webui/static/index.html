@@ -39,12 +39,16 @@
   <main id="main">
     <section id="welcome" class="welcome">
       <h1>Bring your characters home.</h1>
-      <ol>
-        <li>Install the <b>localCAI Extractor</b> browser extension, open your chat on Character.AI and click <b>Export .lcai.json</b>.</li>
-        <li>Drag the file into this window (or use <b>Import files</b>).</li>
-        <li>Start a local model runner (Ollama, LM Studio, llama.cpp, KoboldCpp), pick it in the top bar and chat.</li>
-      </ol>
-      <p class="muted">Everything stays on this computer. Not affiliated with Character.AI.</p>
+      <div class="steps">
+        <div class="step"><b>1</b><div><h4>Save your chats from Character.AI</h4>
+          <p class="muted">A small browser extension saves your whole chat to a file.</p>
+          <button class="btn primary" id="open-extractor"><i data-ic="download"></i> Set up the extension</button></div></div>
+        <div class="step"><b>2</b><div><h4>Drop the file here</h4>
+          <p class="muted">Drag the <code>.lcai.json</code> file into this window, or use <b>Import files</b>.</p></div></div>
+        <div class="step"><b>3</b><div><h4>Keep chatting</h4>
+          <p class="muted">Pick a model at the top. The built-in engine downloads and runs it for you.</p></div></div>
+      </div>
+      <p class="muted small">Everything stays on this computer. Not affiliated with Character.AI.</p>
     </section>
 
     <section id="chat-view" class="chat-view" hidden>
@@ -179,6 +183,33 @@
       <button type="submit" class="btn primary"><i data-ic="sparkle"></i> Rewrite</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="extractor-dialog" class="wide">
+  <h3><i data-ic="download"></i> Set up the localCAI Extractor</h3>
+  <div class="tabs" id="ex-browser">
+    <button class="tab active" data-b="chrome">Chrome</button><button class="tab" data-b="edge">Edge</button>
+    <button class="tab" data-b="brave">Brave / Opera</button><button class="tab" data-b="firefox">Firefox</button>
+  </div>
+  <ol class="ex-steps">
+    <li><button class="btn primary" id="ex-prepare">Get the extension folder ready</button>
+      <span class="muted small" id="ex-ready"></span>
+      <div class="copyrow" id="ex-path-row" hidden><code id="ex-path"></code><button class="btn" data-copy="ex-path">Copy</button></div></li>
+    <li>Open a new browser tab and paste this into the address bar:
+      <div class="copyrow"><code id="ex-url">chrome://extensions</code><button class="btn" data-copy="ex-url">Copy</button></div></li>
+    <li id="ex-dev">Turn on <b>Developer mode</b> <span class="muted" id="ex-dev-where">(switch at the top right)</span>.</li>
+    <li id="ex-load">Click <b>Load unpacked</b> and choose the folder that just opened (its path is copied above).</li>
+    <li id="ex-pin">Click the puzzle-piece icon in the toolbar and pin <b>localCAI Extractor</b>.</li>
+  </ol>
+  <p class="muted small" id="ex-ff-note" hidden>Firefox only keeps add-ons loaded this way until you close it.
+    A permanent version will come through Firefox Add-ons.</p>
+  <h4>Then, for each chat</h4>
+  <ol class="ex-steps">
+    <li>Open the chat on character.ai and <b>refresh the page</b>.</li>
+    <li>Click the localCAI icon → <b>Load full history</b> (about a minute for a long chat).</li>
+    <li>Click <b>Export .lcai.json</b> and drag the file into this window.</li>
+  </ol>
+  <div class="dialog-buttons"><button class="btn" id="ex-close">Done</button></div>
 </dialog>
 
 <dialog id="bg-dialog">

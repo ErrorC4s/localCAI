@@ -720,3 +720,45 @@ $("story-generate").onclick = async () => {
 
 // ── Boot ──────────────────────────────────────────────
 loadState().then(loadModels).then(refreshEngine).then(() => watchJob()).catch((e) => toast("Couldn't load: " + e.message, "error"));
+
+
+// ── Extension setup: copy the bundled extension to a folder, then walk through "Load unpacked" ──
+const EX_BROWSERS = {
+  chrome:  { url: "chrome://extensions",  dev: "(switch at the top right)" },
+  edge:    { url: "edge://extensions",    dev: "(switch on the left, under the menu)" },
+  brave:   { url: "chrome://extensions",  dev: "(switch at the top right; Brave and Opera accept chrome://)" },
+  firefox: { url: "about:debugging#/runtime/this-firefox", dev: "" },
+};
+let exBrowser = "chrome";
+function showExBrowser(b) {
+  exBrowser = b;
+  document.querySelectorAll("#ex-browser .tab").forEach((t) => t.classList.toggle("active", t.dataset.b === b));
+  $("ex-url").textContent = EX_BROWSERS[b].url;
+  $("ex-dev-where").textContent = EX_BROWSERS[b].dev;
+  const ff = b === "firefox";
+  $("ex-dev").hidden = ff; $("ex-pin").hidden = ff; $("ex-ff-note").hidden = !ff;
+  $("ex-load").innerHTML = ff
+    ? "Click <b>Load Temporary Add-on…</b> and choose <b>manifest.json</b> in the folder that just opened."
+    : "Click <b>Load unpacked</b> and choose the folder that just opened (its path is copied above).";
+  $("ex-path-row").hidden = true; $("ex-ready").textContent = "";
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+}
+document.querySelectorAll("#ex-browser .tab").forEach((t) => (t.onclick = () => showExBrowser(t.dataset.b)));
+document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => {
+  const ok = await copyText($(b.dataset.copy).textContent);
+  b.textContent = ok ? "Copied" : "Select & copy";
+  setTimeout(() => (b.textContent = "Copy"), 1500);
+}));
+$("open-extractor").onclick = () => { showExBrowser(exBrowser); $("extractor-dialog").showModal(); };
+$("ex-close").onclick = () => $("extractor-dialog").close();
+$("ex-prepare").onclick = async () => {
+  try {
+    const r = await api("/api/extractor/setup", { json: { browser: exBrowser === "firefox" ? "firefox" : "chromium" } });
+    $("ex-path").textContent = exBrowser === "firefox" ? r.manifest : r.path;
+    $("ex-path-row").hidden = false;
+    const copied = await copyText(r.path);
+    $("ex-ready").textContent = (r.opened ? "Folder opened. " : "") + (copied ? "Path copied." : "") + ` (version ${r.version})`;
+  } catch (e) { toast(e.message, "error"); }
+};

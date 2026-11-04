@@ -38,12 +38,20 @@ Already use Ollama, LM Studio, llama.cpp or KoboldCpp? Just pick it in **Backend
 
 ### The browser extension
 
-Until it's in the Chrome Web Store / Firefox Add-ons, install it from the [latest release](https://github.com/ErrorC4s/localCAI/releases) or this repo:
+**Easiest:** open the localCAI app and click **Set up the extension** on the start screen. It gets the extension folder ready, opens it, copies its path, and shows the four clicks for your browser (Chrome, Edge, Brave, Opera or Firefox).
 
-- **Chrome / Edge / Brave:** download [`localcai-extractor-0.5.2-chrome.zip`](downloads/localcai-extractor-0.5.2-chrome.zip) and unzip it → open `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → pick the unzipped folder.
-- **Firefox 140+:** download [`localcai-extractor-0.5.2-firefox.zip`](downloads/localcai-extractor-0.5.2-firefox.zip) → open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → pick the zip.
+**Without the app** (Chrome, Edge, Brave, Opera):
 
-More in [`extension/README.md`](extension/README.md). Then open a chat on character.ai, **refresh the page**, click the localCAI icon, press **⏫ Load full history** (fetches the whole chat, about a minute for tens of thousands of messages) and choose **Export .lcai.json**.
+1. Download [`localcai-extractor-0.5.2-chrome.zip`](downloads/localcai-extractor-0.5.2-chrome.zip) and unzip it (right-click → *Extract All*).
+2. Open a new tab and go to `chrome://extensions` (Edge: `edge://extensions`).
+3. Turn on **Developer mode**.
+4. Click **Load unpacked** and choose the unzipped folder, the one that has `manifest.json` directly inside it.
+
+**Firefox 140+:** download [`localcai-extractor-0.5.2-firefox.zip`](downloads/localcai-extractor-0.5.2-firefox.zip) → go to `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → pick the zip. Firefox keeps it until you close the browser.
+
+**Then, for each chat:** open it on character.ai, **refresh the page**, click the localCAI icon → **Load full history** (about a minute for tens of thousands of messages) → **Export .lcai.json**, and drag the file into the app.
+
+More in [`extension/README.md`](extension/README.md).
 
 ## The app
 

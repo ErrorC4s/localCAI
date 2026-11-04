@@ -9,6 +9,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed --name localCAI ^
   --icon assets\logo.ico ^
   --add-data "assets\logo.ico;assets" ^
   --add-data "localcai\webui\static;localcai\webui\static" ^
+  --add-data "extension;extension" ^
   --collect-all webview ^
   packaging\exe_entry.py || (echo Build failed & pause & exit /b 1)
 copy /y dist\localCAI.exe localCAI.exe >nul

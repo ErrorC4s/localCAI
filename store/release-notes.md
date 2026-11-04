@@ -1,4 +1,9 @@
-## localCAI v0.8.35 · Extractor 0.5.2
+## localCAI v0.8.36 · Extractor 0.5.2
+
+- New start screen with three simple steps, and **Set up the extension**: the app now carries the extractor inside it, gets a ready-to-load folder for your browser (Chrome, Edge, Brave/Opera or Firefox), opens it, copies its path, and shows exactly which buttons to click. No more hunting for the right zip or folder.
+- The README's extension instructions are rewritten as short numbered steps.
+
+### Earlier in v0.8.35
 
 - Extractor 0.5.2: pressing Clear while "Load full history" is still running no longer loses the newest messages. Answers to requests sent before Clear are ignored, and the running load stops, so loading again collects the whole chat (before, a late older page could move past the newest one and the collection ended early, "at the first message").
 - Releases now also need the app UI, built-in engine and extension end-to-end tests to pass, not only the unit tests.
