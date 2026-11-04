@@ -149,7 +149,10 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
                      f"clothing) unless this turn changes it; carry ongoing actions on, don't drop or restart them. "
                      f"Mood moves with the story: keep {char}'s current mood and intensity unless what just happened "
                      f"gives a reason to change it; a real reason (a surprise, a hurtful word, a climax, a sudden "
-                     f"danger) can change it at once, otherwise let it shift gradually, never flip for no reason.")
+                     f"danger) can change it at once, otherwise let it shift gradually, never flip for no reason. "
+                     f"Right after a peak (a climax, a scare, crying, a fight) show the aftermath first (breath, "
+                     f"trembling, a dazed or soft moment) before any new mood; a calm, cocky or teasing tone "
+                     f"doesn't appear out of nowhere.")
     if pacing and history and history[-1]["role"] == "user":
         c = continuity_note(history, char, user_name, initiative)
         if c:
@@ -259,6 +262,28 @@ def wants_lead(text: str) -> bool:
     return bool(_LEAD.search(t)) or bool(t) and not re.sub(r"[.…。\s~～*]", "", t)
 
 
+_QUESTION = re.compile(r"[^.!?…~\n\"“”*]{4,}[?？]+")
+
+
+def last_question(reply: str) -> str:
+    """The question or offer at the end of the character's last reply ("Do you want to…?"), or "".
+    Only near the end: an earlier question has usually been moved past within the same reply."""
+    tail = reply[-400:]
+    qs = [q.group(0).strip(" ,\"“”*_") for q in _QUESTION.finditer(tail)]
+    if not qs:
+        return ""
+    q = qs[-1]
+    return (q if len(q) <= 160 else "…" + q[-159:])
+
+
+def user_doing(text: str) -> str:
+    """What the user does with their body this turn (their *actions*, or their narration without the spoken part)."""
+    acts = _ACTION.findall(text)
+    out = " … ".join(a.strip() for a in acts) if acts else re.sub(r"[\"“][^\"”]*[\"”]", " ", text)
+    out = re.sub(r"\s+", " ", out).strip(" .,…")
+    return out if len(out) <= 200 else out[:199] + "…"
+
+
 def continuity_note(history: list[dict], char: str, user: str, initiative: str = "auto") -> str:
     """Keep the scene flowing without jumps.
 
@@ -290,9 +315,19 @@ def continuity_note(history: list[dict], char: str, user: str, initiative: str =
                         f", then {char} may carry the scene on with her own next action, following on from the last one.")
                      .replace("her own", f"{char}'s own"))
     else:
-        parts.append(f"React to what {user} actually did; never add actions for {user} beyond what they wrote."
+        doing = user_doing(last_user)
+        parts.append((f"{user} is doing this right now: {doing}. Start with how {char}'s body and feelings respond "
+                      f"to it (don't skip it or carry on as if it weren't happening), "
+                      if doing else f"React to what {user} actually did first, ")
+                     + f"and never add actions for {user} beyond what they wrote."
                      + ("" if initiative == "follow" else
                         f" Then {char} can continue with a next action of {char}'s own that follows from it."))
+    q = last_question(prev)
+    if q:
+        # 8B models like to stall: ask, get a yes, then ask again in other words or tease instead of going on
+        parts.append(f"{char} last asked or offered: \"{q}\" {user}'s message is the answer. Take it as given "
+                     f"(a yes, even an eager or teasing one, means go ahead now; a no means drop it) and act on it in this reply; don't ask "
+                     f"the same thing again in other words, don't stall, and don't put a new question in its place.")
     return " ".join(parts)
 
 

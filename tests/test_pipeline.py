@@ -1245,3 +1245,30 @@ def test_long_pins_and_examples_are_shortened_to_leave_room_for_the_chat():
     # with room to spare nothing is shortened
     roomy = build_messages(card, hist[-2:], "Sam", max_chars=200000, memories=pins, facts=fs)[0]["content"]
     assert all(p in roomy for p in pins) and card["data"]["mes_example"].strip() in roomy
+
+
+def test_an_answered_question_is_acted_on_and_the_users_action_comes_first():
+    from localcai.runtime.prompt import build_messages, continuity_note, last_question
+    prev = {"role": "assistant", "content": "*I lean closer, smiling.* \"You look tired. Do you want to stay the night "
+                                            "here with me?\" *I tilt my head.*"}
+    yes = {"role": "user", "content": "I rest my head on your shoulder, thought you'd never ask..."}
+    n = continuity_note([prev, yes], "Mira", "Sam")
+    assert "Do you want to stay the night here with me?" in n and "go ahead now" in n and "don't ask" in n
+    assert "Sam is doing this right now: I rest my head on your shoulder" in n and "Start with how Mira's body" in n
+    # only a question near the end counts; a plain statement has none
+    assert last_question("*I wave.* Want tea? *She pours it and sits down by the fire, humming an old song while "
+                         "the rain taps on the window.* " + "*The kettle cools on the stove beside the two cups.* " * 8) == ""
+    assert last_question("*smiles* 要不要留下來？") == "要不要留下來？"
+    assert "last asked" not in continuity_note([{"role": "assistant", "content": "*I wave.* Hi."}, yes], "Mira", "Sam")
+    # spoken-only turns keep their own rule, and still answer the question
+    spoke = continuity_note([prev, {"role": "user", "content": "yes please"}], "Mira", "Sam")
+    assert "Sam only spoke" in spoke and "go ahead now" in spoke
+
+
+def test_mood_rule_and_scene_note_cover_the_aftermath_of_a_peak():
+    from localcai.runtime.prompt import build_messages
+    from localcai.runtime.scene import SCENE_PROMPT
+    hist = [{"role": "assistant", "content": "*I gasp and tremble.*"}, {"role": "user", "content": "*I hold you*"}]
+    last = build_messages({"data": {"name": "Mira"}}, hist, "Sam", scene="Where: bed; Mira: trembling; Mood: afterglow")[-1]["content"]
+    assert "aftermath first" in last and "doesn't appear out of nowhere" in last
+    assert "afterglow" in SCENE_PROMPT

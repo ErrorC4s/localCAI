@@ -1,4 +1,10 @@
-## localCAI v0.8.44
+## localCAI v0.8.45
+
+- Less stalling: when the character's last reply asked or offered something ("Do you want to…?") and you answer, the model is told your message is the answer and to act on it now, instead of asking again in other words, teasing, or putting a new question in its place.
+- Your actions aren't skipped: when you do something (not only talk), the reply starts with how the character's body and feelings respond to it, before her own next move.
+- Mood after a peak: right after a climax, a scare, crying or a fight, the character shows the aftermath first (breath, trembling, a dazed or soft moment) instead of jumping straight to a calm, cocky or teasing tone. The scene note records it too ("afterglow, still catching breath").
+
+### Earlier in localCAI v0.8.44
 
 - Fixed "too long for this model's context" in chats with many long pinned messages. What's sent with every reply (the character, memories, pinned messages, example dialogue, guidance) now always leaves room for the chat itself: when it's too long for the context, the example dialogue is shortened first, then each long pinned message, then the story so far; only if that isn't enough are the oldest pinned messages left out. The character's description and personality, memory facts and rules are never cut. Nothing is changed in your chat; this only affects what's sent to the model.
 - Chat memory says when pinned messages are long enough to be shortened, and how to keep more of them.
