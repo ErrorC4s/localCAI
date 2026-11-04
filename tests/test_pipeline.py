@@ -898,3 +898,10 @@ def test_reply_is_only_saved_onto_the_chat_it_was_based_on():
     assert not chatlog.same_messages(rows[:1], snap)          # rewound → stale
     swiped = [dict(r) for r in rows]; chatlog.add_swipe(swiped[0], "*nods*")
     assert not chatlog.same_messages(swiped, snap)            # another version chosen → stale
+
+
+def test_extension_manifest_fits_the_store_limits():
+    import json
+    m = json.loads((Path(__file__).resolve().parents[1] / "localcai" / "extension" / "manifest.json").read_text("utf-8"))
+    assert len(m["description"]) <= 132, len(m["description"])   # Chrome Web Store rejects longer ones
+    assert len(m["name"]) <= 75

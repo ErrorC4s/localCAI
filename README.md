@@ -42,12 +42,12 @@ Already use Ollama, LM Studio, llama.cpp or KoboldCpp? Just pick it in **Backend
 
 **Without the app** (Chrome, Edge, Brave, Opera):
 
-1. Download [`localcai-extractor-0.5.3-chrome.zip`](downloads/localcai-extractor-0.5.3-chrome.zip) and unzip it (right-click → *Extract All*).
+1. Download [`localcai-extractor-0.5.4-chrome.zip`](downloads/localcai-extractor-0.5.4-chrome.zip) and unzip it (right-click → *Extract All*).
 2. Open a new tab and go to `chrome://extensions` (Edge: `edge://extensions`).
 3. Turn on **Developer mode**.
 4. Click **Load unpacked** and choose the unzipped folder, the one that has `manifest.json` directly inside it.
 
-**Firefox 140+:** download [`localcai-extractor-0.5.3-firefox.zip`](downloads/localcai-extractor-0.5.3-firefox.zip) → go to `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → pick the zip. Firefox keeps it until you close the browser.
+**Firefox 140+:** download [`localcai-extractor-0.5.4-firefox.zip`](downloads/localcai-extractor-0.5.4-firefox.zip) → go to `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → pick the zip. Firefox keeps it until you close the browser.
 
 **Then, for each chat:** open it on character.ai, **refresh the page**, click the localCAI icon → **Load full history** (about a minute for tens of thousands of messages) → **Export .lcai.json**, and drag the file into the app.
 

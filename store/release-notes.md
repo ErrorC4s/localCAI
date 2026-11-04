@@ -1,4 +1,8 @@
-## localCAI v0.8.37 · Extractor 0.5.3
+## localCAI v0.8.38 · Extractor 0.5.4
+
+- Extractor 0.5.4: a shorter extension description that fits the Chrome Web Store's 132-character limit (needed to publish it there). No other changes.
+
+### Earlier in v0.8.37
 
 - Your changes are never undone by a reply: if you edit, rewind or switch versions of messages (or reply from another window) while a reply is being written, the reply isn't saved over them. You get a notice, and the message you sent goes back into the input box.
 - Extractor 0.5.3: after Clear, Load full history always starts again from the newest page, even if you scrolled the chat up in between. Before, the newest messages could be missing while it said it had reached the start.
