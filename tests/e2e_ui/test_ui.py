@@ -439,6 +439,18 @@ def main(shot=None):
             page.click(".char-item:has-text('Rex')")
             page.click("#delete-char")
             expect(page.locator(".char-item")).to_have_count(1)
+            # restoring an old chat of the character that's open shows it in the chat picker at once
+            page.click(".char-item:has-text('Luna')")
+            n_chats = page.locator("#chat-picker option").count()
+            old = Path(home, "library", "trash", "20260101-000000", "chats")
+            old.mkdir(parents=True)
+            src = sorted(Path(home, "library", "chats").glob("Luna.*.jsonl"))[0]
+            (old / src.name).write_bytes(src.read_bytes())
+            page.click("#open-trash")
+            page.locator(".trash-item", has_text="Chat with Luna").locator(".t-restore").click()
+            expect(page.locator("#chat-picker option")).to_have_count(n_chats + 1)
+            expect(page.locator("#chat-picker option", has_text="restored")).to_have_count(1)
+            page.click("#trash-close")
             assert http("POST", "/api/character/delete", {"X-LocalCAI": "1", "Content-Type": "application/json"},
                         b'{"character": "../personas/personas"}') == 400, "delete path traversal"
 

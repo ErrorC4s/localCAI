@@ -232,7 +232,7 @@ async function openCharacter(file, chatFile) {
   pick.innerHTML = "";
   for (const ch of c.chats) {
     const when = new Date(ch.modified * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-    pick.add(new Option(`${when} · ${ch.messages} msgs`, ch.file));
+    pick.add(new Option(`${when} · ${ch.messages} msgs` + (/-restored\d*\.jsonl$/.test(ch.file) ? " · restored" : ""), ch.file));
   }
   pick.hidden = !c.chats.length;
   if (chatFile || c.chats.length) await openChat(chatFile || c.chats[0].file);
@@ -782,6 +782,9 @@ async function openTrash() {
         if (x.kept_cards.length) msg += ` ${x.kept_cards.join(", ")} is in your library again, so its current card was kept; the old chats are back next to the new ones.`;
         toast(msg);
         await loadState(); openTrash();
+        // the open character may have got its old chats back: refresh its chat list (keep the chat on screen)
+        if (S.character && charInfo(S.character)) await openCharacter(S.character, S.chat);
+        else renderCharacters();
       } catch (e) { toast(e.message, "error"); }
     };
     el.querySelector(".t-delete").onclick = async () => {

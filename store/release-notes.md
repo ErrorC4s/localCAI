@@ -1,4 +1,8 @@
-## localCAI v0.8.49
+## localCAI v0.8.50
+
+- Fixed: after restoring from the Trash, the restored chat didn't show up in the chat list at the top until you switched characters. It now appears at once, marked "restored".
+
+### Earlier in localCAI v0.8.49
 
 - **Style** (was Learn style) is now a window you can open any time: the learned style notes and the example dialogue, both editable, plus the habits counted from the character's real C.ai replies (with a switch to turn them off). **Learn from this chat** is in the same window; when it's done the window opens again with what was learned, ready to check and change.
 - **Trash** (bottom of the character list): see what Delete moved away (characters and their chats, with message counts), **Restore** it or **Delete forever**. Restoring a character that you've imported again keeps its current card and brings the old chats back next to the new ones.
