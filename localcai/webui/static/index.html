@@ -34,6 +34,7 @@
     <input id="file-input" type="file" multiple accept=".json,.jsonl,.png,.zip" hidden>
     <p class="hint">Drop <code>.lcai.json</code>, CAI Tools / SillyTavern files, character cards or a <code>.zip</code> anywhere.</p>
     <nav id="characters" class="char-list"></nav>
+    <button class="btn block trash-btn" id="open-trash"><i data-ic="trash"></i> Trash</button>
   </aside>
 
   <main id="main">
@@ -63,7 +64,7 @@
         <button id="new-chat" class="btn"><i data-ic="plus"></i> New chat</button>
         <button id="open-bg" class="btn" title="Background picture for this chat or character"><i data-ic="image"></i><span class="lbl"> Background</span></button>
         <button id="edit-char" class="btn" title="Edit character"><i data-ic="pencil"></i><span class="lbl"> Edit</span></button>
-        <button id="learn-style" class="btn" title="Learn how this character talks from your chat history"><i data-ic="learn"></i><span class="lbl"> Learn style</span></button>
+        <button id="learn-style" class="btn" title="How this character talks: learned style notes, example dialogue and habits (view, edit, learn again)"><i data-ic="learn"></i><span class="lbl"> Style</span></button>
         <button id="open-memory" class="btn" title="Chat memory"><i data-ic="book"></i><span class="lbl"> Memory</span></button>
         <a id="download-card" class="btn" download><i data-ic="download"></i> Card</a>
         <button id="delete-char" class="btn" title="Delete character (moved to the library's trash folder)"><i data-ic="trash"></i></button>
@@ -238,15 +239,36 @@
   </div>
 </dialog>
 
-<dialog id="style-dialog">
-  <h3><i data-ic="learn"></i> <span id="style-title">Learned style</span></h3>
-  <p class="muted small" id="style-where"></p>
-  <pre id="style-notes" class="style-notes"></pre>
-  <p class="small" id="style-examples"></p>
-  <div class="dialog-buttons">
-    <button class="btn" id="style-edit"><i data-ic="pencil"></i> Open Edit</button>
-    <button class="btn primary" id="style-close">OK</button>
+<dialog id="style-dialog" class="wide">
+  <h3><i data-ic="learn"></i> <span id="style-title">Style</span></h3>
+  <p class="small style-just" id="style-just" hidden></p>
+  <div class="step">
+    <b>How they talk (style notes)</b>
+    <p class="muted small" id="style-where"></p>
+    <textarea id="style-notes" rows="9" placeholder="Nothing learned yet. Press Learn from this chat, or write notes yourself: tone, catchphrases, how they narrate…"></textarea>
   </div>
+  <div class="step">
+    <b>Example dialogue</b>
+    <p class="muted small" id="style-ex-hint"></p>
+    <textarea id="style-examples" rows="7" placeholder="&lt;START&gt;&#10;{{user}}: …&#10;{{char}}: …"></textarea>
+  </div>
+  <div class="step">
+    <label class="check-row"><input type="checkbox" id="style-voice-on"> <b id="style-voice-title">Habits counted from their real replies</b></label>
+    <ul id="style-voice" class="small style-voice"></ul>
+  </div>
+  <div class="dialog-buttons">
+    <button class="btn" id="style-learn"><i data-ic="sparkle"></i> Learn from this chat</button>
+    <span class="grow"></span>
+    <button class="btn" id="style-close">Close</button>
+    <button class="btn primary" id="style-save">Save</button>
+  </div>
+</dialog>
+
+<dialog id="trash-dialog" class="wide">
+  <h3><i data-ic="trash"></i> Trash</h3>
+  <p class="muted small">Deleted characters and their chats wait here until you delete them for good. Restoring a character that's in your library again keeps its current card and brings the old chats back next to the new ones.</p>
+  <div id="trash-list"></div>
+  <div class="dialog-buttons"><button class="btn" id="trash-close">Close</button></div>
 </dialog>
 
 <dialog id="memory-dialog">

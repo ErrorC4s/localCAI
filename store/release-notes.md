@@ -1,4 +1,10 @@
-## localCAI v0.8.48
+## localCAI v0.8.49
+
+- **Style** (was Learn style) is now a window you can open any time: the learned style notes and the example dialogue, both editable, plus the habits counted from the character's real C.ai replies (with a switch to turn them off). **Learn from this chat** is in the same window; when it's done the window opens again with what was learned, ready to check and change.
+- **Trash** (bottom of the character list): see what Delete moved away (characters and their chats, with message counts), **Restore** it or **Delete forever**. Restoring a character that you've imported again keeps its current card and brings the old chats back next to the new ones.
+- Learn style no longer overwrites changes made while it was running (it saves onto the card as it is when it finishes), and an example dialogue you edited is yours: Learn style leaves it alone.
+
+### Earlier in localCAI v0.8.48
 
 - **Sounds more like the character from C.ai.** localCAI now counts the character's writing habits from their real C.ai replies in the chat (not the ones written in localCAI): how speech is marked (quotes, bold quotes), bold emphasis, their own laugh, what they call you (and the pet names they never use), stutters, trailing … and —, asides, and stock phrases they never write ("sly grin", "the dim light"…). These go to the model as exact rules, with a one-line reminder on every turn, so the model doesn't drift into its own habits as its replies fill the recent chat.
 - Reply length "like their past replies" now follows the character's real C.ai replies, so replies don't grow longer and longer.

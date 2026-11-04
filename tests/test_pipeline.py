@@ -1324,3 +1324,50 @@ def test_example_dialogue_outlasts_long_pins():
     shown = system.split("[Example dialogue — style reference only]\n", 1)[1]
     assert shown.count("<START>") >= 3            # whole exchanges kept…
     assert "pin 16" in system                     # …while the pins were shortened instead
+
+
+def test_trash_restore_keeps_a_reimported_character_and_brings_old_chats_back(tmp_path):
+    from localcai import chatlog
+    from localcai.library import delete_character, empty_trash, list_library, list_trash, restore_trash
+    lib = tmp_path / "lib"
+    for sub in ("characters", "chats"):
+        (lib / sub).mkdir(parents=True)
+    card = lambda text: json.dumps({"data": {"name": "Mira", "personality": text}})
+    (lib / "characters" / "Mira.card.json").write_text(card("old notes"), "utf-8")
+    chatlog.save(lib / "chats" / "Mira.c1.jsonl", {}, [chatlog.row("Mira", False, "old chat")] * 3)
+    (lib / "chats" / "Mira.c1.scene.json").write_text("{}", "utf-8")
+    delete_character(lib, "Mira")
+    [b] = list_trash(lib)
+    assert b["characters"] == ["Mira"] and b["chats"][0]["messages"] == 3
+    # imported again (same chat file name), then the old one restored
+    (lib / "characters" / "Mira.card.json").write_text(card("new"), "utf-8")
+    chatlog.save(lib / "chats" / "Mira.c1.jsonl", {}, [chatlog.row("Mira", False, "new chat")])
+    out = restore_trash(lib, b["batch"])
+    assert out["kept_cards"] == ["Mira"] and out["renamed"] == ["Mira.c1-restored.jsonl"]
+    assert json.loads((lib / "characters" / "Mira.card.json").read_text("utf-8"))["data"]["personality"] == "new"
+    assert (lib / "chats" / "Mira.c1-restored.scene.json").exists()
+    chats = list_library(lib)["characters"][0]["chats"]
+    assert sorted(c["messages"] for c in chats) == [1, 3]
+    [left] = list_trash(lib)                      # the old card stays in the trash, nothing is lost
+    assert left["characters"] == ["Mira"] and not left["chats"]
+    empty_trash(lib, left["batch"])
+    assert list_trash(lib) == []
+    with pytest.raises(ValueError):
+        restore_trash(lib, "../chats")
+
+
+def test_style_notes_live_in_personality_and_keep_the_users_own_text():
+    from localcai import analyze
+    d = {"personality": "Shy, loves ghosts."}
+    analyze.set_style_notes(d, "- says ke ke ke")
+    assert d["personality"] == f"Shy, loves ghosts.\n\n{analyze.STYLE_HEADER}\n- says ke ke ke"
+    assert analyze.style_notes_of(d) == "- says ke ke ke"
+    analyze.set_style_notes(d, "- new notes")
+    assert d["personality"].count(analyze.STYLE_HEADER) == 1 and analyze.style_notes_of(d) == "- new notes"
+    analyze.set_style_notes(d, "")
+    assert d["personality"] == "Shy, loves ghosts."
+    e = {}
+    analyze.set_style_notes(e, "- learned")
+    assert e["personality"] == "- learned" and analyze.style_notes_of(e) == "- learned"
+    analyze.set_examples(e, "<START>\nx", learned=False)
+    assert not e["extensions"][analyze.AUTO_MARK].get("mes_example")  # edited by the user: kept from now on

@@ -701,33 +701,99 @@ async function watchJob(onDone) {
 }
 $("job-stop").onclick = () => api("/api/job/stop", { json: {} });
 
-$("learn-style").onclick = async () => {
+// ── Style: what the character is told about how they talk (always viewable and editable) ──
+async function openStyle(just) {
+  if (!S.character) return;
+  let r;
+  try { r = await api(`/api/style?character=${enc(S.character)}&chat=${enc(S.chat || "")}`); }
+  catch (e) { return toast(e.message, "error"); }
+  const name = charInfo(S.character).name;
+  $("style-title").textContent = `${name}'s style`;
+  $("style-just").hidden = !just;
+  if (just) $("style-just").textContent = `Just learned from this chat` + (just.examples ? `, with ${just.examples} example exchanges` : "")
+    + `. Read it through and change anything that's off; Save keeps your changes.`;
+  $("style-where").textContent = r.has_own_personality
+    ? `Saved after your own Personality text (which stays as it is). Sent with every reply.`
+    : `Saved as ${name}'s Personality. Sent with every reply.`;
+  $("style-notes").value = r.notes;
+  $("style-examples").value = r.examples;
+  $("style-ex-hint").textContent = r.examples_learned
+    ? "Picked from your chat by Learn style (picked again next time). Once you edit it, it's yours and Learn style leaves it alone."
+    : "Exchanges the model copies the voice and format from. Learn style only fills this in when it's empty.";
+  const v = r.voice;
+  $("style-voice-on").checked = v.on;
+  $("style-voice-title").textContent = v.n ? `Habits counted from ${v.n.toLocaleString()} of ${name}'s real replies (C.ai)` : "Habits counted from real replies";
+  $("style-voice").innerHTML = v.rules.length ? v.rules.map((x) => `<li>${escHtml(x)}</li>`).join("")
+    : `<li>Not enough of ${escHtml(name)}'s replies in this chat yet (needs about 30).</li>`;
+  S.styleBase = { notes: r.notes, examples: r.examples, voice_on: v.on };
+  if (!$("style-dialog").open) $("style-dialog").showModal();
+}
+$("learn-style").onclick = () => (S.character ? openStyle() : toast("Open a character first.", "warn"));
+$("style-close").onclick = () => $("style-dialog").close();
+$("style-save").onclick = async () => {
+  const b = S.styleBase || {}, body = { character: S.character, chat: S.chat || "" };
+  if ($("style-notes").value !== b.notes) body.notes = $("style-notes").value;          // only what changed
+  if ($("style-examples").value !== b.examples) body.examples = $("style-examples").value;
+  if ($("style-voice-on").checked !== b.voice_on) body.voice_on = $("style-voice-on").checked;
+  try {
+    await api("/api/style/save", { json: body });
+    $("style-dialog").close(); toast("Style saved. It's used from the next reply.");
+    if (S.chat) openChat(S.chat);
+  } catch (e) { toast(e.message, "error"); }
+};
+$("style-learn").onclick = async () => {
   if (!S.chat) return toast("Open a chat with some history first.", "warn");
   if (!(await ensureAdult())) return;
-  if (!confirm("Learn how this character talks?\n\nThe model reads a sample of her replies (a minute or two), writes style notes into the character, and picks example dialogues. You can edit or undo it any time with Edit.")) return;
+  if (!confirm("Learn how this character talks from this chat?\n\nThe model reads a sample of their replies (a minute or two) and writes new style notes, replacing the learned ones shown here. Your own Personality text and an example dialogue you edited are kept.")) return;
   try {
     await api("/api/analyze/style", { json: { character: S.character, chat: S.chat } });
+    $("style-dialog").close();
     refreshEngine();
     watchJob(async (j) => {
       await loadState(); await openCharacter(S.character, S.chat);
-      if (!j.error && j.notes) showStyle(j);
+      if (!j.error) openStyle(j);
     });
   } catch (e) { toast(e.message, "error"); }
 };
-// What Learn style wrote, so it's clear it worked and what the character will now be told
-function showStyle(j) {
-  const name = charInfo(S.character).name;
-  $("style-title").textContent = `Learned ${name}'s style`;
-  $("style-where").textContent = j.added
-    ? `Added to the end of ${name}'s Personality (your own text there is kept). It's sent with every reply.`
-    : `Saved as ${name}'s Personality (replacing the notes from the last time). It's sent with every reply.`;
-  $("style-notes").textContent = j.notes;
-  $("style-examples").textContent = j.examples
-    ? `Also picked ${j.examples} example exchanges from your chat as the Example dialogue.` : "";
-  $("style-dialog").showModal();
+
+// ── Trash: deleted characters and chats, to restore or delete for good ──
+function trashWhen(batch) {
+  const m = /(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)(\d\d)/.exec(batch);
+  if (!m) return batch;
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).toLocaleString();
 }
-$("style-close").onclick = () => $("style-dialog").close();
-$("style-edit").onclick = () => { $("style-dialog").close(); $("edit-char").click(); };
+async function openTrash() {
+  let r;
+  try { r = await api("/api/trash"); } catch (e) { return toast(e.message, "error"); }
+  const list = $("trash-list");
+  list.innerHTML = r.batches.length ? "" : `<p class="muted">The trash is empty.</p>`;
+  for (const b of r.batches) {
+    const el = document.createElement("div");
+    el.className = "trash-item";
+    const mb = (b.bytes / 1048576).toFixed(b.bytes > 10485760 ? 0 : 1);
+    el.innerHTML = `<b>Deleted ${escHtml(trashWhen(b.batch))}</b> <span class="muted small">· ${mb} MB</span><ul>`
+      + b.characters.map((c) => `<li>Character: ${escHtml(c)}</li>`).join("")
+      + b.chats.map((c) => `<li>Chat with ${escHtml(c.character)}: ${c.messages.toLocaleString()} messages</li>`).join("")
+      + `</ul><div class="row"><button class="btn t-restore">Restore</button><button class="btn t-delete">Delete forever</button></div>`;
+    el.querySelector(".t-restore").onclick = async () => {
+      try {
+        const x = await api("/api/trash/restore", { json: { batch: b.batch } });
+        let msg = "Restored.";
+        if (x.kept_cards.length) msg += ` ${x.kept_cards.join(", ")} is in your library again, so its current card was kept; the old chats are back next to the new ones.`;
+        toast(msg);
+        await loadState(); openTrash();
+      } catch (e) { toast(e.message, "error"); }
+    };
+    el.querySelector(".t-delete").onclick = async () => {
+      if (!confirm("Delete these for good? This can't be undone.")) return;
+      try { await api("/api/trash/delete", { json: { batch: b.batch } }); openTrash(); } catch (e) { toast(e.message, "error"); }
+    };
+    list.appendChild(el);
+  }
+  if (!$("trash-dialog").open) $("trash-dialog").showModal();
+}
+$("open-trash").onclick = openTrash;
+$("trash-close").onclick = () => $("trash-dialog").close();
 
 async function openMemory() {
   const r = await api(`/api/chat?character=${enc(S.character)}&chat=${enc(S.chat)}`);

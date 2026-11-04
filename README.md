@@ -69,7 +69,8 @@ Run `localcai` and it opens at `http://127.0.0.1:8765`:
   - **🗑 Delete** a message, or **⤺ Rewind** to delete it and everything after
 - **🖼 Background**: set your own picture as a chat's background (✕ to remove)
 - **✎ Edit character**: description, personality, scenario, greeting, example dialogue, custom instructions, pronouns, rules, and reply length (like their past replies, short, medium, long)
-- **🔍 Learn style**: the model reads a sample of the character's replies from your history and writes style notes (tone, catchphrases, how they narrate) into the character, plus picks example dialogues. Great for characters whose definition is private
+- **🔍 Style**: view and edit how the character talks: style notes, example dialogue, and the habits counted from their real C.ai replies (laugh, pet names, how speech is marked…). **Learn from this chat** has the model read a sample of their replies and write the notes, plus pick example dialogues. Great for characters whose definition is private
+- **🗑 Trash**: deleted characters and chats wait there; restore them or delete them for good
 - **📖 Chat memory**: **memory facts** like C.ai's Memory page (grouped by who they're about, with categories; add, edit, delete, usage bar; your C.ai memory imported; new facts picked up from the chat every few replies), see what's always remembered (pins), and edit *the story so far*, or **✨ generate it from history** (last 500 / 2,000 / 5,000 messages or the whole chat; stoppable)
 - **Recall**: on every reply, moments from the whole chat that match what you're talking about are found (fast keyword search, works for English and Chinese) and added to the prompt, so old events aren't forgotten
 - **⬇ Card**: download a Character Card V2 PNG for SillyTavern, RisuAI, etc.

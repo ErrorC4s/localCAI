@@ -9,6 +9,7 @@ Default location: ~/.localcai/library (override with the LOCALCAI_HOME env var).
 from __future__ import annotations
 
 import json
+import shutil
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -241,3 +242,70 @@ def delete_character(lib: Path, file_stem: str) -> int:
         f.replace(dest)
         moved += 1
     return moved
+
+
+# ── trash: what Delete moved away, to look at, restore or delete for good ─────────────────────
+
+def _trash_batch(lib: Path, batch: str) -> Path:
+    if not batch or "/" in batch or "\\" in batch or batch.startswith("."):
+        raise ValueError("bad name")
+    p = lib / "trash" / batch
+    if not p.is_dir():
+        raise FileNotFoundError(batch)
+    return p
+
+
+def list_trash(lib: Path) -> list[dict]:
+    """Newest first: each deletion with the characters and chats in it."""
+    out = []
+    root = lib / "trash"
+    for b in sorted((d for d in root.iterdir() if d.is_dir()), reverse=True) if root.is_dir() else []:
+        chars, chats, size = [], [], 0
+        for f in b.rglob("*"):
+            if f.is_file():
+                size += f.stat().st_size
+        for jp in sorted((b / "characters").glob("*.card.json")):
+            try:
+                chars.append(json.loads(jp.read_text("utf-8")).get("data", {}).get("name") or jp.name[:-10])
+            except (OSError, ValueError):
+                chars.append(jp.name[:-10])
+        for cp in sorted((b / "chats").glob("*.jsonl")):
+            with cp.open("rb") as fh:
+                n = max(0, sum(1 for _ in fh) - 1)
+            chats.append({"file": cp.name, "character": cp.name.split(".")[0], "messages": n})
+        out.append({"batch": b.name, "characters": chars, "chats": chats, "bytes": size})
+    return out
+
+
+def restore_trash(lib: Path, batch: str) -> dict:
+    """Move a deletion back. A character that's in the library again (e.g. imported anew) keeps its current
+    card; its old chats come back next to the new ones (renamed "-restored" if the same name is taken)."""
+    b = _trash_batch(lib, batch)
+    kept_cards, renamed, restored = [], [], 0
+    for f in sorted((b / "characters").glob("*")) if (b / "characters").is_dir() else []:
+        dest = lib / "characters" / f.name
+        if dest.exists():
+            if f.name.endswith(".card.json"):
+                kept_cards.append(f.name[:-10])
+            continue
+        f.replace(dest)
+        restored += 1
+    chat_dir = b / "chats"
+    for cp in sorted(chat_dir.glob("*.jsonl")) if chat_dir.is_dir() else []:
+        stem = cp.name[:-6]
+        new_stem, n = stem, 1
+        while (lib / "chats" / f"{new_stem}.jsonl").exists():
+            new_stem = f"{stem}-restored" + (f"{n}" if n > 1 else "")
+            n += 1
+        if new_stem != stem:
+            renamed.append(f"{new_stem}.jsonl")
+        for f in sorted(chat_dir.glob(f"{stem}.*")):  # the chat and its files (scene notes, background)
+            f.replace(lib / "chats" / f"{new_stem}{f.name[len(stem):]}")
+            restored += 1
+    if not any(f.is_file() for f in b.rglob("*")):  # leftovers (the old card of a character that's back) stay
+        shutil.rmtree(b, ignore_errors=True)
+    return {"restored": restored, "kept_cards": kept_cards, "renamed": renamed}
+
+
+def empty_trash(lib: Path, batch: str) -> None:
+    shutil.rmtree(_trash_batch(lib, batch))

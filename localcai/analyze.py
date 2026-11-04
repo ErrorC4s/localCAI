@@ -156,3 +156,45 @@ def story_summary(rows: list[dict], char: str, user: str, ask: Callable[[str], s
         if stopped():
             break
     return notes[0]
+
+
+# ── the learned style as its own thing (the Style window), stored in the card's personality ──────
+STYLE_HEADER = "[Style notes from your chats]"
+
+
+def _auto(d: dict) -> dict:
+    return d.setdefault("extensions", {}).setdefault(AUTO_MARK, {})
+
+
+def style_notes_of(d: dict) -> str:
+    """The style notes in a card: the whole personality when Learn style wrote it, else the part after the header."""
+    p = d.get("personality") or ""
+    if (d.get("extensions") or {}).get(AUTO_MARK, {}).get("personality"):
+        return p.strip()
+    return p.split(STYLE_HEADER, 1)[1].strip() if STYLE_HEADER in p else ""
+
+
+def set_style_notes(d: dict, notes: str) -> None:
+    """Put style notes in the card, keeping a personality the user wrote themselves (notes go after it)."""
+    notes = (notes or "").strip()
+    auto = _auto(d)
+    own = "" if auto.get("personality") else (d.get("personality") or "").split(STYLE_HEADER, 1)[0].rstrip()
+    if own:
+        d["personality"] = own + (f"\n\n{STYLE_HEADER}\n{notes}" if notes else "")
+        auto.pop("personality", None)
+    else:
+        d["personality"] = notes
+        if notes:
+            auto["personality"] = True
+        else:
+            auto.pop("personality", None)
+
+
+def set_examples(d: dict, examples: str, learned: bool) -> None:
+    """learned: written by Learn style (replaced next time); otherwise the user's own (kept)."""
+    d["mes_example"] = (examples or "").strip()
+    auto = _auto(d)
+    if learned and d["mes_example"]:
+        auto["mes_example"] = True
+    else:
+        auto.pop("mes_example", None)

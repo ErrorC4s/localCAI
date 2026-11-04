@@ -4,6 +4,7 @@ Run: python tests/e2e_ui/test_ui.py [screenshot.png]
 Needs: pip install playwright (browsers installed).
 """
 import json
+import re
 import os
 import subprocess
 import sys
@@ -308,14 +309,30 @@ def main(shot=None):
             assert card["data"]["description"].endswith("Loves riddles.")
             assert card["data"]["scenario"] == "Written meanwhile.", "Edit only saves the fields changed in it"
             # 🔍 learn style from history → personality + example dialogue written into the card
-            page.click("#learn-style")   # confirm() accepted by the dialog handler
+            page.click("#learn-style")                                    # the Style window, any time
+            expect(page.locator("#style-dialog")).to_be_visible()
+            page.click("#style-learn")   # confirm() accepted by the dialog handler
             expect(page.locator(".toast", has_text="Learned Luna's style")).to_have_count(1, timeout=20000)
-            expect(page.locator("#style-dialog")).to_be_visible()          # shows what was learned
-            expect(page.locator("#style-notes")).to_contain_text("Darjeeling")
+            expect(page.locator("#style-dialog")).to_be_visible()          # opens again with what was learned
+            expect(page.locator("#style-just")).to_be_visible()
+            expect(page.locator("#style-notes")).to_have_value(re.compile("Darjeeling"))
+            if os.environ.get("LCAI_SHOT_STYLE"):
+                page.locator("#style-dialog").screenshot(path=os.environ["LCAI_SHOT_STYLE"])
             page.click("#style-close")
             card = json.loads((Path(home) / "library" / "characters" / "Luna.card.json").read_text("utf-8"))
             assert "Darjeeling" in card["data"]["personality"], "style notes saved"
             assert "Hello~" in card["data"]["mes_example"], "a creator's own example dialogue is never overwritten"
+            # …and stays editable later from the same button
+            page.click("#learn-style")
+            expect(page.locator("#style-just")).to_be_hidden()
+            page.fill("#style-notes", "- Speaks softly, ends lines with ~")
+            page.click("#style-save")
+            expect(page.locator(".toast", has_text="Style saved")).to_have_count(1)
+            card = json.loads((Path(home) / "library" / "characters" / "Luna.card.json").read_text("utf-8"))
+            assert "Speaks softly" in card["data"]["personality"] and "Hello~" in card["data"]["mes_example"]
+            page.fill("#input", "style?"); page.click("#send"); page.wait_for_timeout(800)
+            sent = json.load(open(last_path, encoding="utf-8"))
+            assert "Speaks softly, ends lines with ~" in sent["messages"][0]["content"], "edited style used"
 
             # 📖 chat memory: generate the story so far, then it's used in the prompt
             page.click("#open-memory")
@@ -409,6 +426,19 @@ def main(shot=None):
             page.click("#delete-char")  # confirm() accepted by the handler registered above
             expect(page.locator(".char-item")).to_have_count(1)
             assert list(Path(home, "library", "trash").rglob("Rex.card.json")), "Rex should be in trash"
+            # 🗑 Trash: see what was deleted, restore it
+            page.click("#open-trash")
+            item = page.locator(".trash-item", has_text="Character: Rex")
+            expect(item).to_have_count(1)
+            if os.environ.get("LCAI_SHOT_TRASH"):
+                page.screenshot(path=os.environ["LCAI_SHOT_TRASH"])
+            item.locator(".t-restore").click()
+            expect(page.locator(".char-item", has_text="Rex")).to_have_count(1)
+            expect(page.locator(".trash-item", has_text="Character: Rex")).to_have_count(0)
+            page.click("#trash-close")
+            page.click(".char-item:has-text('Rex')")
+            page.click("#delete-char")
+            expect(page.locator(".char-item")).to_have_count(1)
             assert http("POST", "/api/character/delete", {"X-LocalCAI": "1", "Content-Type": "application/json"},
                         b'{"character": "../personas/personas"}') == 400, "delete path traversal"
 

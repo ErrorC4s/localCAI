@@ -27,13 +27,13 @@ from ..engine import ENGINE, models_dir
 from .. import analyze
 from .. import facts as factmem
 from ..recall import recall
-from ..library import delete_character, import_into, list_library
+from ..library import delete_character, empty_trash, import_into, list_library, list_trash, restore_trash
 from ..runtime import BACKENDS, build_messages, list_models, resolve_base_url, stream_chat
 from ..runtime.guard import check_reply, same_reply, spoken_part
 from ..runtime.scene import build_state, save_state, state_for
 from ..runtime.client import ContextTooLong, other_speakers, strip_markers, strip_meta, strip_name_prefix, trim_to_sentence
 from ..runtime.prompt import PRONOUN_CHOICES, reply_words_for, words_bucket
-from ..runtime.voice import for_chat as voice_profile
+from ..runtime.voice import for_chat as voice_profile, rules as voice_rules
 from ..safety import HELPLINES, load_config, looks_like_crisis, save_config
 
 STATIC = Path(__file__).parent / "static"
@@ -206,6 +206,10 @@ def make_handler(app: App, port: int):
                         return self.send_json({"models": list_models(url)})
                     except OSError as e:
                         return self.send_json({"models": [], "error": f"No model runner found at {url}. Start Ollama / LM Studio / llama.cpp, or pick another backend."})
+                if u.path == "/api/style":
+                    return self.send_json(self.style_info(q["character"], q.get("chat", "")))
+                if u.path == "/api/trash":
+                    return self.send_json({"batches": list_trash(app.lib)})
                 if u.path == "/api/facts":
                     card = app.card(q["character"])
                     p = app.safe_file("chats", q["chat"], "")
@@ -289,6 +293,27 @@ def make_handler(app: App, port: int):
                     with app.lock:
                         n = delete_character(app.lib, self.body_json()["character"])
                     return self.send_json({"moved": n})
+                if path == "/api/style/save":
+                    body = self.body_json()
+                    jp = app.safe_file("characters", body["character"], ".card.json")
+                    with app.lock:
+                        card = json.loads(jp.read_text("utf-8"))
+                        d = card.setdefault("data", {})
+                        if "notes" in body:
+                            analyze.set_style_notes(d, str(body["notes"])[:20000])
+                        if "examples" in body:
+                            analyze.set_examples(d, str(body["examples"])[:40000], learned=False)
+                        if "voice_on" in body:
+                            d.setdefault("extensions", {}).setdefault("localcai", {})["voice_off"] = not body["voice_on"]
+                        self.write_card(jp, card)
+                    return self.send_json(self.style_info(body["character"], str(body.get("chat") or "")))
+                if path in ("/api/trash/restore", "/api/trash/delete"):
+                    batch = str(self.body_json().get("batch", ""))
+                    with app.lock:
+                        if path.endswith("restore"):
+                            return self.send_json(restore_trash(app.lib, batch))
+                        empty_trash(app.lib, batch)
+                    return self.send_json({"ok": True})
                 if path == "/api/chat/background":
                     return self.chat_background_upload()
                 if path == "/api/character/background-remove":
@@ -333,6 +358,29 @@ def make_handler(app: App, port: int):
                 self.send_json({"error": "not found"}, 404)
             except (FileNotFoundError, KeyError, ValueError) as e:
                 self.send_json({"error": str(e)}, 400)
+
+        def write_card(self, jp: Path, card: dict) -> None:
+            jp.write_text(json.dumps(card, ensure_ascii=False, indent=2), "utf-8")
+            pp = jp.with_name(jp.name.replace(".card.json", ".card.png"))
+            if pp.exists():
+                from ..exporters import embed_card_in_png
+                pp.write_bytes(embed_card_in_png(pp.read_bytes(), card))  # keep the PNG card in sync
+
+        def style_info(self, character: str, chat: str) -> dict:
+            card = app.card(character)
+            d = card.get("data", card)
+            local = (d.get("extensions") or {}).get("localcai") or {}
+            voice, rules = {}, []
+            if chat:
+                _, rows = chatlog.load(app.safe_file("chats", chat, ""))
+                voice = voice_profile(app.safe_file("chats", chat, ""), rows)
+                _, user = app.persona()
+                rules = voice_rules(voice, d.get("name", "Character"), user)
+            return {"notes": analyze.style_notes_of(d), "examples": d.get("mes_example") or "",
+                    "examples_learned": bool(((d.get("extensions") or {}).get(analyze.AUTO_MARK) or {}).get("mes_example")),
+                    "has_own_personality": bool((d.get("personality") or "").split(analyze.STYLE_HEADER, 1)[0].strip())
+                                           and not ((d.get("extensions") or {}).get(analyze.AUTO_MARK) or {}).get("personality"),
+                    "voice": {"n": voice.get("n", 0), "rules": rules, "on": not local.get("voice_off")}}
 
         def facts_info(self, facts: list[dict]) -> dict:
             return {"facts": facts, "used": factmem.used(facts), "limit": factmem.LIMIT}
@@ -517,24 +565,19 @@ def make_handler(app: App, port: int):
                             url, model, p, analyze.STYLE_SYSTEM, on_text=writing))
                         JOB.update(message="Picking example dialogues…", progress=0.9)
                         examples = analyze.pick_examples(rows, user, char)
-                        auto = d.setdefault("extensions", {}).setdefault(analyze.AUTO_MARK, {})
-                        if not d.get("personality") or auto.get("personality"):
-                            d["personality"] = notes
-                            auto["personality"] = True
-                        else:
-                            d["personality"] = d["personality"].rstrip() + "\n\n[Style notes from your chats]\n" + notes
-                        if examples and (not d.get("mes_example") or auto.get("mes_example")):
-                            d["mes_example"] = examples
-                            auto["mes_example"] = True
                         with app.lock:
-                            card_path.write_text(json.dumps(card, ensure_ascii=False, indent=2), "utf-8")
-                            pp = card_path.with_name(card_path.name.replace(".card.json", ".card.png"))
-                            if pp.exists():
-                                from ..exporters import embed_card_in_png
-                                pp.write_bytes(embed_card_in_png(pp.read_bytes(), card))
+                            # onto the card as it is now (it may have been edited while the model was writing)
+                            card = json.loads(card_path.read_text("utf-8"))
+                            d = card.setdefault("data", {})
+                            auto = d.setdefault("extensions", {}).setdefault(analyze.AUTO_MARK, {})
+                            added = bool(d.get("personality")) and not auto.get("personality")
+                            analyze.set_style_notes(d, notes)
+                            new_examples = bool(examples) and (not d.get("mes_example") or auto.get("mes_example"))
+                            if new_examples:
+                                analyze.set_examples(d, examples, learned=True)
+                            self.write_card(card_path, card)
                         JOB.update(message=f"Learned {char}'s style.", progress=1.0, notes=notes,
-                                   examples=examples.count("<START>") if examples and auto.get("mes_example") else 0,
-                                   added=not auto.get("personality"))
+                                   examples=examples.count("<START>") if new_examples else 0, added=added)
                     else:
                         part = rows[-scope:] if scope else rows
                         def prog(done, total):
@@ -614,7 +657,8 @@ def make_handler(app: App, port: int):
             own_length = ((card.get("data", card).get("extensions") or {}).get("localcai") or {}).get("reply_length")
             length_setting = str(own_length or s.get("reply_length") or "auto")
             # the character's writing habits, counted from their real (C.ai) replies; cached per chat
-            voice = voice_profile(path, rows)
+            voice_off = ((card.get("data", card).get("extensions") or {}).get("localcai") or {}).get("voice_off")
+            voice = {} if voice_off else voice_profile(path, rows)
             target_words = (words_bucket(voice["median_words"]) if length_setting == "auto" and voice
                             else reply_words_for(length_setting, history, card))
             instruction = str(body.get("instruction") or "")[:600]

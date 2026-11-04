@@ -246,5 +246,10 @@ dialog.wide { width: min(620px, 92vw); }
 .fact-tabs .tab { font-size: 12px; padding: 3px 10px; }
 #facts-list { border: 1px solid var(--line); border-radius: 10px; padding: 2px 10px; min-height: 48px; gap: 0; }
 #facts-list > .muted { padding: 10px 0; }
-.style-notes { white-space: pre-wrap; max-height: 50vh; overflow-y: auto; background: var(--panel2); border-radius: 10px;
-  padding: 10px 12px; font: inherit; font-size: 13px; line-height: 1.5; }
+#style-dialog textarea { width: 100%; font-size: 13px; line-height: 1.45; }
+.style-voice { margin: 0; padding-left: 18px; color: var(--muted); }
+.style-voice li { margin: 2px 0; }
+.style-just { background: var(--panel2); border-left: 3px solid var(--accent, #7c6cff); padding: 6px 10px; border-radius: 6px; }
+.trash-btn { margin-top: auto; opacity: .8; }
+.trash-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.trash-item ul { margin: 4px 0 8px; padding-left: 18px; }
