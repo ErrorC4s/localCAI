@@ -247,10 +247,63 @@ async function interleaved() {
   console.log(`interleaved oldest/newest pages: ${a.s.job.message}; ids t0..t99 in order`);
 }
 
+// Same start, but Stop while the middle pages are still missing (the newest page and, from the page itself,
+// the oldest one are in), then Load full history again: it must carry on and fetch the middle pages.
+async function stopInGap() {
+  const ctx = await chromium.launchPersistentContext(mkdtempSync(path.join(tmpdir(), "lcai-")), {
+    headless: true, channel: "chromium", args: [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`] });
+  await ctx.route("https://character.ai/**", (r) => r.fulfill({ status: 200, contentType: "text/html", body: HTML }));
+  const pageAsked = new Set();
+  let holdP1 = true;
+  await ctx.route("https://neo.character.ai/turns/**", async (r) => {
+    const req = r.request();
+    const tok = new URL(req.url()).searchParams.get("next_token");
+    const headers = { "Access-Control-Allow-Origin": "https://character.ai", "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": "x-from-page" };
+    if (req.method() === "OPTIONS") return r.fulfill({ status: 204, headers });
+    const fromPage = !!req.headers()["x-from-page"];
+    if (fromPage) pageAsked.add(tok);
+    if (fromPage && tok === "p" + (PAGES - 1)) await new Promise((ok) => setTimeout(ok, 1200));  // after our newest
+    if (!fromPage && tok === "p1" && holdP1) { holdP1 = false; await new Promise((ok) => setTimeout(ok, 3500)); }
+    r.fulfill({ status: 200, contentType: "application/json", headers, body: JSON.stringify(page(tok ? +tok.slice(1) : 0)) });
+  });
+  const tab = await ctx.newPage();
+  await tab.goto("https://character.ai/chat/x");
+  await tab.waitForTimeout(800);
+  const popup = await ctx.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup/popup.html`);
+  const ask = (type) => popup.evaluate(async (type) => {
+    const [t] = await chrome.tabs.query({ url: "https://character.ai/*" });
+    return chrome.tabs.sendMessage(t.id, { type });
+  }, type);
+  const scrollUp = () => tab.evaluate(() => { const l = document.getElementById("list"); l.scrollTop = -l.scrollHeight;
+    l.dispatchEvent(new Event("scroll")); });
+  for (let i = 0; i < 20 && !pageAsked.has("p" + (PAGES - 2)); i++) { await scrollUp(); await tab.waitForTimeout(250); }
+  await tab.waitForTimeout(300);
+  await ask("clear");
+  for (let i = 0; i < 20 && !pageAsked.has("p" + (PAGES - 1)); i++) { await scrollUp(); await tab.waitForTimeout(100); }
+  await ask("loadAll");               // newest page comes at once; p1 is held; the page's oldest comes at ~1.2s
+  await tab.waitForTimeout(2000);
+  const mid = await ask("stats");
+  await ask("stopLoad");
+  let s;
+  for (let i = 0; i < 20; i++) { await tab.waitForTimeout(300); s = await ask("stats"); if (s.job.done && !s.job.running) break; }
+  await ask("loadAll");
+  for (let i = 0; i < 60; i++) { await tab.waitForTimeout(500); s = await ask("stats"); if (s.job.done && !s.job.running) break; }
+  const doc = (await ask("export")).doc;
+  await ctx.close();
+  const ids = ((doc.chats || [])[0]?.turns || []).map((t) => t.id);
+  const want = Array.from({ length: PAGES * PER }, (_, i) => "t" + i);
+  if (JSON.stringify(ids) !== JSON.stringify(want))
+    fail(`Stop in the gap, then Load again left a gap: ${ids.length} ids (had ${mid.turns} at Stop) · ${s.job.message}`);
+  console.log(`stop in the gap, load again: ${s.job.message} (had ${mid.turns} at Stop); ids t0..t99 in order`);
+}
+
 const fail = (m) => { console.error("FAIL:", m); process.exit(1); };
 await run(true);
 await run(false);
 await race();
 await clearThenScroll();
 await interleaved();
+await stopInGap();
 console.log("LOAD-ALL PASS");

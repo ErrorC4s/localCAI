@@ -1,4 +1,11 @@
-## localCAI v0.8.40 · Extractor 0.5.5
+## localCAI v0.8.41 · Extractor 0.5.6
+
+- Extractor 0.5.6: after Clear, stopping Load full history while pages in the middle were still missing and then pressing it again could stop at once ("Already at the first message") and leave those pages out. After Clear, the collection only counts as complete once a Load full history run (or a stopped run that you continue) has itself walked every page down to the first message; pressing it again always carries on from where it stopped.
+- Memory facts you wrote yourself stay yours: if a later C.ai import has the same fact and then C.ai changes it, you're asked (Use C.ai's / Keep mine) instead of it being overwritten.
+- A C.ai fact whose category you renamed (say hometown → home) is still recognised when C.ai updates it: you're asked, no duplicate is added.
+- A C.ai fact edited in v0.8.39 and then deleted stays deleted on re-import.
+
+### Earlier in v0.8.40 · Extractor 0.5.5
 
 - Extractor 0.5.5: Load full history no longer leaves a gap when C.ai's page and the extension are loading pages at the same time (for example: Clear, scroll up, then Load full history while the page is still fetching). Before, the oldest page arriving first could end the load early, missing the messages in between while it said it had reached the first message, and pressing it again didn't fill the gap. Each Load full history run now keeps its own place and is only done when it has walked every page itself.
 - Memory facts from chats imported before v0.8.39 can now be edited and deleted (before, the first edit or delete said the fact "isn't there any more").

@@ -1091,3 +1091,65 @@ def test_api_edit_and_delete_old_card_facts(tmp_path, monkeypatch):
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+def test_a_fact_the_user_wrote_stays_theirs_when_cai_has_it_too():
+    from localcai import facts
+    card = {"data": {"name": "Luna"}}
+    meta = {"chat_metadata": {facts.KEY: []}}
+    facts.apply_to_chat(meta, card, "add", {"about": "Alex", "category": "hometown", "value": "Porto"})
+    out = _reimport(meta, [{"about": "Alex", "category": "hometown", "value": "Porto"}])
+    assert len(out) == 1 and out[0]["source"] == "you"
+    out = _reimport({"chat_metadata": {facts.KEY: out}}, [{"about": "Alex", "category": "hometown", "value": "Madrid"}])
+    assert [(f["value"], f.get("pending")) for f in out] == [("Porto", "Madrid")]  # asks, doesn't overwrite
+    took = facts.apply(out, "use-cai", {"id": out[0]["id"]})
+    assert took[0]["value"] == "Madrid" and took[0]["source"] == "cai"
+    # chosen C.ai's: the next C.ai change just follows
+    out = _reimport({"chat_metadata": {facts.KEY: took}}, [{"about": "Alex", "category": "hometown", "value": "Rome"}])
+    assert [(f["value"], f.get("pending")) for f in out] == [("Rome", None)]
+
+
+def test_renamed_category_still_matches_its_cai_fact():
+    from localcai import facts
+    card = {"data": {"name": "Luna"}}
+    meta = {"chat_metadata": {facts.KEY: facts.from_cai([{"about": "Alex", "category": "hometown", "value": "Lisbon"}])}}
+    fid = facts.chat_facts(meta, card)[0]["id"]
+    facts.apply_to_chat(meta, card, "edit", {"id": fid, "category": "home", "value": "Lisbon"})
+    out = _reimport(meta, [{"about": "Alex", "category": "hometown", "value": "Madrid"}])
+    assert [(f["category"], f["value"], f.get("pending")) for f in out] == [("home", "Lisbon", "Madrid")]
+
+
+def test_deleting_an_old_edited_fact_without_origin_stays_deleted():
+    from localcai import facts
+    card = {"data": {"name": "Luna"}}
+    meta = {"chat_metadata": {facts.KEY: [
+        {"id": "a1", "about": "Alex", "category": "hometown", "value": "Porto", "source": "cai", "edited": True}]}}
+    facts.apply_to_chat(meta, card, "delete", {"id": "a1"})
+    for _ in range(2):
+        out = _reimport(meta, [{"about": "Alex", "category": "hometown", "value": "Lisbon"}])
+        assert out == []
+        meta["chat_metadata"][facts.KEY] = out
+
+
+def test_import_path_keeps_a_users_fact_protected(tmp_path):
+    """Through the real import: the user writes a fact, C.ai later has the same one, then changes it."""
+    import copy
+    from localcai import chatlog, facts
+    from localcai.library import import_into
+    full = json.loads((FX / "extension_export.lcai.json").read_text("utf-8"))
+    full["chats"][0]["memories"] = []
+    (tmp_path / "a.lcai.json").write_text(json.dumps(full), "utf-8")
+    import_into(tmp_path / "a.lcai.json", tmp_path / "lib")
+    f = next((tmp_path / "lib" / "chats").glob("Luna.*.jsonl"))
+    card = {"data": {"name": "Luna"}}
+    meta, rows = chatlog.load(f)
+    facts.apply_to_chat(meta, card, "add", {"about": "Alex", "category": "hometown", "value": "Porto"})
+    chatlog.save(f, meta, rows)
+    for value in ("Porto", "Madrid"):
+        doc = copy.deepcopy(full)
+        doc["chats"][0]["memories"] = [{"about": "Alex", "category": "hometown", "value": value}]
+        (tmp_path / "b.lcai.json").write_text(json.dumps(doc), "utf-8")
+        import_into(tmp_path / "b.lcai.json", tmp_path / "lib")
+    meta, _ = chatlog.load(f)
+    got = facts.chat_facts(meta, card)
+    assert [(x["value"], x.get("pending"), x["source"]) for x in got] == [("Porto", "Madrid", "you")]

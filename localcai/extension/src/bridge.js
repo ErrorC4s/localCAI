@@ -6,7 +6,10 @@
   // History paging: C.ai's turns endpoint returns meta.next_token while older messages exist.
   // chatId/nextToken: where the oldest page we've seen says older messages continue.
   const paging = { lastPageAt: 0, reachedStart: false, chatId: null, nextToken: null, cleared: false,
-                   clearedAt: 0, round: 0, needNewest: false, complete: false, resume: null };
+                   clearedAt: 0, round: 0, needNewest: false, complete: false, resume: null,
+                   gap: false };
+  // gap: since Clear, the collection may have a hole (the newest page and whatever the page loaded afterwards
+  // need not join up). Only a Load full history run that reaches the first message on its own closes it.
   // reachedStart/nextToken follow the pages the C.ai page itself loads. "complete" means the collection holds
   // every page from the newest to the first without a gap: set only by an unbroken run. A page the C.ai page
   // loads on its own is merged in, but never ends or steers a Load full history run (which keeps its own
@@ -35,7 +38,7 @@
       if (!data.turns.length || !data.meta || !data.meta.next_token) {
         paging.reachedStart = true;
         // the page's own loading runs newest → oldest without gaps, unless Clear removed pages in between
-        if (!paging.needNewest) paging.complete = true;
+        if (!paging.gap) paging.complete = true;
       } else paging.nextToken = data.meta.next_token; // pages arrive newest → oldest
     }
   }
@@ -86,7 +89,7 @@
     Object.assign(job, { running: true, done: false, stopped: false, message: "Looking for the chat…" });
     try {
       job.turns = turnCount();
-      if (paging.complete && !paging.needNewest) {
+      if (paging.complete && !paging.needNewest && !paging.gap) {
         job.message = `Already at the first message. ${job.turns} messages loaded.`; return;
       }
       if (await fastLoad()) return;         // direct page-by-page history requests
@@ -129,8 +132,10 @@
     // since it opened, so nothing is skipped).
     const round = paging.round;   // Clear starts a new round; this loop's late answers are then dropped
     let cursor;
+    const resume = paging.resume && paging.resume.round === round && paging.resume.chatId === paging.chatId;
     if (paging.needNewest || paging.cleared) cursor = null;
-    else if (paging.resume && paging.resume.round === round && paging.resume.chatId === paging.chatId) cursor = paging.resume.token;
+    else if (resume) cursor = paging.resume.token;
+    else if (paging.gap) cursor = null;     // a hole somewhere and no run of ours to continue: start over
     else if (paging.nextToken) cursor = paging.nextToken;
     else return false;
     const chatId = paging.chatId;
@@ -160,7 +165,7 @@
       job.turns = turnCount();
       if (!data.turns.length || !data.meta || !data.meta.next_token) {
         atStart = true;
-        Object.assign(paging, { reachedStart: true, complete: true, resume: null });
+        Object.assign(paging, { reachedStart: true, complete: true, resume: null, gap: false });
         break;
       }
       cursor = data.meta.next_token;
@@ -194,7 +199,7 @@
       // forget how far back we got too, or "Load full history" would think it's already done
       Object.assign(paging, { reachedStart: false, nextToken: null, cleared: true, lastPageAt: 0,
                               clearedAt: Date.now(), round: paging.round + 1, needNewest: true,
-                              complete: false, resume: null });
+                              complete: false, resume: null, gap: true });
       if (job.running) job.stopped = true;   // a load in progress ends; its late answers are ignored
       else Object.assign(job, { done: false, stopped: false, turns: 0, message: "" });
       reply({ ok: true });

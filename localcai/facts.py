@@ -57,19 +57,35 @@ def normalize(facts: object) -> list[dict]:
         g = make(f.get("about", ""), f.get("category", ""), f.get("value", ""),
                  f.get("source") if f.get("source") in ("cai", "you", "auto") else "you", f.get("edited", False))
         g["id"] = _clean(f["id"], 20) if f.get("id") else _stable_id(f, n)
-        if g["source"] == "cai":
-            o = f.get("orig") if isinstance(f.get("orig"), dict) else None
-            if o or not g["edited"]:
-                o = o or g
-                g["orig"] = {k: _clean(o.get(k), MAX_VALUE) for k in ("about", "category", "value")}
-            if _clean(f.get("pending"), MAX_VALUE):
-                g["pending"] = _clean(f["pending"], MAX_VALUE)
+        o = f.get("orig") if isinstance(f.get("orig"), dict) else None
+        if not o and g["source"] == "cai" and not g["edited"]:
+            o = g  # an untouched C.ai fact is what C.ai had
+        if o:  # any fact can be known to C.ai too (e.g. one the user wrote that a later import also had)
+            g["orig"] = {k: _clean(o.get(k), MAX_VALUE) for k in ("about", "category", "value")}
+        if _clean(f.get("pending"), MAX_VALUE):
+            g["pending"] = _clean(f["pending"], MAX_VALUE)
         k = _same(g)
         if k in seen:
             continue
         seen.add(k)
         out.append(g)
     return out
+
+
+def is_theirs(f: dict) -> bool:
+    """The user decided this fact (wrote or edited it): imports and automatic facts never change it,
+    whatever its source says."""
+    return f["source"] == "you" or bool(f["edited"])
+
+
+def slot_key(about: str, category: str) -> str:
+    return "slot\x1f" + _clean(about, 60).casefold() + "\x1f" + _clean(category, 40).casefold()
+
+
+def _slot_of(f: dict) -> str:
+    """Which C.ai fact this is, by who and category as C.ai had them (the user may have renamed the category)."""
+    o = f.get("orig") or f
+    return slot_key(o.get("about", ""), o.get("category", ""))
 
 
 def _same(f: dict) -> tuple:
@@ -127,20 +143,25 @@ def merge_import(old: list[dict], new: list[dict], removed: list[str] | None = N
     gone = set(removed or [])
     for f in normalize(new):
         k = orig_key(f)
-        if k in gone or any(g.get("orig") and orig_key(g) == k for g in out):
+        if k in gone or _slot_of(f) in gone or any(g.get("orig") and orig_key(g) == k for g in out):
             continue  # already here (maybe edited) or deleted by the user
         if any(_same(g) == _same(f) for g in out):
-            for g in out:  # the same fact written by the user or found automatically: now known as C.ai's too
-                if _same(g) == _same(f) and g["source"] != "cai":
-                    g.update(source="cai", orig=dict(f["orig"]))
+            for g in out:  # the same fact is already here: from now on it's known as C.ai's too
+                if _same(g) == _same(f):
+                    g["orig"] = dict(f["orig"])
+                    if g["source"] == "auto":
+                        g["source"] = "cai"  # the user's own stays theirs (and protected)
                     break
             continue
-        slot = [g for g in out if g["source"] == "cai" and f["category"]
-                and g["about"].casefold() == f["about"].casefold()
-                and g["category"].casefold() == f["category"].casefold()]
+        if not f["category"]:
+            out.append(f)
+            continue
+        # the same C.ai fact (who + category as C.ai had them), now with another value
+        slot = [g for g in out if g.get("orig") and _slot_of(g) == _slot_of(f)]
+        slot = slot or [g for g in out if g["source"] == "cai" and not g.get("orig") and _slot_of(g) == _slot_of(f)]
         if slot:
             g = slot[0]
-            if not g["edited"]:
+            if not is_theirs(g):
                 g.update(value=f["value"], orig=dict(f["orig"]))
                 g.pop("pending", None)
             elif not g.get("orig"):
@@ -170,9 +191,11 @@ def apply_to_chat(meta: dict, card: dict, op: str, body: dict) -> list[dict]:
     facts = chat_facts(meta, card)
     f = next((f for f in facts if f["id"] == body.get("id")), None)
     new = apply(facts, op, body)
-    if op == "delete" and f and f.get("orig"):
+    if op == "delete" and f and (f.get("orig") or f["source"] == "cai"):
+        # remember the deletion so a re-import doesn't bring it back; a C.ai fact edited before origins
+        # were kept doesn't know what C.ai had, so remember its place (who + category) instead
         cm = meta.setdefault("chat_metadata", {})
-        cm[REMOVED] = sorted(set(cm.get(REMOVED) or []) | {orig_key(f)})
+        cm[REMOVED] = sorted(set(cm.get(REMOVED) or []) | {orig_key(f) if f.get("orig") else _slot_of(f)})
     set_facts(meta, new)
     return normalize(new)
 
@@ -195,7 +218,7 @@ def apply(facts: list[dict], op: str, body: dict) -> list[dict]:
     if op in ("keep-mine", "use-cai"):
         g = dict(facts[i])
         if op == "use-cai" and g.get("pending"):
-            g.update(value=g["pending"], edited=False)
+            g.update(value=g["pending"], edited=False, source="cai")  # now C.ai's: later C.ai updates follow
         g.pop("pending", None)
         return facts[:i] + [g] + facts[i + 1:]
     if op == "edit":
@@ -277,8 +300,8 @@ def merge_auto(facts: list[dict], new: list[dict]) -> list[dict]:
                 and g["category"].casefold() == f["category"].casefold()]
         if slot:
             g = out[slot[0]]
-            if g["source"] != "auto" or g["edited"]:
-                continue  # theirs: leave it
+            if g["source"] != "auto" or is_theirs(g):
+                continue  # theirs or C.ai's: leave it
             trial = out[:slot[0]] + [{**f, "id": g["id"]}] + out[slot[0] + 1:]
         else:
             trial = out + [f]
