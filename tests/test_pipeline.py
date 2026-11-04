@@ -1421,3 +1421,14 @@ def test_reimport_keeps_what_was_written_in_localcai_and_takes_a_public_definiti
     d = json.loads(cp.read_text("utf-8"))["data"]
     assert d["mes_example"] == "{{char}}: Hello~ I'm Luna." and d["personality"] == "- yawns a lot"
     assert not d["extensions"][analyze.AUTO_MARK].get("mes_example")   # the creator's: Learn style leaves it alone
+
+
+def test_pins_on_the_card_give_way_before_the_example_dialogue():
+    from localcai.runtime.prompt import build_messages
+    ex = "<START>\n{{char}}: Ke ke ke~ hello trainer! " + "word " * 200
+    pins = [{"content": f"Mira: *pin {i}* " + "long pinned text. " * 60, "constant": True,
+             "extensions": {"localcai": {"from_pin": True}}} for i in range(60)]
+    card = {"data": {"name": "Mira", "mes_example": ex, "character_book": {"entries": pins}}}
+    system = build_messages(card, [{"role": "user", "content": "hi"}], "Sam", max_chars=16000)[0]["content"]
+    assert "Ke ke ke~ hello trainer!" in system           # the creator's example survives…
+    assert "pin 59" in system and "*pin 0*" not in system  # …the oldest C.ai pins went first

@@ -1,4 +1,8 @@
-## localCAI v0.8.52 · Extractor 0.5.7
+## localCAI v0.8.53
+
+- Pinned messages imported from C.ai (kept on the character) now count as pinned messages when the context is small: they're shortened, and the oldest left out, before the example dialogue is cut. Before, they stayed in full and the example dialogue (now often the creator's own definition) was dropped first.
+
+### Earlier in localCAI v0.8.52 · Extractor 0.5.7
 
 - Extractor 0.5.7: exports a character's definition when its creator made it public (C.ai shows it to everyone under "View character details"). Before, only your own characters' definitions were exported. It's read from the character data the page already has; private definitions are still left out.
 - The definition becomes the character's example dialogue (C.ai's END_OF_DIALOG and {{random_user_1}} turned into the <START> / {{user}} format other apps use). It replaces example dialogue Learn style had picked, and Learn style leaves it alone from then on.

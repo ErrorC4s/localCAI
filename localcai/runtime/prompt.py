@@ -94,10 +94,14 @@ def build_messages(card: dict, history: list[dict], user_name: str = "User",
         parts.append(f"[How {char} writes — counted from {voice['n']} of {char}'s real replies; follow these exactly]\n"
                      + "\n".join(f"- {x}" for x in vr))
     book = d.get("character_book") or {}
-    lore = [e["content"] for e in sorted(book.get("entries", []), key=lambda e: e.get("insertion_order", 0))
-            if e.get("enabled", True) and e.get("constant")
-            and not (facts is not None and is_memory_entry(e))]  # the chat's own facts replace these
-    pins = [m for m in memories or [] if m not in lore]  # pinned in this chat (in localCAI or on C.ai)
+    always = [e for e in sorted(book.get("entries", []), key=lambda e: e.get("insertion_order", 0))
+              if e.get("enabled", True) and e.get("constant")
+              and not (facts is not None and is_memory_entry(e))]  # the chat's own facts replace these
+    is_pin = lambda e: ((e.get("extensions") or {}).get("localcai") or {}).get("from_pin")
+    lore = [e["content"] for e in always if not is_pin(e)]
+    # pinned messages: from C.ai (kept on the card) and pinned in this chat, each once, oldest first
+    pins = [e["content"] for e in always if is_pin(e)]
+    pins += [m for m in memories or [] if m not in pins and m not in lore]
     example = d.get("mes_example") or ""
     head = list(parts)
     constant = lore + pins  # (read by the per-turn part below)
