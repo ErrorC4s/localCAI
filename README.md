@@ -40,8 +40,8 @@ Already use Ollama, LM Studio, llama.cpp or KoboldCpp? Just pick it in **Backend
 
 Until it's in the Chrome Web Store / Firefox Add-ons, install it from the [latest release](https://github.com/ErrorC4s/localCAI/releases) or this repo:
 
-- **Chrome / Edge / Brave:** download [`localcai-extractor-0.5.1-chrome.zip`](downloads/localcai-extractor-0.5.1-chrome.zip) and unzip it → open `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → pick the unzipped folder.
-- **Firefox 140+:** download [`localcai-extractor-0.5.1-firefox.zip`](downloads/localcai-extractor-0.5.1-firefox.zip) → open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → pick the zip.
+- **Chrome / Edge / Brave:** download [`localcai-extractor-0.5.2-chrome.zip`](downloads/localcai-extractor-0.5.2-chrome.zip) and unzip it → open `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → pick the unzipped folder.
+- **Firefox 140+:** download [`localcai-extractor-0.5.2-firefox.zip`](downloads/localcai-extractor-0.5.2-firefox.zip) → open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** → pick the zip.
 
 More in [`extension/README.md`](extension/README.md). Then open a chat on character.ai, **refresh the page**, click the localCAI icon, press **⏫ Load full history** (fetches the whole chat, about a minute for tens of thousands of messages) and choose **Export .lcai.json**.
 

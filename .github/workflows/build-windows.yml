@@ -25,7 +25,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # End-to-end tests (app UI in a real browser, built-in engine with a stand-in llama-server, and the
+  # browser extension against a mock character.ai). No release unless these pass.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install test tools
+        run: |
+          python -m pip install pytest playwright
+          python -m playwright install --with-deps chromium
+          npm install --no-save playwright
+          npx playwright install chromium
+      - name: Unit tests
+        run: python -m pytest -q tests/test_pipeline.py
+      - name: App UI end-to-end
+        run: python tests/e2e_ui/test_ui.py
+      - name: Built-in engine end-to-end
+        run: python tests/e2e_ui/test_engine.py
+      - name: Extension end-to-end
+        run: |
+          node tests/e2e_extension/e2e.mjs /tmp/e2e.lcai.json
+          node tests/e2e_extension/load_all.mjs
+
   windows:
+    needs: e2e
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

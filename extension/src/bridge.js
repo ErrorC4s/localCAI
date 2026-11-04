@@ -5,10 +5,14 @@
   const captures = [];
   // History paging: C.ai's turns endpoint returns meta.next_token while older messages exist.
   // chatId/nextToken: where the oldest page we've seen says older messages continue.
-  const paging = { lastPageAt: 0, reachedStart: false, chatId: null, nextToken: null, cleared: false };
+  const paging = { lastPageAt: 0, reachedStart: false, chatId: null, nextToken: null, cleared: false,
+                   clearedAt: 0, round: 0 };
 
   const seenTurns = new Set();
-  function record(kind, url, t, data) {
+  function record(kind, url, t, data, t0) {
+    // an answer to a request sent before Clear belongs to the old collection: never mix it in
+    // (it would move the paging past the newest page and lose it)
+    if (t0 && t0 < paging.clearedAt) return;
     captures.push({ kind, url, t, data });
     if (captures.length > MAX_CAPTURES) captures.shift();
     const m = /\/turns\/([^/]+)\/?$/.exec(url || "");
@@ -24,8 +28,8 @@
 
   window.addEventListener("message", (ev) => {
     if (ev.source !== window || !ev.data || ev.data.__localcai !== true) return;
-    const { kind, url, t, data } = ev.data;
-    record(kind, url, t, data);
+    const { kind, url, t, data, t0 } = ev.data;
+    record(kind, url, t, data, t0);
   });
 
   // ── Load full history: scroll the chat up like a person would ──────────────
@@ -106,8 +110,10 @@
     // after Clear there is no next_token: start again from the newest page of the same chat
     if (!paging.chatId || (!paging.nextToken && !paging.cleared)) return false;
     let retries = 0;
-    while (!job.stopped && !paging.reachedStart) {
+    const round = paging.round;   // Clear starts a new round; this loop's late answers are then dropped
+    while (!job.stopped && !paging.reachedStart && round === paging.round) {
       const url = `https://neo.character.ai/turns/${encodeURIComponent(paging.chatId)}/`;
+      const t0 = Date.now();
       let res;
       try {
         res = await fetch(paging.nextToken ? `${url}?next_token=${encodeURIComponent(paging.nextToken)}` : url,
@@ -123,8 +129,9 @@
       let data;
       try { data = await res.json(); } catch { return false; }
       if (!Array.isArray(data?.turns)) return false;
+      if (round !== paging.round) break;   // cleared while this page was on its way
       retries = 0;
-      record("http", url, Date.now(), data);
+      record("http", url, Date.now(), data, t0);
       job.turns = turnCount();
       job.message = `Loading older messages… ${job.turns}`;
       await sleep(200 + Math.random() * 200);
@@ -153,8 +160,10 @@
       captures.length = 0;
       seenTurns.clear();
       // forget how far back we got too, or "Load full history" would think it's already done
-      Object.assign(paging, { reachedStart: false, nextToken: null, cleared: true, lastPageAt: 0 });
-      if (!job.running) Object.assign(job, { done: false, stopped: false, turns: 0, message: "" });
+      Object.assign(paging, { reachedStart: false, nextToken: null, cleared: true, lastPageAt: 0,
+                              clearedAt: Date.now(), round: paging.round + 1 });
+      if (job.running) job.stopped = true;   // a load in progress ends; its late answers are ignored
+      else Object.assign(job, { done: false, stopped: false, turns: 0, message: "" });
       reply({ ok: true });
     }
     return false;

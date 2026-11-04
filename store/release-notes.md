@@ -1,4 +1,9 @@
-## localCAI v0.8.34 · Extractor 0.5.1
+## localCAI v0.8.35 · Extractor 0.5.2
+
+- Extractor 0.5.2: pressing Clear while "Load full history" is still running no longer loses the newest messages. Answers to requests sent before Clear are ignored, and the running load stops, so loading again collects the whole chat (before, a late older page could move past the newest one and the collection ended early, "at the first message").
+- Releases now also need the app UI, built-in engine and extension end-to-end tests to pass, not only the unit tests.
+
+### Earlier in v0.8.34
 
 - Built-in engine: before loading a model, localCAI checks how much graphics memory is actually free (browsers, Discord and other apps use some too). If the model plus your context size wouldn't fit, the context is shrunk to the largest size that does, so the whole model stays on the GPU. Without this the driver quietly moved part of it into system memory and replies got 5-7x slower (measured on an 8B model with an 8 GB laptop GPU: 7.5 tokens/s at 8192 context, 51 at 6144). The engine chip shows when this happens (e.g. "ready · 6K context"); close some apps and reload the model to get the full context back. The engine log now records free VRAM at start.
 

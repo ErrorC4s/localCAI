@@ -95,7 +95,49 @@ async function run(cors) {
   if (cors && direct < PAGES - 1) fail("fast path should fetch the older pages directly");
 }
 
+// Clear while an older page is still on its way: its late answer must not be mixed into the new collection
+// (it used to move the paging past the newest page, which was then lost: e.g. 75/100 and "at the start").
+async function race() {
+  const ctx = await chromium.launchPersistentContext(mkdtempSync(path.join(tmpdir(), "lcai-")), {
+    headless: true, channel: "chromium", args: [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`] });
+  await ctx.route("https://character.ai/**", (r) => r.fulfill({ status: 200, contentType: "text/html", body: HTML }));
+  let held = false;
+  await ctx.route("https://neo.character.ai/turns/**", async (r) => {
+    const req = r.request();
+    const tok = new URL(req.url()).searchParams.get("next_token");
+    const headers = { "Access-Control-Allow-Origin": "https://character.ai", "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": "x-from-page" };
+    if (req.method() === "OPTIONS") return r.fulfill({ status: 204, headers });
+    if (tok === "p2" && !held && !req.headers()["x-from-page"]) { held = true; await new Promise((ok) => setTimeout(ok, 2500)); }
+    r.fulfill({ status: 200, contentType: "application/json", headers, body: JSON.stringify(page(tok ? +tok.slice(1) : 0)) });
+  });
+  const tab = await ctx.newPage();
+  await tab.goto("https://character.ai/chat/x");
+  await tab.waitForTimeout(800);
+  const popup = await ctx.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup/popup.html`);
+  const ask = (type) => popup.evaluate(async (type) => {
+    const [t] = await chrome.tabs.query({ url: "https://character.ai/*" });
+    return chrome.tabs.sendMessage(t.id, { type });
+  }, type);
+  await ask("loadAll");
+  await tab.waitForTimeout(1200);          // p1 is in, p2 is being held back
+  await ask("clear");
+  let s;
+  for (let i = 0; i < 20; i++) { await tab.waitForTimeout(300); s = await ask("stats"); if (s.job.done) break; }
+  await tab.waitForTimeout(2000);          // the held p2 answer arrives now, after Clear
+  s = await ask("stats");
+  if (s.turns !== 0) fail("an answer to a request sent before Clear was kept: " + s.turns);
+  await ask("loadAll");
+  for (let i = 0; i < 60; i++) { await tab.waitForTimeout(500); s = await ask("stats"); if (s.job.done && !s.job.running) break; }
+  await ctx.close();
+  if (s.turns !== PAGES * PER || !/Reached the first message/.test(s.job.message))
+    fail(`after Clear during a load, loading again should get everything: ${s.turns} · ${s.job.message}`);
+  console.log(`clear during load: ${s.job.message}`);
+}
+
 const fail = (m) => { console.error("FAIL:", m); process.exit(1); };
 await run(true);
 await run(false);
+await race();
 console.log("LOAD-ALL PASS");

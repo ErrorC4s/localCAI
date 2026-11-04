@@ -37,27 +37,29 @@
     return data;
   };
 
-  const post = (kind, url, body) => {
+  // t0 = when the request was sent: the extension drops answers to requests sent before a Clear
+  const post = (kind, url, body, t0) => {
     let data;
     try { data = typeof body === "string" ? JSON.parse(body) : body; } catch { return; }
     if (!data || typeof data !== "object") return;
     // strip query strings: they can carry ids/tokens and we don't need them
     const cleanUrl = String(url).split("?")[0];
-    window.postMessage({ __localcai: true, kind, url: cleanUrl, t: Date.now(), data: trim(url, data) }, location.origin);
+    window.postMessage({ __localcai: true, kind, url: cleanUrl, t: Date.now(), t0, data: trim(url, data) }, location.origin);
   };
 
   // fetch
   const origFetch = window.fetch;
   window.fetch = async function (...args) {
+    const t0 = Date.now();
     const res = await origFetch.apply(this, args);
     try {
       const url = typeof args[0] === "string" ? args[0] : args[0]?.url;
       const ct = res.headers.get("content-type") || "";
       if (isCai(url) && (ct.includes("json") || ct.includes("text/plain"))) {
         res.clone().text().then((txt) => {
-          try { post("http", url, JSON.parse(txt)); }
+          try { post("http", url, JSON.parse(txt), t0); }
           catch { // some endpoints stream newline-delimited JSON
-            for (const line of txt.split("\n")) if (line.trim()) post("http", url, line);
+            for (const line of txt.split("\n")) if (line.trim()) post("http", url, line, t0);
           }
         }).catch(() => {});
       }
@@ -74,10 +76,11 @@
   const origSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.send = function (...args) {
     if (isCai(this.__localcaiUrl)) {
+      const t0 = Date.now();
       this.addEventListener("load", () => {
         try {
-          if (this.responseType === "" || this.responseType === "text") post("http", this.__localcaiUrl, this.responseText);
-          else if (this.responseType === "json") post("http", this.__localcaiUrl, this.response);
+          if (this.responseType === "" || this.responseType === "text") post("http", this.__localcaiUrl, this.responseText, t0);
+          else if (this.responseType === "json") post("http", this.__localcaiUrl, this.response, t0);
         } catch {}
       });
     }
