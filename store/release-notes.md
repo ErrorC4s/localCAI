@@ -1,4 +1,8 @@
-## localCAI v0.8.53
+## localCAI v0.8.54 · Extractor 0.5.8
+
+- Extractor 0.5.8: **Clear** now forgets only the collected messages. The character (and its public definition), your personas and the chat's memory stay: C.ai sends them once when the page loads, so after Clear → Load full history the export used to have the messages but no character and no memory (unless you reloaded the page first).
+
+### Earlier in localCAI v0.8.53
 
 - Pinned messages imported from C.ai (kept on the character) now count as pinned messages when the context is small: they're shortened, and the oldest left out, before the example dialogue is cut. Before, they stayed in full and the example dialogue (now often the creator's own definition) was dropped first.
 

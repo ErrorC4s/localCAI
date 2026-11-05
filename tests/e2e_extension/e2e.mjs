@@ -126,12 +126,17 @@ const result = await popup.evaluate(async () => {
   const doc = (await chrome.tabs.sendMessage(tab.id, { type: "export" })).doc;
   const raw = (await chrome.tabs.sendMessage(tab.id, { type: "raw" })).doc;
   await LocalCAIAssets.embed(doc);
-  return { stats, doc, raw };
+  // Clear forgets the messages, but not the character, personas and memory the page sends only once
+  await chrome.tabs.sendMessage(tab.id, { type: "clear" });
+  const cleared = (await chrome.tabs.sendMessage(tab.id, { type: "export" })).doc;
+  return { stats, doc, raw, cleared };
 });
 await ctx.close();
 
 const fail = (m) => { console.error("FAIL:", m); process.exit(1); };
-const { stats, doc, raw } = result;
+const { stats, doc, raw, cleared } = result;
+if (cleared.characters.length !== 3 || cleared.personas.length !== 1) fail("Clear must keep characters and personas");
+if (cleared.chats.some((c) => (c.turns || []).length)) fail("Clear must forget the messages");
 console.log("stats", stats);
 if (stats.characters !== 3 || stats.chats !== 1 || stats.turns !== 4 || stats.pinned !== 1 || stats.captures !== 9) fail("stats");
 const luna = doc.characters.find((c) => c.name === "Luna");

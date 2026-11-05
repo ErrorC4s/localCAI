@@ -194,7 +194,12 @@
       job.stopped = true;
       reply({ ok: true });
     } else if (msg?.type === "clear") {
+      // Clear the messages only. The character, its definition, your personas and the chat's memory are
+      // sent once when the page loads and never again, so dropping them would leave the next export
+      // without them (unless the page is reloaded).
+      const keep = captures.filter((c) => !/\/turns\/|\/ws\/?$/.test(c.url || "") && c.kind !== "ws");
       captures.length = 0;
+      captures.push(...keep);
       seenTurns.clear();
       // forget how far back we got too, or "Load full history" would think it's already done
       Object.assign(paging, { reachedStart: false, nextToken: null, cleared: true, lastPageAt: 0,
