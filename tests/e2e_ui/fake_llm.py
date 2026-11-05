@@ -1,5 +1,5 @@
 """Tiny fake OpenAI-compatible server for UI tests. Records the last request body."""
-import json, time
+import json, os, time
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -24,9 +24,10 @@ class H(BaseHTTPRequestHandler):
         check = msgs[0]["role"] == "system" and msgs[0]["content"].startswith("You are a strict editor")
         scene = msgs[0]["role"] == "system" and msgs[0]["content"].startswith("You keep notes on a role-play scene")
         facts = msgs[0]["role"] == "system" and msgs[0]["content"].startswith("You keep a short list of lasting facts")
-        with open(LAST + (".check" if check else ".scene" if scene else ".facts" if facts else ""), "w",
-                  encoding="utf-8") as f:
+        dest = LAST + (".check" if check else ".scene" if scene else ".facts" if facts else "")
+        with open(dest + ".tmp", "w", encoding="utf-8") as f:  # whole file or nothing: the test may read it now
             json.dump(body, f, ensure_ascii=False)
+        os.replace(dest + ".tmp", dest)
         if facts:  # memory facts picked up every few replies
             return self.sse(["Alex | hobbies | painting watercolours"], "stop")
         if scene:  # the scene-state note made after a reply
